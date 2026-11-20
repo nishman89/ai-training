@@ -24,18 +24,22 @@ Every code example has a **Java / Python** switch. The choice is saved in the br
 
 ### The exam
 
-53 multiple-choice and multiple-response questions · 120 minutes · scaled score 100–1,000, 720 to pass.
+53 multiple-choice and multiple-response questions · 120 minutes · scaled score 100–1,000, 720 to pass. Source: the official
+[CCDV-F exam guide v1.0](https://everpath-course-content.s3-accelerate.amazonaws.com/instructor/6nizmqk8tpzpfjvt6qmmav7rh/public/1783542875/Claude+Certified+Developer+%E2%80%93+Foundations+Exam+Guide.pdf)
+(effective July 2026, applies to exams up to 6 December 2026). From 7 December 2026 the exam follows
+[guide v1.1](https://cc.sj-cdn.net/instructor/6nizmqk8tpzpfjvt6qmmav7rh/public/1794946771/Claude_Certified_Developer_-_Foundations_Exam_Guide_Updated_Dec_7.pdf)
+(70 questions, new weights); this site follows v1.0.
 
-| # | Domain | Weight | ≈ Questions in mock |
+| # | Domain (official exam-guide v1.0 numbering) | Weight | ≈ Questions in mock |
 |---|---|---|---|
-| 1 | Application and Integration | 33% | 18 |
-| 2 | Model Selection and Optimization | 16% | 9 |
-| 3 | Agents and Workflows | 14% | 7 |
-| 4 | Prompt and Context Engineering | 11% | 6 |
-| 5 | Tools and MCP | 10% | 5 |
-| 6 | Security and Safety | 8% | 4 |
-| 7 | Evaluation, Testing and Debugging | 3% | 2 |
-| 8 | Claude Code | 3% | 2 |
+| 1 | Agents and Workflows | 14.7% | 8 |
+| 2 | Applications and Integration | 33.1% | 18 |
+| 3 | Claude Code | 3.1% | 2 |
+| 4 | Eval, Testing, and Debugging | 2.6% | 1 |
+| 5 | Model Selection and Optimization | 16.8% | 9 |
+| 6 | Prompt and Context Engineering | 11.0% | 6 |
+| 7 | Security and Safety | 8.1% | 4 |
+| 8 | Tools and MCPs | 10.6% | 5 |
 
 ## Running it
 
@@ -64,6 +68,7 @@ All internal links go through `url()` in `src/lib/site.ts` so they work under th
 | Change a domain's title, weight, summary or objectives | The frontmatter at the top of that file |
 | Add, fix or remove a quiz question | `src/data/exams/exam-a.json` (schema below) |
 | Change the "Watch out for…" traps | `src/data/traps.ts` |
+| Change the official skills, their weights, coverage notes or Academy chapters shown on each domain | `src/data/blueprint.ts` |
 | Change the Start here page | `src/pages/introduction.astro` |
 | Change questions per domain in the mock | `QUESTIONS_PER_CHAPTER` in `src/lib/site.ts` |
 | Change the pass mark | `PASS_MARK` in `src/lib/site.ts` (0.72 ≈ the real 720/1,000) |
@@ -75,9 +80,9 @@ All internal links go through `url()` in `src/lib/site.ts` so they work under th
 ### How it works               ← a topic inside it, listed in the side menu
 ```
 
-### Notes: Java and Python code
+### Notes: Java, Python and TypeScript code
 
-Wrap one `java` fence and one `python` fence in `<CodeSwitch>` (blank lines around the fences matter in MDX):
+Wrap one `java`, one `python` and one `typescript` fence in `<CodeSwitch>` (blank lines around the fences matter in MDX):
 
 ````mdx
 <CodeSwitch title="Optional caption">
@@ -109,6 +114,7 @@ Lists in the form `- **Title** - description · second line` become cards automa
 | `CodeSwitch` | Java / Python code example |
 | `Gotcha` | A real-world trap at the end of a section: `title`, `scenario`, `gotcha` (what goes wrong), `fix` |
 | `SectionSummary` | The key points at the end of every section: `points={[ ... ]}` |
+| `PictureIt` | A real-life walk-through inside a topic: the actual code, request/response JSON and log lines (Markdown and `CodeSwitch` inside) |
 
 `Gotcha` and `SectionSummary` can be written anywhere in a section: the section plugin moves them to the end of
 the section, outside the collapsible topics, gotchas first. Pass text containing quotes as expressions, e.g.

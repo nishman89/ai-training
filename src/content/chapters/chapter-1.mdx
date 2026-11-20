@@ -1,475 +1,403 @@
 ---
 number: 1
-title: "Application and Integration"
-weight: 33
-summary: "The Messages API from request to response: every parameter, stop reasons, streaming, errors and retries, rate limits, and taking a Claude app through its lifecycle."
+title: "Agents and Workflows"
+weight: 14.7
+summary: "When to use a fixed workflow and when an agent, the five workflow patterns, the agent loop in code, wiring options, human gates and memory."
 objectives:
-  - "Build a correct Messages API request and read every part of the response"
-  - "Explain each request parameter, with a real-life example of getting it wrong"
-  - "Handle streaming safely and only commit a complete message"
-  - "Classify any API error as retriable or terminal, and know what the SDK already retries"
-  - "Place a Claude application in its lifecycle, choose a platform and pin what ships"
+  - "Decide between a single call, a workflow and an agent"
+  - "Recognise the five workflow patterns and when each fits"
+  - "Implement the agent loop with exit conditions and human-in-the-loop gates"
+  - "Compare the three ways to wire an agent: raw API, Agent SDK and Managed Agents"
+  - "Choose a memory scope for state that survives sessions"
 ---
+import Compare from '../../components/diagrams/Compare.astro';
+import Tiles from '../../components/diagrams/Tiles.astro';
+import ExamRef from '../../components/ExamRef.astro';
+import RoleLens from '../../components/RoleLens.astro';
+import PictureIt from '../../components/PictureIt.astro';
 import Gotcha from '../../components/Gotcha.astro';
 import SectionSummary from '../../components/SectionSummary.astro';
 import CodeSwitch from '../../components/CodeSwitch.astro';
 import Flow from '../../components/diagrams/Flow.astro';
-import VsPair from '../../components/VsPair.astro';
+import Cycle from '../../components/diagrams/Cycle.astro';
+import SideBySide from '../../components/SideBySide.astro';
 import WhenThen from '../../components/WhenThen.astro';
-import MythReality from '../../components/MythReality.astro';
 import Exercise from '../../components/Exercise.astro';
 import Resource from '../../components/Resource.astro';
 
-## 1.1 The Messages API
+## 1.1 Workflow or agent?
+
+<ExamRef section="1.1" />
+
+
+
+
 
 ### In plain English
 
-This domain is how your program talks to Claude. You send one HTTP request, a package of settings plus the conversation so far, and get back a message, a note on why it stopped and an itemised bill. Everything else in the exam is a field on that request, a way to handle the reply, or a pattern for sending many requests in a row.
+This domain is about getting Claude to finish jobs that take several steps. A **workflow** is a fixed recipe you write: step 1 summarise, step 2 translate. An **agent** chooses its own steps: it asks for a tool, looks at the result, decides what to do next, and repeats until the job is done.
 
-**Real-life example:** a bank's help chat. Behind it, the bank's Java service sends each customer question to Claude and shows the answer. When 10,000 customers ask at once, some calls get a "slow down" error (429), and the service should wait and retry instead of crashing. That's Domain 1.
+**Real-life example:** "Find out why order 1234 is late and email the customer." The agent looks up the order, checks the courier, drafts an email and asks a human to approve sending it. The rule is to use the simplest option that works: agents are powerful, but slower, pricier and less predictable.
 
-<Flow caption="One Claude call: a stateless request and response" steps={[
-  { title: 'Your app', sub: 'builds the request' },
-  { title: 'POST /v1/messages', sub: 'API key + JSON' },
-  { title: 'Claude', sub: 'reads, writes a reply' },
-  { title: 'Response', sub: 'content · stop_reason · usage' },
+<RoleLens dev={"A Spring service that classifies each support ticket is one call; summarise-then-translate is a workflow you code as two calls; \"investigate this outage and fix the config\" is an agent. Start with the call and only move up when a step can't be decided in advance."} test={"A test-data generator that always does the same three steps is a workflow. \"Find why this flaky Selenium test fails and propose a fix\" needs an agent: it must read logs, rerun and decide what to look at next."} data={"Nightly \"extract → classify each row with Claude → load\" is a workflow: the steps never change, so put it in Airflow as fixed tasks. Only use an agent for open-ended jobs such as \"work out why yesterday's load dropped 30% of rows\"."} ba={"When a stakeholder says \"we want an AI agent\", ask whether the steps are known up front. If you could write them as a process map, it's a workflow: cheaper, testable and easier to sign off. Capture that decision in the requirements."} />
+
+### Start simple, climb only when needed
+
+<Flow caption="Move up only when the simpler pattern can't handle the variation (Exam guide: Agent Architecture)" steps={[
+  { title: 'Single call', sub: 'one prompt, one answer' },
+  { title: 'Workflow', sub: 'steps you define in code' },
+  { title: 'Agent', sub: 'the model picks the steps' },
+  { title: 'Multi-agent', sub: 'only for parallel, broad work' },
 ]} />
 
-### Anatomy of a request
-
-A request to `POST /v1/messages` needs three fields and two headers. Everything else is optional.
-
-| Part | What it is | Required? |
-|---|---|---|
-| `x-api-key` header | Your secret key; proves who you are and who pays | Yes |
-| `anthropic-version` header | API version, `2023-06-01`; beta features add `anthropic-beta` | Yes |
-| `model` | Which Claude does the work, e.g. `claude-sonnet-5-5` | Yes |
-| `max_tokens` | Ceiling on the reply length, in tokens | Yes |
-| `messages` | The conversation: alternating `user` and `assistant` turns | Yes |
-| `system` | Standing instructions for the whole conversation (a top-level field, **not** a role) | No |
-| `tools`, `tool_choice` | Functions Claude may ask you to run (Domain 5) | No |
-| `stream` | Receive the reply as server-sent events | No |
-
-The API is **stateless**: it keeps no conversation. Your app stores the history and resends it every turn, which is why long chats get slower and pricier.
-
-<CodeSwitch>
-
-```java
-AnthropicClient client = AnthropicOkHttpClient.builder()
-    .fromEnv()          // reads ANTHROPIC_API_KEY - never hard-code it
-    .maxRetries(4)      // default is 2
-    .build();           // create ONE client per app: it owns the connection pool
-
-Message msg = client.messages().create(MessageCreateParams.builder()
-    .model(Model.CLAUDE_SONNET_5_5)
-    .maxTokens(1024L)
-    .system("You are a concise support assistant.")
-    .addUserMessage("Summarise this ticket: ...")
-    .build());
-```
-
-```python
-import anthropic
-
-client = anthropic.Anthropic(max_retries=4)   # reads ANTHROPIC_API_KEY; default retries is 2
-                                               # create ONE client per app and reuse it
-msg = client.messages.create(
-    model="claude-sonnet-5-5",
-    max_tokens=1024,
-    system="You are a concise support assistant.",
-    messages=[{"role": "user", "content": "Summarise this ticket: ..."}],
-)
-```
-
-</CodeSwitch>
-
-### The response: content, stop_reason, usage
-
-| Field | Meaning | Real-life comparison |
-|---|---|---|
-| `content` | A list of blocks: `text`, `tool_use`, `thinking` | The work delivered |
-| `stop_reason` | Why it stopped (below) | The contractor's note: "done", "ran out of hours", "need you to fetch something" |
-| `usage` | `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens` | The itemised invoice |
-
-| `stop_reason` | Means | Your code should… |
-|---|---|---|
-| `end_turn` | Claude finished naturally | Use the answer |
-| `max_tokens` | Hit your `max_tokens` cap; the reply is cut off | Raise the cap, ask for less, or continue |
-| `stop_sequence` | Wrote one of your stop strings | Use the text before it |
-| `tool_use` | Wants you to run a tool | Run it, send back a `tool_result` (Domain 5) |
-| `pause_turn` | A server-tool loop paused | Resend the conversation as it is |
-| `refusal` | Declined for safety reasons | Read `stop_details`, log it, and surface it or retry on a fallback model; don't resend the same request with backoff |
-| `model_context_window_exceeded` | The reply filled the model's context window | Treat it as truncated, like `max_tokens` |
-
-A 200 OK does **not** mean a complete answer. Branch on `stop_reason` every time, like checking an exit code.
-
-<CodeSwitch>
-
-```java
-msg.content().forEach(b -> b.text().ifPresent(t -> System.out.println(t.text())));
-
-if (msg.stopReason().map(StopReason.MAX_TOKENS::equals).orElse(false)) {
-    // truncated: never parse this as complete JSON
-}
-System.out.printf("in=%d out=%d%n", msg.usage().inputTokens(), msg.usage().outputTokens());
-```
-
-```python
-for block in msg.content:
-    if block.type == "text":
-        print(block.text)
-
-if msg.stop_reason == "max_tokens":
-    ...  # truncated: never parse this as complete JSON
-print(f"in={msg.usage.input_tokens} out={msg.usage.output_tokens}")
-```
-
-</CodeSwitch>
-
-<Gotcha
-  title={"The chatbot with amnesia"}
-  scenario={"A Java service sends each new customer message to Claude on its own, using only the latest user turn."}
-  gotcha={"The second answer ignores everything said before (\"What order number?\"). The API is stateless, so Claude never saw turn one."}
-  fix={"Keep the conversation in your app (session store or database) and resend the full history, trimmed or summarised, on every call."}
+<SideBySide joiner="or"
+  left={{ title: 'Workflow', question: 'Can you write the exact steps down?', points: ['Every run follows the same sequence', 'Errors are costly: you need step-level guardrails', 'Inputs come from a known set', 'Standard observability is required'], tip: 'Predictable, cheap, testable' }}
+  right={{ title: 'Agent', question: 'Do you know the goal and tools, but not the path?', points: ['The path can\'t be described in advance', 'Inputs vary unpredictably', 'Non-determinism is acceptable', 'The registered tools bound what it can do'], tip: 'Flexible, but costlier and less predictable' }}
 />
 
 <SectionSummary points={[
-  "A call is one stateless `POST /v1/messages`: your app resends the whole history every time.",
-  "Required: `model`, `max_tokens`, `messages` plus the API-key and `anthropic-version` headers. `system` is a top-level field, not a role.",
-  "The response gives you `content` blocks, a `stop_reason` and `usage`.",
-  "A 200 OK isn't a complete answer: branch on `stop_reason` (end_turn, max_tokens, stop_sequence, tool_use, pause_turn, refusal, model_context_window_exceeded).",
+  "Climb only as far as needed: single call → workflow → agent → multi-agent.",
+  "If you can write the steps down, build a workflow: predictable, cheap and testable.",
+  "Use an agent when you know the goal and tools but not the path, and non-determinism is acceptable.",
 ]} />
 
-## 1.2 Request parameters, explained
+## 1.2 The five workflow patterns
 
-### Think of a call as a job for a contractor
+<ExamRef section="1.2" />
 
-You pick the contractor (`model`), hand over the standing brief (`system`) and the case file so far (`messages`), and cap the billable hours (`max_tokens`). You get back the work (`content`), a note on why they stopped (`stop_reason`) and an invoice (`usage`).
 
-### Tokens
 
-A token is the unit Claude reads, writes and bills in: a chunk of text of roughly ¾ of an English word. Think of a taxi meter that ticks per chunk of road. Your prompt, the whole history, tool definitions, tool results and images all tick the **input** meter. Everything Claude writes ticks the **output** meter, which costs 5× more per token on every current model.
 
-### model
 
-Which Claude does the work. Think of choosing junior, mid or senior staff: seniors are better, slower and pricier.
+### Prompt chaining
 
-- **Haiku** - tagging 1M support tickets overnight
-- **Sonnet** - a customer-facing chatbot
-- **Opus** - a multi-hour coding agent
-- **Fable** - the hardest reasoning, when Opus still falls short on your evals
+A fixed sequence of calls, each using the previous output, with optional code checks ("gates") between steps. Example: write marketing copy, check it meets length and tone rules, then translate it. Use it when a task splits cleanly into steps and accuracy matters more than latency.
 
-<CodeSwitch>
+{/* diagram */}
+<Tiles cols={5} caption="The five workflow patterns: you write the control flow (Exam guide: Agent Architecture)" tiles={[
+  { label: '1', title: 'Prompt chaining', sub: 'Step → gate → step' },
+  { label: '2', title: 'Routing', sub: 'Classify, then send to the right handler' },
+  { label: '3', title: 'Parallelisation', sub: 'Split into sections, or vote' },
+  { label: '4', title: 'Orchestrator-workers', sub: 'Lead splits work it can\'t predict' },
+  { label: '5', title: 'Evaluator-optimiser', sub: 'Generate, critique, repeat' },
+]} />
 
-```java
-.model(Model.CLAUDE_SONNET_5_5)      // or .model("claude-sonnet-5-5"); pin the full ID in production
-```
+<RoleLens dev={"Routing = a `switch` on a cheap Haiku classification. Parallelisation = `CompletableFuture.allOf` over independent calls. Evaluator-optimiser = a generate/review loop with a max-iterations cap."} test={"Evaluator-optimiser is the pattern you already know: generate a test, run a checker, feed failures back, try again. Parallelisation is like running suites in parallel and voting on a flaky result."} data={"Prompt chaining is a DAG of tasks with a gate between them. Parallelisation is fan-out over partitions. Orchestrator-workers is a dynamic task mapping where the orchestrator decides how many workers to spawn."} ba={"Map each pattern to a process diagram: chaining = sequential swimlane, routing = decision diamond, parallel = fork/join, evaluator-optimiser = review loop with an approval step. It makes the AI design reviewable by non-engineers."} />
 
-```python
-model="claude-sonnet-5-5"      # pin the full ID in production
-```
+### Routing
 
-</CodeSwitch>
+Classify the input, then send it to a specialised prompt, tool set or model. Example: route refund requests, technical questions and general queries to different handlers, or send easy questions to Haiku and hard ones to a bigger model.
 
-### max_tokens
+### Parallelisation
 
-A hard ceiling on how many tokens Claude may **write** in this reply. It isn't a target, it doesn't limit the input, and you only pay for what's actually written. Think of a word limit on an essay.
+Run calls at the same time and combine the results.
 
-If Claude reaches the limit mid-sentence, the reply is simply cut off and `stop_reason` is `max_tokens`. There's **no error**: just truncated text or broken JSON. Size it to the longest good answer: about 300 tokens for a label plus a reason, 1,024–4,096 for chat, and much more (with streaming) for long documents or code.
+- **Sectioning** - independent subtasks at once · e.g. one call answers the user while another screens for policy issues
+- **Voting** - the same task several times, then aggregate · e.g. three reviewers flag vulnerabilities, flag if any two agree
 
-### messages and system
+### Orchestrator-workers
 
-<VsPair
-  left={{ title: 'system', meaning: 'Standing rules for the whole conversation: role, scope, format. A top-level field.', example: '"You are Acme\'s support agent. Answer only about Acme products, in under 80 words."' }}
-  right={{ title: 'messages', meaning: 'The conversation so far, as alternating user and assistant turns, resent every call.', example: 'user: refund policy? → assistant: 30 days → user: and without a receipt?' }}
+A lead model decides the subtasks **at run time**, hands them to workers, and merges the results. It looks like parallelisation, but the subtasks aren't predefined. Anthropic reports multi-agent research runs using roughly **15× the tokens** of a single chat, so use it only for broad work that genuinely splits into independent parts. For tightly coupled work like coding, a single agent with good context wins.
+
+### Evaluator-optimizer
+
+One call generates, another critiques against clear criteria, and the loop repeats until the critique passes. Use it when you can state what "good" looks like and iteration measurably improves the result, such as literary translation or a search that needs several rounds.
+
+<Gotcha
+  title={"Five agents, one module, fifteen times the bill"}
+  scenario={"A team uses an orchestrator with five sub-agents to refactor one tightly coupled payments module."}
+  gotcha={"Each sub-agent sees only part of the code, so their edits conflict, and token use is many times that of one agent. Slower and worse."}
+  fix={"Use a single agent with good context for coupled work. Save orchestrator-workers for broad tasks that split into independent parts."}
 />
 
-Think of it as the employee handbook versus today's case file. Because the API remembers nothing, it's like phoning a call-centre agent who has no notes: you read out the whole file each time.
+<SectionSummary points={[
+  "Prompt chaining: fixed steps, each using the last, with code gates between.",
+  "Routing: classify, then send down ONE specialised path or model.",
+  "Parallelisation: sectioning (independent parts) or voting (same task, aggregated).",
+  "Orchestrator-workers: subtasks decided at run time, about 15× the tokens, for broad parallel work only.",
+  "Evaluator-optimizer: generate, critique against clear criteria, repeat.",
+]} />
+
+## 1.3 The agent loop
+
+<ExamRef section="1.3" />
+
+
+
+
+
+### The loop
+
+An agent is a multi-step tool-use loop with managed context and a defined goal.
+
+<Cycle center="Agent loop" caption="Loop while stop_reason is tool_use; stop on any other stop reason or an exit condition (Exam guide: Agent Construction with Claude)" steps={[
+  { title: 'Call Claude', sub: 'history + tools', tone: 'dark' },
+  { title: 'stop_reason = tool_use?', sub: 'else: finished', tone: 'pink' },
+  { title: 'Run the tools', sub: 'your code', tone: 'dark' },
+  { title: 'Append tool_result', sub: 'matching IDs', tone: 'pink' },
+]} />
+
+<RoleLens dev={"It's a `while` loop: call, check `stop_reason`, run each `tool_use` with your own code, append the `tool_result`, repeat. The bugs are always a missing exit condition or a dropped `tool_use_id`."} test={"Test the loop's exits, not just the happy path: max-turns reached, tool throws, model never stops asking. Mock the Claude client to return a scripted `tool_use` sequence so the test is deterministic."} data={"Treat each loop iteration like a pipeline retry: log turn number, tokens and tool calls to your warehouse so you can see runaway loops and cost per run in a dashboard."} ba={"The human-in-the-loop gate is a business rule: \"refunds over £100 need approval\". Write it as an acceptance criterion, e.g. **Given** an agent proposes a £150 refund **then** it waits for a supervisor."} />
+
+### In code
+
+This is the raw loop. In **Python** (or TypeScript) the Claude Agent SDK can run this loop for you; it isn't available for **Java**, where you write the loop yourself or use the Java SDK's beta tool runner.
 
 <CodeSwitch>
 
 ```java
-.system("You are Acme's support agent. Answer only about Acme products, in under 80 words.")
-.addUserMessage("What's your refund policy?")
-.addAssistantMessage("Refunds within 30 days with a receipt.")
-.addUserMessage("And without a receipt?")         // Claude sees all three turns
+List<MessageParam> history = new ArrayList<>();
+history.add(MessageParam.builder().role(MessageParam.Role.USER)
+    .content("Find order 1234 and tell me its status").build());
+
+for (int turn = 0; turn < MAX_TURNS; turn++) {             // exit condition: iteration cap
+    Message reply = client.messages().create(MessageCreateParams.builder()
+        .model(Model.CLAUDE_SONNET_5_5).maxTokens(2048L)
+        .system("You are an order-status agent. Use only the tools given.")
+        .addTool(LOOKUP_ORDER_TOOL)
+        .messages(history).build());
+
+    history.add(reply.toParam());                          // keep the tool_use blocks intact
+    if (!reply.stopReason().map(StopReason.TOOL_USE::equals).orElse(false)) break;
+
+    List<ContentBlockParam> results = new ArrayList<>();
+    for (ContentBlock block : reply.content()) {
+        block.toolUse().ifPresent(use -> {
+            ToolOutcome r = runToolSafely(use);            // YOUR code runs the tool
+            results.add(ContentBlockParam.ofToolResult(ToolResultBlockParam.builder()
+                .toolUseId(use.id())                       // must match the tool_use id
+                .content(r.text())
+                .isError(r.failed())                       // never hide errors as empty data
+                .build()));
+        });
+    }
+    history.add(MessageParam.builder().role(MessageParam.Role.USER)
+        .contentOfBlockParams(results).build());
+}
 ```
 
 ```python
-system="You are Acme's support agent. Answer only about Acme products, in under 80 words.",
-messages=[
-    {"role": "user", "content": "What's your refund policy?"},
-    {"role": "assistant", "content": "Refunds within 30 days with a receipt."},
-    {"role": "user", "content": "And without a receipt?"},   # Claude sees all three turns
-]
+history = [{"role": "user", "content": "Find order 1234 and tell me its status"}]
+
+for turn in range(MAX_TURNS):                       # exit condition: iteration cap
+    reply = client.messages.create(
+        model="claude-sonnet-5-5", max_tokens=2048,
+        system="You are an order-status agent. Use only the tools given.",
+        tools=[LOOKUP_ORDER_TOOL],
+        messages=history,
+    )
+    history.append({"role": "assistant", "content": reply.content})   # keep tool_use blocks intact
+    if reply.stop_reason != "tool_use":
+        break
+
+    results = []
+    for block in reply.content:
+        if block.type == "tool_use":
+            outcome = run_tool_safely(block.name, block.input)   # YOUR code runs the tool
+            results.append({
+                "type": "tool_result",
+                "tool_use_id": block.id,                      # must match the tool_use id
+                "content": outcome.text,
+                "is_error": outcome.failed,                   # never hide errors as empty data
+            })
+    history.append({"role": "user", "content": results})
+```
+
+```typescript
+const history: Anthropic.MessageParam[] = [
+  { role: 'user', content: 'Find order 1234 and tell me its status' },
+];
+
+for (let turn = 0; turn < MAX_TURNS; turn++) {           // exit condition: iteration cap
+  const reply = await client.messages.create({
+    model: 'claude-sonnet-5-5', max_tokens: 2048,
+    system: 'You are an order-status agent. Use only the tools given.',
+    tools: [LOOKUP_ORDER_TOOL],
+    messages: history,
+  });
+  history.push({ role: 'assistant', content: reply.content });   // keep tool_use blocks intact
+  if (reply.stop_reason !== 'tool_use') break;
+
+  const results: Anthropic.ToolResultBlockParam[] = [];
+  for (const block of reply.content) {
+    if (block.type !== 'tool_use') continue;
+    const outcome = await runToolSafely(block.name, block.input);   // YOUR code runs the tool
+    results.push({
+      type: 'tool_result',
+      tool_use_id: block.id,                          // must match the tool_use id
+      content: outcome.text,
+      is_error: outcome.failed,                       // never hide errors as empty data
+    });
+  }
+  history.push({ role: 'user', content: results });
+}
 ```
 
 </CodeSwitch>
 
-### stop_sequences, temperature and effort
+Builder method names can differ slightly between SDK versions. What the exam tests is the shape: loop on `tool_use`, append the assistant turn unchanged, return each `tool_result` with the matching ID.
 
-- **stop_sequences** - strings that end the reply as soon as Claude writes them; stop_reason becomes stop_sequence · e.g. stop at a closing answer tag so no commentary follows
-- **temperature / top_p** - randomness knobs, low = predictable · on the newest models you can't set them: steer with the prompt and test properties, not exact wording
-- **effort** - how hard the model thinks before answering · current models think adaptively: low for routing an email, high for a tricky bug · more thinking = more output tokens, cost and latency
+### Exit conditions and human gates
 
-### Worked cost example
+Every agent needs a clear stopping rule: a goal check, a maximum number of turns and a token or cost budget. Place human approval where the worst case is expensive.
 
-Sonnet 5.5 costs $2 per million input tokens and $10 per million output tokens. A support-bot call with a 3,000-token system prompt, 1,500 tokens of history and a 400-token answer:
+<WhenThen whenLabel="Insert a human check…" thenLabel="…because" rows={[
+  { when: 'Before a destructive tool call (write, delete, send, pay)', then: 'High risk: the action can\'t be undone' },
+  { when: 'After a planning step, before execution', then: 'Medium risk: a wrong plan gives a wrong outcome even if executed perfectly' },
+  { when: 'On unexpected output (error flag, empty result, out-of-range value)', then: 'Catches failures that retry logic alone won\'t fix' },
+]} />
 
-| Item | Tokens | Rate | Cost |
+<PictureIt title="An agent run, as it appears in your logs">
+**The scenario:** a customer writes "My order A-1234 still hasn't arrived and I want a refund." The agent has three tools: `get_order`, `get_courier_status` and `issue_refund`, the last gated by a human for anything over £50.
+
+#### A healthy run
+
+```text
+turn 1  → Claude: tool_use get_order {"order_id":"A-1234"}
+        ← app:    tool_result {"status":"shipped","courier":"DPD","value":89.00}
+turn 2  → Claude: tool_use get_courier_status {"tracking":"DPD-55120"}
+        ← app:    tool_result {"state":"lost_in_transit","since":"2026-11-14"}
+turn 3  → Claude: tool_use issue_refund {"order_id":"A-1234","amount":89.00}
+        ⏸ app:    amount > £50 → paused for human approval (ticket #8812)
+        ← app:    tool_result {"status":"approved by j.smith","refund_id":"R-771"}
+turn 4  → Claude: end_turn "I'm sorry, your parcel was lost. I've refunded £89.00 (ref R-771)…"
+loop exits: stop_reason=end_turn · 4 turns · 9,812 tokens
+```
+
+#### A runaway run (no exit conditions)
+
+```text
+turn 1  → tool_use get_courier_status  ← tool_result []        (API timed out, tool returned an empty list)
+turn 2  → tool_use get_courier_status  ← tool_result []
+turn 3  → tool_use get_order           ← tool_result {...}
+turn 4  → tool_use get_courier_status  ← tool_result []
+  …
+turn 212 → still going at 06:00, 1.9M tokens
+```
+
+What was missing: an **iteration cap** (e.g. stop at 15 turns), a **budget**, and `is_error: true` on the failed tool so Claude would tell the customer instead of retrying forever.
+
+</PictureIt>
+
+### Tool orchestration
+
+Routing depends on how tools are described and how many are registered. Too many overlapping tools make choices erratic; too few and the agent invents a path or returns an incomplete result. Start with the minimum set and add a tool only for a specific gap.
+
+<Gotcha
+  title={"The agent that never stopped"}
+  scenario={"An agent loop runs `while stop_reason == tool_use`, with no other exit condition. A tool starts returning an empty list instead of an error."}
+  gotcha={"Claude keeps re-querying in slightly different ways, and the loop runs for hundreds of turns overnight."}
+  fix={"Add an iteration cap and a token or cost budget, return tool failures with `is_error`, and gate unexpected outputs to a human."}
+/>
+
+<SectionSummary points={[
+  "The loop: call → if `stop_reason` is tool_use, run the tools → append tool_results with matching IDs → call again.",
+  "Append the assistant turn unchanged so the tool_use blocks stay intact.",
+  "You define the exit: a goal check, an iteration cap and a budget.",
+  "Put human approval before destructive actions, after planning, and on unexpected output. Register only the tools the task needs.",
+]} />
+
+## 1.4 Three ways to wire an agent
+
+<ExamRef section="1.4" />
+
+
+
+
+
+### Who runs the loop?
+
+| | Raw Messages API loop | Agent SDK | Claude Managed Agents |
 |---|---|---|---|
-| Input | 4,500 | $2 / 1M | $0.0090 |
-| Output | 400 | $10 / 1M | $0.0040 |
-| **Per call** | | | **$0.0130** |
-| **100,000 calls a day** | | | **≈ $1,300 a day** |
+| **Who runs the loop** | You | The SDK, inside your process | Anthropic, in its sandbox |
+| **What you own** | Everything | Tool execution and the app around it | The app layer and the agent definition |
+| **Choose when** | You need full control, or have constraints a library can't meet | You want a ready loop, context handling and tools in your own environment (Python or TypeScript; no Java version) | You want long-running execution and a managed sandbox |
+| **Watch out** | You maintain all of it | Set `settingSources` explicitly, or CLAUDE.md and skills won't load | Public beta; sessions stored server-side, so **not** eligible for Zero Data Retention or HIPAA |
 
-Caching the 3,000-token system prompt (cache reads cost 0.05× base on Sonnet 5.5) cuts that slice from $0.006 to $0.0003 per call, saving about $570 a day. Domain 2 covers how.
+Whichever path you take, the four steps are the same: register tools, scope the system prompt, run the tool loop, define exit conditions.
 
-<Exercise title="What went wrong?" id="exercise-max-tokens">
+<Gotcha
+  title={"The skill that silently did nothing"}
+  scenario={"A code-review skill works in Claude Code. The same agent, run headless through the Agent SDK in CI, ignores it."}
+  gotcha={"`settingSources` was never set, so the SDK didn't load filesystem settings: no CLAUDE.md, no skills, and no error."}
+  fix={"Set `settingSources` (`setting_sources` in Python) explicitly, and confirm in a test that the skill fires."}
+/>
 
-A nightly job asks Claude to return 200 product descriptions as one JSON array, with `max_tokens` set to 1,024. Your JSON parser throws on about half the runs, but there are no API errors. What's happening, and what are two fixes?
+<SectionSummary points={[
+  "Raw API loop: you own everything. Agent SDK: the loop runs in your process (Python/TypeScript, not Java). Managed Agents: Anthropic runs the loop and sandbox.",
+  "With the Agent SDK, set `settingSources` explicitly or CLAUDE.md and skills won't load.",
+  "Managed Agents store sessions server-side, so they aren't currently ZDR or HIPAA eligible.",
+]} />
+
+{/* diagram */}
+<Compare caption="Three ways to wire an agent: more control on the left, less to run on the right (Exam guide: Agent Construction with Claude)" columns={[
+  { title: 'Raw Messages API', sub: 'you write the loop', points: ['Any language, including Java', 'You own tools, history, retries', 'Most control, most code'] },
+  { title: 'Agent SDK', sub: 'the loop as a library', points: ['Python and TypeScript', 'Built-in tools and context management', 'Runs in your infrastructure'] },
+  { title: 'Managed Agents', sub: 'hosted by Anthropic', points: ['Anthropic runs the loop and sandbox', 'Long-running sessions', 'Least to operate'] },
+]} />
+
+<RoleLens dev={"Raw API in Java gives full control. The Agent SDK (Python/TS only) gives you the loop, tools and context management for free. Managed Agents runs the whole thing on Anthropic's side."} test={"With the raw API you own the loop, so you test the loop. With the Agent SDK or Managed Agents, test the behaviour: given this task and these tools, does it reach the right outcome within budget?"} data={"If your stack is Python already (Airflow, dbt hooks), the Agent SDK fits naturally. If you need jobs running without your own infrastructure, Managed Agents removes the hosting work."} ba={"This is a build-vs-buy decision: control and effort (raw API) against speed and less ops (SDK, Managed). Put it in the options appraisal with cost, skills and vendor lock-in."} />
+
+## 1.5 Memory and long-horizon work
+
+<ExamRef section="1.5" />
+
+
+
+
+
+### Memory scopes
+
+Choose at design time what the agent should know when a new session starts.
+
+| Scope | What persists | Cost | Use when | You lose |
+|---|---|---|---|---|
+| In-context | The conversation, within one session | Grows with every turn | Short sessions that fit the window | Everything at session end |
+| External storage | State in a database, read at start or on demand | Retrieval latency + code | State must survive sessions or be shared | Nothing (beyond latency) |
+| Summarised | A condensed summary injected next session | Cheaper than replaying history | Long-running conversational agents | Any detail the summary dropped |
+| Stateless | Nothing | None | Independent task runs and pipelines | All prior context |
+
+{/* diagram */}
+<Cycle caption="Long-horizon work: state lives outside the context window (Exam guide: Agent Patterns and Frameworks)" center="Progress file / memory" steps={[
+  { title: 'Read state', sub: 'memory + progress notes', tone: 'blue' },
+  { title: 'Work', sub: 'a chunk of the task', tone: 'green' },
+  { title: 'Write state', sub: 'what is done, what is next', tone: 'yellow' },
+  { title: 'Compact or new session', sub: 'context stays small', tone: 'purple' },
+]} />
+
+<RoleLens dev={"Keep long-lived facts in a memory store or file the agent reads and writes, not in an ever-growing `messages` list. Compact or summarise history before it hits the context limit."} test={"Long-running agents need checkpoints you can assert on: after step 5, does the progress file say what it should? Resume-from-checkpoint is a test case on its own."} data={"Memory is just state: decide its scope (per user, per project) and retention like any table. A progress file is the agent's equivalent of a watermark column."} ba={"Ask what the agent must remember between sessions and for how long. That's a data-retention requirement, and it may have GDPR implications."} />
+
+### Subagents for long tasks
+
+A subagent gets a scoped task, the minimum context it needs, the tools for that task and clear exit conditions. It works in its own context window and returns only a summary, which keeps the parent's context small. You lose visibility of how it reached its answer.
+
+<Exercise title="Workflow, agent or neither?" id="exercise-pattern">
+
+Pick the simplest pattern for each:
+
+1. Translate 50,000 product descriptions into French overnight.
+2. A support bot answers FAQs, but billing disputes need a specialist prompt with account tools.
+3. "Investigate why last night's data pipeline produced 3% fewer rows, and propose a fix."
 
 <div slot="answer">
 
-The reply is longer than 1,024 tokens, so it's **cut off** (`stop_reason: max_tokens`) and the JSON is incomplete. The API returned 200 OK because truncation isn't an error.
-
-Fixes: check `stop_reason` before parsing; raise `max_tokens` or, better, **split the work** (fewer items per call, or the Batch API with one item per request).
+1. **A single call per item, run through the Batch API.** There are no steps to decide.
+2. **Routing workflow.** Classify, then send billing to the specialist prompt and tools.
+3. **Agent.** The path depends on what each query reveals. Add a human gate before any fix is applied.
 
 </div>
 </Exercise>
 
-<Gotcha
-  title={"The JSON that broke on Tuesdays"}
-  scenario={"A nightly job asks for 150 product records as one JSON array with `max_tokens` set to 1,024. It passed every test with 10 records."}
-  gotcha={"Production batches are longer, the reply is cut off mid-array, and the parser throws. There's no API error, because `stop_reason: max_tokens` arrives with a 200 OK."}
-  fix={"Check `stop_reason` before parsing, size `max_tokens` to the real output, or split the work into one record per request (ideally through the Batch API)."}
-/>
-
-<SectionSummary points={[
-  "Tokens are the unit of reading, writing and billing; output costs about 5× input.",
-  "`model` picks the tier: Haiku for volume, Sonnet as the default, Opus or Fable for the hardest work.",
-  "`max_tokens` caps the reply only. Hitting it truncates silently with `stop_reason: max_tokens`, never an error.",
-  "`system` holds standing rules; `messages` holds the alternating conversation.",
-  "Cost = input tokens × input price + output tokens × output price: estimate it before you scale.",
-]} />
-
-## 1.3 Streaming
-
-### When to stream
-
-Streaming sends the reply as it's written, like watching a live broadcast instead of waiting for the recording. Use it for chat UIs and long outputs. Skip it for short backend jobs where nobody is watching: it adds code (you assemble the message yourself) without benefit.
-
-### The event sequence
-
-<Flow caption="Server-sent events for one streamed message" steps={[
-  { title: 'message_start', sub: 'empty shell' },
-  { title: 'content_block_start', sub: 'block type + index' },
-  { title: 'content_block_delta', sub: 'append fragment' },
-  { title: 'content_block_stop', sub: 'block complete' },
-  { title: 'message_delta', sub: 'stop_reason, usage' },
-  { title: 'message_stop', sub: 'message is whole' },
-]} />
-
-A `tool_use` block's input arrives as JSON fragments, so it isn't valid JSON until its `content_block_stop`. **Never act on a partial block.**
-
-### Interrupted streams
-
-A stream *ending* isn't the same as a message *completing*. Only `message_stop` means the message is whole. If your handler saves a turn whenever its read loop exits, a dropped connection writes a half-built block into history, and the failure shows up on the **next** request.
-
-<WhenThen whenLabel="When the stream…" thenLabel="…do this" rows={[
-  { when: 'reaches message_stop', then: 'Append the assembled message to history, then check stop_reason' },
-  { when: 'drops (network, timeout, client disconnect)', then: 'Discard the partial turn and retry from the last complete turn' },
-  { when: 'a retry then fails with a tool-use error', then: 'Check whether the previous turn was built from an interrupted stream before touching the schema' },
-]} />
-
-<CodeSwitch>
-
-```java
-MessageAccumulator acc = MessageAccumulator.create();
-try (StreamResponse<RawMessageStreamEvent> stream = client.messages().createStreaming(params)) {
-    stream.stream()
-        .peek(acc::accumulate)                              // rebuilds the full Message
-        .flatMap(e -> e.contentBlockDelta().stream())
-        .flatMap(d -> d.delta().text().stream())
-        .forEach(t -> System.out.print(t.text()));         // show text as it arrives
-}
-Message complete = acc.message();   // only reached if the stream ended cleanly
-history.add(complete.toParam());    // commit to history AFTER completion
-```
-
-```python
-with client.messages.stream(model="claude-sonnet-5-5", max_tokens=1024, messages=history) as stream:
-    for text in stream.text_stream:          # show text as it arrives
-        print(text, end="", flush=True)
-    complete = stream.get_final_message()     # only reached if the stream ended cleanly
-
-history.append({"role": "assistant", "content": complete.content})   # commit AFTER completion
-```
-
-</CodeSwitch>
-
-In Java, `MessageAccumulator` rebuilds the full message and mid-stream failures throw `SseException`; in Python, `stream.get_final_message()` does the same job.
-
-<Gotcha
-  title={"The error that appeared one request late"}
-  scenario={"A streaming chat app saves whatever it has received to history when its read loop exits. A user's Wi-Fi drops mid-reply."}
-  gotcha={"A half-built `tool_use` block is saved. The NEXT request fails with a validation error, so the team spends a day debugging the tool schema, which was fine."}
-  fix={"Append to history only after `message_stop`; on interruption, discard the partial turn and retry from the last complete one."}
-/>
-
-<SectionSummary points={[
-  "Stream when a person is watching or the output is long; skip it for short backend jobs.",
-  "Events run message_start → content_block_start/delta/stop → message_delta → message_stop.",
-  "Never act on a partial block: a tool_use input isn't valid JSON until its block stops.",
-  "Only `message_stop` means complete: commit to history then, and discard a partial turn on interruption.",
-]} />
-
-## 1.4 Errors, retries and rate limits
-
-### Retriable or terminal?
-
-Ask one question of every failure: could waiting and sending the **same** request succeed?
-
-| Status | `error.type` | Meaning | Retry? |
-|---|---|---|---|
-| 400 | `invalid_request_error` | Bad request shape (or a spend limit you set) | **No**: fix the request |
-| 401 / 403 | authentication / permission | Bad key or no access | **No** |
-| 404 / 413 | not_found / request_too_large | Wrong model or path; payload too big | **No** |
-| 429 | `rate_limit_error` | Your org hit a rate or spend limit | **Yes**, after `retry-after`. A spend-cap 429 has no `retry-after` and won't clear by waiting |
-| 500 / 504 | `api_error` / `timeout_error` | Server-side fault | **Yes**, bounded backoff |
-| 529 | `overloaded_error` | Anthropic-wide capacity, not your quota | **Yes**, backoff with jitter |
-| 200 + `refusal` | (not an error) | A content decision by the model | **Not as-is**: read `stop_details`, log it, then surface it or fall back to another model |
-
-<VsPair
-  left={{ title: '429 rate_limit_error', meaning: 'YOU are sending too much: your organisation hit RPM, ITPM or OTPM.', example: 'Fix: honour retry-after, reduce concurrency, ask for a higher tier.' }}
-  right={{ title: '529 overloaded_error', meaning: 'ANTHROPIC is busy across the board, whatever your rate.', example: 'Fix: backoff with jitter, fail over or degrade gracefully if it persists.' }}
-/>
-
-### Rate limits
-
-Limits are set **per organisation, per model**, as requests per minute (RPM), input tokens per minute (ITPM) and output tokens per minute (OTPM). They use a token-bucket model and rise with your usage tier. Cached input reads typically don't count against ITPM on current models, so caching raises throughput as well as cutting cost.
-
-### What the SDK already does
-
-The official SDKs retry connection errors, 408, 409, 429 and 5xx automatically, **twice by default**, with exponential backoff, honouring `retry-after`. Don't wrap your own retry loop around that: it multiplies attempts. Tune `maxRetries`, then handle what's left.
-
-<CodeSwitch>
-
-```java
-try {
-    Message msg = client.messages().create(params);
-} catch (RateLimitException e) {          // 429, after the SDK's retries ran out
-    // queue the work, or fall back to a cached or simpler answer
-} catch (BadRequestException e) {         // 400: terminal, fix the request
-    throw e;
-} catch (InternalServerException e) {     // 5xx after retries
-    // degrade gracefully, alert
-} catch (AnthropicServiceException e) {   // any other HTTP status: e.statusCode()
-    log.error("Claude call failed", e);
-} catch (AnthropicIoException e) {        // network problem
-    // retry later
-}
-```
-
-```python
-try:
-    msg = client.messages.create(**params)
-except anthropic.RateLimitError:          # 429, after the SDK's retries ran out
-    ...  # queue the work, or fall back to a cached or simpler answer
-except anthropic.BadRequestError:         # 400: terminal, fix the request
-    raise
-except anthropic.InternalServerError:     # 5xx after retries
-    ...  # degrade gracefully, alert
-except anthropic.APIStatusError as e:     # any other HTTP status: e.status_code
-    log.exception("Claude call failed")
-except anthropic.APIConnectionError:      # network problem
-    ...  # retry later
-```
-
-</CodeSwitch>
-
-Python raises `anthropic.BadRequestError`, `RateLimitError`, `InternalServerError` and so on. Java exception map: 400 `BadRequestException` · 401 `UnauthorizedException` · 403 `PermissionDeniedException` · 404 `NotFoundException` · 422 `UnprocessableEntityException` · 429 `RateLimitException` · 5xx `InternalServerException`. Log the `request-id` response header for support (Java: `withRawResponse()...requestId()`; Python: `msg._request_id`).
-
-<MythReality rows={[
-  { myth: 'Retry every failure a few times to be safe', reality: 'Retrying a 400 just burns the retry budget: the identical request fails identically' },
-  { myth: 'A tool failure can be returned as an empty result', reality: 'Return the error with is_error so the model can react; it treats an empty result as valid data' },
-  { myth: 'Refusals are transient errors', reality: 'A refusal is a content decision returned with 200 OK. Read stop_details and log it; surface it, or retry on a fallback model as the docs suggest' },
-]} />
-
-<Gotcha
-  title={"The retry storm"}
-  scenario={"Each service wraps Claude calls in its own 5-attempt retry loop, on top of the SDK's built-in retries."}
-  gotcha={"One brief 529 overload turns every user request into up to 15 calls, amplifying the outage. Meanwhile a spend-cap 429 (no `retry-after`) is retried forever and never clears."}
-  fix={"Rely on the SDK's backoff and tune `maxRetries`; never retry 4xx except 429; treat a 429 without `retry-after` as a billing or limit problem, alert, and fail gracefully."}
-/>
-
-<SectionSummary points={[
-  "First question for any failure: could the same request succeed later? Retriable: 429, 500, 504, 529. Terminal: 400, 401, 403, 404, 413.",
-  "429 is your organisation's limit (honour `retry-after`); 529 is Anthropic-wide overload.",
-  "Limits are per organisation and model: RPM, ITPM, OTPM.",
-  "The SDK already retries with backoff (2× by default): tune `maxRetries`, don't stack your own loop.",
-  "A refusal arrives as 200 OK: read `stop_details` and log it; surface it or fall back to another model, never back off and resend the same request.",
-]} />
-
-## 1.5 The lifecycle and deployment
-
-### Seven lifecycle phases
-
-A Claude application moves through the same lifecycle as any engineered system. Your Accelerators notes frame each phase with a gate.
-
-<Flow caption="The lifecycle of a Claude application, with gates between phases" steps={[
-  { title: 'Requirements', sub: 'functional + infra' },
-  { title: 'Design', sub: 'platform, model, trust' },
-  { title: 'Build', sub: 'agent, tools, prompts' },
-  { title: 'Test', sub: 'evals + test levels' },
-  { title: 'Deploy', sub: 'pin, gate on eval' },
-  { title: 'Operate', sub: 'cost, latency, errors' },
-  { title: 'Iterate', sub: 'findings → requirements' },
-]} />
-
-- **Functional requirements** - what the system must do, with enough detail to check · these become your eval cases
-- **Infrastructure requirements** - latency, scale, data residency, identity, audit · some of these decide the platform, so capture them first
-- **Gates** - don't build until the platform meets residency · don't release until the new version clears the eval
-
-### Choosing a platform
-
-The customer's existing cloud, identity and compliance agreements usually decide the platform.
-
-| Platform | Identity and data | Choose when |
-|---|---|---|
-| Claude API (first-party) | Anthropic identity and terms; new features first | No binding cloud or residency constraint |
-| Claude Platform on AWS | Through the customer's AWS account, Anthropic model IDs and lifecycle | On AWS but wants first-party parity |
-| Amazon Bedrock | AWS identity; data stays in the configured AWS boundary | On AWS with a compliance posture there |
-| Google Vertex AI | Google Cloud IAM; regional or global endpoints | On Google Cloud |
-| Microsoft Foundry | Wrapping product's identity and billing | Customer already runs Foundry |
-
-Compare platforms on **latency** (measured from the customer's region), **compliance** (usually pass or fail) and **total cost** (tokens plus egress, fees and integration effort), not token price alone.
-
-### Pin what ships
-
-Every full model ID is a fixed snapshot; an alias moves over time and may resolve differently per platform. Pin the full ID in configuration, keep the previous version available for rollback, and promote a new model only after it clears your eval baseline (Domain 7). A moving alias is fine for a throwaway prototype, never for production.
-
 ### Where this is in your course notes
 
-- **MSO Foundations §05** - SDK vs REST, sync vs streaming vs async, Batches
-- **Production-Grade Prompting §05** - the streaming event table and the half-written tool call
-- **Production Engineering, Evals & Security §04** - retriable vs terminal, the error decision table
-- **Accelerators & IP Contribution §04–06** - requirements, lifecycle gates, platforms, pinning
+- **Production-Grade Prompting §07** - workflow vs agent, the three wiring paths, loop checklist, human-in-the-loop points
+- **Production-Grade Prompting §08** - memory scopes and skills
+- **Production Engineering, Evals & Security §05** - orchestrator-worker cost (about 15×)
 
-<Resource kind="docs" href="https://platform.claude.com/docs/en/api/errors" title="API errors" text="Every status code and error type, and the request-id header." />
-<Resource kind="docs" href="https://platform.claude.com/docs/en/cli-sdks-libraries/sdks/java" title="Java SDK" text="Client setup, streaming, MessageAccumulator, exceptions and retries." />
-<Resource kind="docs" href="https://platform.claude.com/docs/en/cli-sdks-libraries/sdks/python" title="Python SDK" text="The anthropic package: sync and async clients, streaming helpers, errors and retries." />
-
-<Gotcha
-  title={"The Monday-morning behaviour change"}
-  scenario={"A production app calls Claude with a model alias. Nobody deployed anything over the weekend."}
-  gotcha={"The alias moved to a newer snapshot, outputs changed format, and a downstream parser broke, with no commit to roll back."}
-  fix={"Pin the full model ID in config, keep the previous version available, and promote upgrades only after the eval passes."}
-/>
+<Resource kind="article" href="https://www.anthropic.com/engineering/building-effective-agents" title="Building effective agents" text="Anthropic's guide to workflows vs agents and the five workflow patterns." />
 
 <SectionSummary points={[
-  "Requirements → design → build → test → deploy → operate → iterate, with a gate between phases.",
-  "Capture infrastructure requirements (residency, latency, identity) first: they often decide the platform.",
-  "The customer's cloud and compliance posture usually pick the platform; compare latency, compliance and total cost.",
-  "Pin the full model ID, keep the previous version, and promote a new one only when it clears the eval.",
+  "Pick a memory scope at design time: in-context, external storage, summarised or stateless.",
+  "State that must survive sessions or be shared across instances belongs in external storage.",
+  "Subagents get a scoped task and a fresh context, and return only a summary: cheaper context, less visibility.",
 ]} />

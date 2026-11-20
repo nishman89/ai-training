@@ -1,0 +1,78 @@
+---
+import { BLUEPRINT, GUIDE_V1_URL } from '../data/blueprint';
+import { getSummaries } from '../lib/summaries';
+import { url } from '../lib/site';
+
+/** The official exam-guide skills for one domain: weight, scope, where they're covered here, and Academy chapters. */
+interface Props { chapter: number; }
+const skills = BLUEPRINT[Astro.props.chapter] ?? [];
+const domains = await getSummaries();
+const where = new Map(domains.flatMap((d) => d.sections.map((s) => [s.number, { href: `${url(`chapters/${d.number}`)}#${s.slug}`, title: s.title }])));
+const label = { good: 'Covered', partial: 'Partly covered', light: 'Light coverage' } as const;
+const total = skills.reduce((n, s) => n + s.weight, 0);
+---
+{skills.length > 0 && (
+  <section class="card bp" id="blueprint" data-testid="blueprint-skills">
+    <span class="eyebrow">Official exam guide v1.0 · Domain {Astro.props.chapter}</span>
+    <h2>What the exam tests here</h2>
+    <p class="bp__lead">{skills.length} skill{skills.length === 1 ? '' : 's'}, {total.toFixed(1)}% of the exam. Names and weights from the
+      <a href={GUIDE_V1_URL} target="_blank" rel="noopener">CCDV-F exam guide (PDF) ↗</a>; Academy chapters matched by this site.</p>
+    <ol class="bp__list">
+      {skills.map((s, i) => (
+        <li class:list={['bp__skill', `bp__skill--${s.coverage}`]} data-testid={`blueprint-skill-${i + 1}`}>
+          <div class="bp__top">
+            <span class="bp__weight">{s.weight}%</span>
+            <h3 class="bp__name">{s.name}</h3>
+            <span class:list={['bp__cov', `bp__cov--${s.coverage}`]}>{label[s.coverage]}</span>
+          </div>
+          <p class="bp__covers">{s.covers}</p>
+          <p class="bp__row"><span class="bp__k">In these notes</span>
+            {s.sections.map((n) => where.get(n)
+              ? <a class="bp__sec" href={where.get(n)!.href} title={where.get(n)!.title}>{`${n} ${where.get(n)!.title}`}</a>
+              : <span class="bp__sec">{n}</span>)}
+          </p>
+          {s.academy.length > 0 && (
+            <div class="bp__row"><span class="bp__k">Academy</span>
+              <div class="bp__acs">
+                {s.academy.map((a) => (
+                  <p class="bp__ac"><a href={a.url} target="_blank" rel="noopener">{a.course} ↗</a> › <strong>{a.section}</strong>{a.lessons && <span class="bp__lessons">: {a.lessons.join(' · ')}</span>}</p>
+                ))}
+              </div>
+            </div>
+          )}
+          {s.gap && <p class="bp__gap">Gap: {s.gap}</p>}
+        </li>
+      ))}
+    </ol>
+  </section>
+)}
+
+<style>
+  .bp { border-left: 8px solid var(--pink); margin-top: 1rem; }
+  .bp h2 { margin: 0.15rem 0 0.35rem; font-size: 1.35rem; }
+  .bp__lead { margin: 0 0 0.9rem; color: var(--grey); font-size: 0.95rem; }
+  .bp__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }
+  .bp__skill { padding: 0.8rem 1rem; border-radius: 12px; background: var(--bg); border-left: 5px solid var(--success); }
+  .bp__skill--partial { border-left-color: #c98a00; }
+  .bp__skill--light { border-left-color: var(--pink); }
+  .bp__top { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+  .bp__weight { flex: none; min-width: 3.4rem; text-align: center; padding: 0.15rem 0.5rem; border-radius: 999px; background: var(--charcoal); color: #fff; font-weight: 700; font-size: 0.85rem; }
+  .bp__name { margin: 0; font-size: 1.1rem; flex: 1 1 auto; }
+  .bp__cov { font-size: 0.75rem; font-weight: 700; padding: 0.15rem 0.6rem; border-radius: 999px; }
+  .bp__cov--good { background: var(--success-tint); color: var(--success); }
+  .bp__cov--partial { background: #fbf1d9; color: #8a5d00; }
+  .bp__cov--light { background: var(--pink-tint); color: var(--pink-dark); }
+  .bp__covers { margin: 0.4rem 0 0.35rem; font-size: 0.95rem; }
+  .bp__row { margin: 0.25rem 0 0; display: flex; flex-wrap: wrap; gap: 0.3rem 0.5rem; align-items: baseline; font-size: 0.9rem; }
+  .bp__k { flex: none; width: 7.5rem; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--grey); }
+  .bp__sec { padding: 0.05rem 0.55rem; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); color: var(--charcoal); text-decoration: none; font-weight: 600; font-size: 0.85rem; }
+  a.bp__sec:hover { background: var(--pink-tint); border-color: var(--pink-soft); }
+  .bp__acs { flex: 1 1 0; display: grid; gap: 0.2rem; }
+  .bp__ac { margin: 0; }
+  .bp__lessons { color: var(--grey); }
+  .bp__gap { margin: 0.45rem 0 0; padding: 0.4rem 0.7rem; border-radius: 8px; background: var(--surface); font-size: 0.88rem; color: var(--charcoal); }
+  @media (max-width: 40rem) {
+    .bp__k { width: 100%; }
+    .bp__acs { flex-basis: 100%; }
+  }
+</style>

@@ -1,236 +1,440 @@
 ---
 number: 5
-title: "Tools and MCP"
-weight: 10
-summary: "How tool use works end to end, designing tools Claude picks correctly, client vs server tools, and the Model Context Protocol: primitives, transports, scopes, permissions and authentication."
+title: "Model Selection and Optimization"
+weight: 16.8
+summary: "Picking the right Claude for each job and keeping it affordable: the model lineup, effort and reasoning, prompt caching, the Batch API and token budgets."
 objectives:
-  - "Trace the tool-use round trip and implement it correctly"
-  - "Write tool descriptions and schemas that Claude selects reliably"
-  - "Distinguish client and server tools, and use tool_choice and pause_turn"
-  - "Explain MCP's tools, resources and prompts, and choose stdio or HTTP transport"
-  - "Configure MCP scope, per-tool permissions and authentication safely"
+  - "Choose a model tier from cost, latency and capability, and justify moving up or down with an eval"
+  - "Route traffic between models by task signal"
+  - "Explain prompt caching: what it caches, what it costs, what breaks it, and how to prove it works"
+  - "Decide when the Batch API fits, and when it doesn't"
+  - "Estimate and control token usage, including images and long contexts"
 ---
+import Hub from '../../components/diagrams/Hub.astro';
+import ExamRef from '../../components/ExamRef.astro';
+import RoleLens from '../../components/RoleLens.astro';
+import PictureIt from '../../components/PictureIt.astro';
 import Gotcha from '../../components/Gotcha.astro';
 import SectionSummary from '../../components/SectionSummary.astro';
 import CodeSwitch from '../../components/CodeSwitch.astro';
+import Compare from '../../components/diagrams/Compare.astro';
 import Flow from '../../components/diagrams/Flow.astro';
-import Hub from '../../components/diagrams/Hub.astro';
-import VsPair from '../../components/VsPair.astro';
+import WhenThen from '../../components/WhenThen.astro';
 import MythReality from '../../components/MythReality.astro';
 import Exercise from '../../components/Exercise.astro';
 import Resource from '../../components/Resource.astro';
 
-## 5.1 How tool use works
+## 5.1 Choosing a model
+
+<ExamRef section="5.1" />
+
+
+
+
 
 ### In plain English
 
-This domain is about letting Claude **do** things, not just talk. You describe a function ("get_order_status takes an order ID"). Claude replies "please run get_order_status with A-1234", **your** code runs it and sends back the answer, and Claude continues. **MCP** is a standard way to package tools so they plug into any Claude app, like USB for tools.
+Picking which Claude to use, and not wasting money. Bigger models are smarter but cost more and respond more slowly. Sorting emails into "billing" or "tech" is easy, so use Haiku; reviewing a tricky contract is hard, so use a bigger model. The two big money-savers are **caching** (re-sending the same long document is far cheaper the second time) and **batching** (send a pile of jobs to run overnight at half price).
 
-**Real-life example:** connect the GitHub MCP server once, and Claude can search code and open issues in any app that supports MCP.
+<RoleLens dev={"Default to Sonnet; drop to Haiku for high-volume, simple tasks; use Opus or Fable for hard reasoning. Swap the model ID and rerun the evals to decide."} test={"Run the same eval suite across Haiku, Sonnet and Opus. The cheapest model that passes the threshold wins."} data={"Classifying 10 million rows? Haiku plus Batch is usually the answer. Cost per row is your metric."} ba={"Model choice is a cost-quality trade-off you can show as a table: price per 1,000 tickets against accuracy. That's a business decision with numbers."} />
 
-### The round trip
+### The current lineup
 
-<Flow caption="Claude never runs your tools: it asks, your code runs them" steps={[
-  { title: 'Send tools + question', sub: 'name, description, input_schema' },
-  { title: 'stop_reason: tool_use', sub: 'tool_use block: name, id, input' },
-  { title: 'Your code runs it', sub: 'Claude is not connected meanwhile' },
-  { title: 'Send tool_result', sub: 'same tool_use_id' },
-  { title: 'Claude continues', sub: 'answer or another tool' },
+All four current models have a 1M-token context window, 128K max output and adaptive thinking.
+
+| Model | API ID | Input / output per 1M tokens | Default effort | Speed | Best for |
+|---|---|---|---|---|---|
+| Fable 5.2 | `claude-fable-5-2` | $8 / $40 | high | Moderate | Hardest reasoning, long-horizon agents |
+| Opus 5.5 | `claude-opus-5-5` | $4 / $20 | medium | Moderate | Long-running agentic coding and knowledge work |
+| Sonnet 5.5 | `claude-sonnet-5-5` | $2 / $10 | high | Fast | The balanced default |
+| Haiku 5.5 | `claude-haiku-5-5` | from $0.10 / $0.50 | medium | Fastest | Classification, extraction, routing, high volume |
+
+Prices and IDs change: check the [models overview](https://platform.claude.com/docs/en/models-overview) when you build. Use the Models API (`GET /v1/models`) to read limits and capabilities in code, and read its `line` field rather than parsing the ID.
+
+### The course rule: let the eval decide
+
+<Flow caption="Model choice is an eval-gated decision, in both directions (Exam guide: Model Selection and Tradeoffs)" steps={[
+  { title: 'Start on Sonnet', sub: 'balanced default' },
+  { title: 'Run the eval', sub: 'on your real cases' },
+  { title: 'Misses the bar?', sub: 'step UP a tier' },
+  { title: 'Cheaper tier holds?', sub: 'step DOWN to Haiku' },
 ]} />
 
-A tool conversation is built from typed blocks: `text`, `tool_use`, `tool_result` and (with thinking) `thinking`. The API enforces the pairing: each `tool_use` must be answered by a `tool_result` with the matching ID in the next user turn. Most bugs sit on that boundary between what Claude owns and what your code owns.
+The current docs page recommends Opus 5.5 for most workloads, while your course says start with Sonnet. **For the exam, use the course rule:** start on Sonnet and move only on a measured score.
 
-<CodeSwitch title="One tool call, answered">
+### Routing: a default plus an override
+
+You don't have to use one model for everything. The common production pattern sends most traffic to a balanced default and routes specific requests up or down by task type, input length or a difficulty classification.
+
+- **Handles well** - matching each workload to the cheapest model that meets its quality bar
+- **Costs** - a classification step and a second model path to maintain
+- **Skip it when** - traffic is uniform at one quality bar: pin one model
+
+<Gotcha
+  title={"The classifier that cost more than the product"}
+  scenario={"A prototype used the most capable model for everything, including tagging 2 million support tickets a month."}
+  gotcha={"The bill scales with volume. Haiku would have held the quality bar on this simple task at a small fraction of the cost."}
+  fix={"Start on the default, run the eval on real tickets, and route bulk classification to the smallest model that passes."}
+/>
+
+<SectionSummary points={[
+  "Four tiers trade capability for cost and speed: Fable, Opus, Sonnet, Haiku.",
+  "Course rule: start on Sonnet, step up when an eval shows a miss, step down to Haiku when an eval shows the drop is acceptable.",
+  "Route mixed traffic: a default model plus an override by task type, length or difficulty.",
+  "Check IDs and prices in the docs (or the Models API) at build time: they change.",
+]} />
+
+## 5.2 Reasoning and effort
+
+<ExamRef section="5.2" />
+
+
+
+
+
+### Two separate decisions
+
+Choosing the model and choosing how much it reasons are set separately. Current models use **adaptive thinking**: they decide when to think and how much. You tune depth with `effort` (low → max) rather than a fixed token budget. Thinking content is omitted by default on the newest models; ask for a summarised display when you need to show it.
+
+<Compare middle="vs" caption="Where reasoning earns its cost (Exam guide: LLM Fundamentals)" columns={[
+  { title: 'Worth it', sub: 'raise effort', points: ['Multi-step debugging', 'Planning an agent task', 'Complex analysis or maths', 'Ambiguous requirements'] },
+  { title: 'Wasted', sub: 'lower effort', points: ['Lookups', 'Classification and routing', 'Simple extraction', 'Reformatting'] },
+]} />
+
+More thinking means more output tokens, so more cost and latency. In a multi-turn conversation, pass thinking blocks back unchanged (Domain 6).
+
+<SectionSummary points={[
+  "Choosing a model and choosing how much it reasons are separate decisions.",
+  "Current models think adaptively; tune depth with `effort`, not a token budget.",
+  "Spend reasoning on multi-step problems, not lookups, classification or reformatting: thinking tokens are output tokens.",
+]} />
+
+<RoleLens dev={"Extended thinking and the effort setting let Claude reason more before answering, which costs more tokens and time. Turn it up only where accuracy needs it."} test={"Higher effort can fix a failing eval case, but measure the latency and cost change too. That's a performance test."} data={"Don't switch on deep reasoning for simple row classification. It multiplies cost across millions of rows for little gain."} ba={"More thinking is slower and costs more, so ask: does this decision need it? A complex claim assessment might; a ticket tag doesn't."} />
+
+## 5.3 Prompt caching
+
+<ExamRef section="5.3" />
+
+
+
+
+
+### How it works
+
+Prompt caching stores the processing of a stable **prefix** of your request so the next request with the same prefix reads it back instead of recomputing it. The prefix is built in a fixed order: **tools → system → messages**, up to and including the block marked with `cache_control`.
+
+Think of a barista who remembers your usual order: the first visit takes longer to set up, and every repeat is quick and cheap.
+
+- **Automatic** - one top-level cache_control; the breakpoint moves forward as the conversation grows · best for multi-turn chat
+- **Explicit** - cache_control on specific blocks, up to 4 breakpoints · best when sections change at different rates (tools rarely, RAG context daily)
+
+{/* diagram */}
+<Flow caption="The cache matches an exact prefix, in this order: stable first, changing last (Exam guide: Cost and Token Management)" steps={[
+  { title: 'tools', sub: 'stable' },
+  { title: 'system', sub: 'stable: policy, documents' },
+  { title: 'cache_control', sub: 'breakpoint: cache up to here' },
+  { title: 'messages', sub: 'changes every call' },
+]} />
+
+<RoleLens dev={"Put the stable part (system prompt, documents, tools) first with `cache_control`, and the changing part last. Check `cache_read_input_tokens` to prove it works."} test={"Assert on caching: call twice within 5 minutes, and the second response must show `cache_read_input_tokens > 0`. That's an automatable test."} data={"When you classify many rows against the same long instructions, caching the instructions cuts input cost massively. Keep per-row data out of the cached prefix."} ba={"Caching changes the business case: the same 50-page policy read for every query becomes much cheaper. Factor it into cost estimates."} />
+
+### What it costs
+
+| Operation | Price vs base input |
+|---|---|
+| Cache write, 5-minute TTL (default) | 1.25× |
+| Cache write, 1-hour TTL | 2× |
+| Cache read | 0.1× on most models; **0.05× on Opus and Sonnet 5.5**; **0.025× on Fable** |
+
+Writes cost **more** than normal input, so caching pays only when reads outnumber writes. The 5-minute lifetime refreshes free on every hit. These multipliers stack with the Batch API discount. The minimum cacheable prefix is 512 tokens on the 5.x models; shorter prompts silently don't cache.
+
+### What breaks the cache
+
+The prefix must be **byte-identical**. A change at one level invalidates that level and everything after it.
+
+<WhenThen whenLabel="If you change…" thenLabel="…this is invalidated" rows={[
+  { when: 'tool definitions', then: 'Everything: tools, system and messages' },
+  { when: 'web search or citations on/off', then: 'System and messages' },
+  { when: 'tool_choice, or add/remove images', then: 'Messages only' },
+  { when: 'a timestamp or user name near the top', then: 'Everything after it, on every call (move it below the last breakpoint)' },
+]} />
+
+### Proving it works
+
+Read the usage fields: `total input = cache_read_input_tokens + cache_creation_input_tokens + input_tokens`. Note that `input_tokens` counts only the uncached tokens **after** the last breakpoint. If both cache fields are 0, the prefix was too short or not identical.
+
+<CodeSwitch>
 
 ```java
-// Claude asked for a tool: echo its turn, then answer every tool_use with a tool_result
-history.add(reply.toParam());
-List<ContentBlockParam> results = new ArrayList<>();
-for (ContentBlock block : reply.content()) {
-    block.toolUse().ifPresent(use -> {
-        try {
-            String out = orders.status(use.input().toString());
-            results.add(ContentBlockParam.ofToolResult(ToolResultBlockParam.builder()
-                .toolUseId(use.id()).content(out).build()));
-        } catch (Exception e) {
-            results.add(ContentBlockParam.ofToolResult(ToolResultBlockParam.builder()
-                .toolUseId(use.id())
-                .content("Order service unavailable: " + e.getMessage())
-                .isError(true)                          // tell Claude it failed
-                .build()));
-        }
-    });
-}
-history.add(MessageParam.builder().role(MessageParam.Role.USER).contentOfBlockParams(results).build());
+MessageCreateParams params = MessageCreateParams.builder()
+    .model(Model.CLAUDE_SONNET_5_5)
+    .maxTokens(1024L)
+    .systemOfTextBlockParams(List.of(
+        TextBlockParam.builder()
+            .text(LONG_POLICY_DOCUMENT)                               // stable, reused prefix
+            .cacheControl(CacheControlEphemeral.builder().build())    // 5-minute TTL
+            .build()))
+    .addUserMessage(userQuestion)                                     // changes every call
+    .build();
+
+Usage u = client.messages().create(params).usage();
+long read  = u.cacheReadInputTokens().orElse(0L);
+long write = u.cacheCreationInputTokens().orElse(0L);
+// first call: write > 0. Repeat within 5 minutes: read > 0. Both 0: not cached.
 ```
 
 ```python
-# Claude asked for a tool: echo its turn, then answer every tool_use with a tool_result
-history.append({"role": "assistant", "content": reply.content})
-results = []
-for block in reply.content:
-    if block.type != "tool_use":
-        continue
-    try:
-        out = orders.status(**block.input)
-        results.append({"type": "tool_result", "tool_use_id": block.id, "content": out})
-    except Exception as e:
-        results.append({
-            "type": "tool_result", "tool_use_id": block.id,
-            "content": f"Order service unavailable: {e}",
-            "is_error": True,                           # tell Claude it failed
-        })
-history.append({"role": "user", "content": results})
+msg = client.messages.create(
+    model="claude-sonnet-5-5",
+    max_tokens=1024,
+    system=[{
+        "type": "text",
+        "text": LONG_POLICY_DOCUMENT,                    # stable, reused prefix
+        "cache_control": {"type": "ephemeral"},         # 5-minute TTL
+    }],
+    messages=[{"role": "user", "content": user_question}],   # changes every call
+)
+
+read = msg.usage.cache_read_input_tokens or 0
+write = msg.usage.cache_creation_input_tokens or 0
+# first call: write > 0. Repeat within 5 minutes: read > 0. Both 0: not cached.
+```
+
+```typescript
+const msg = await client.messages.create({
+  model: 'claude-sonnet-5-5',
+  max_tokens: 1024,
+  system: [{
+    type: 'text',
+    text: LONG_POLICY_DOCUMENT,                      // stable, reused prefix
+    cache_control: { type: 'ephemeral' },           // 5-minute TTL
+  }],
+  messages: [{ role: 'user', content: userQuestion }],   // changes every call
+});
+
+const read = msg.usage.cache_read_input_tokens ?? 0;
+const write = msg.usage.cache_creation_input_tokens ?? 0;
+// first call: write > 0. Repeat within 5 minutes: read > 0. Both 0: not cached.
 ```
 
 </CodeSwitch>
 
-<SectionSummary points={[
-  "Claude only requests a tool call; your code runs it and returns a `tool_result` with the matching `tool_use_id`.",
-  "Conversations are typed blocks (text, tool_use, tool_result, thinking), and the API enforces the pairing.",
-  "Most bugs sit on the boundary between what Claude owns and what your code owns.",
-]} />
+<Exercise title="Why is caching not working?" id="exercise-cache-miss">
 
-## 5.2 Designing tools Claude picks correctly
-
-### The description is the interface
-
-Claude picks a tool by reasoning over every registered description in the context of the conversation. When two descriptions look alike, it has no reliable signal and picks on surface details.
-
-- **Say when NOT to use it** - one sentence of exclusion gives a decision boundary · "Look up an order's status. Do not use for refunds."
-- **Merge what you can't separate** - two overlapping tools → one tool with a type parameter
-- **Use the schema** - enum for fixed values, required only for truly required fields, clear parameter descriptions
-- **Don't over-tool** - every definition costs tokens on every call, and overlap makes selection erratic · start minimal
-
-### Errors go back to Claude
-
-Return failures as a `tool_result` with `is_error: true` and a useful message, so the model can retry, try another approach, ask the user or stop. An empty result is read as valid data ("no orders found"), and the model carries on confidently.
-
-<Gotcha
-  title={"\"Sorry, that item is out of stock\""}
-  scenario={"The inventory API times out, and the tool catches the exception and returns an empty list."}
-  gotcha={"Claude reads the empty result as real data and confidently tells a customer the item is unavailable. A lost sale and a false statement."}
-  fix={"Return `is_error: true` with a message (\"inventory service timed out\") so Claude can retry, apologise, or hand off."}
-/>
-
-<SectionSummary points={[
-  "The description is the interface: say what the tool does AND when not to use it.",
-  "Merge tools you can't separate; use enums and only truly required fields.",
-  "Return failures with `is_error: true`: an empty result reads as valid data.",
-  "Start with the fewest tools: each costs tokens every call and overlap makes selection erratic.",
-]} />
-
-## 5.3 Client tools, server tools and tool_choice
-
-### Who runs it?
-
-<VsPair
-  left={{ title: 'Client tools', meaning: 'Defined by you (or Anthropic-schema tools like bash and text_editor) and run in YOUR application.', example: 'Response stops with stop_reason tool_use; you run it and send tool_result.' }}
-  right={{ title: 'Server tools', meaning: 'Run on Anthropic\'s side, e.g. web search, web fetch, code execution. Declared in the request; nothing to implement.', example: 'May cost extra per use. A long server loop returns pause_turn.' }}
-/>
-
-| `tool_choice` | Meaning |
-|---|---|
-| `auto` (default) | Claude decides whether to call a tool |
-| `any` | Must call some tool |
-| `tool` + name | Must call that specific tool (forced: handy for structured output) |
-| `none` | Must not call tools |
-
-Add `disable_parallel_tool_use: true` to allow at most one tool call per turn. When a server-tool loop hits its iteration cap the response has `stop_reason: pause_turn`. Resend the conversation as it is; don't add a "please continue" message.
-
-<SectionSummary points={[
-  "Client tools run in your app; server tools (web search, web fetch, code execution) run on Anthropic's side.",
-  "`tool_choice`: auto, any, tool (forced) or none; `disable_parallel_tool_use` allows one call per turn.",
-  "`pause_turn` means a server-tool loop paused: resend as it is, no \"continue\" message.",
-]} />
-
-## 5.4 The Model Context Protocol
-
-### Why MCP
-
-Wiring a tool straight into each app means three apps need three integrations. MCP moves the tool into a **server** that any MCP client (Claude Code, Claude apps, your own app) can attach to, so you build the integration once. Think JDBC: one driver standard, many databases and clients.
-
-<Hub center="MCP server" caption="An MCP server exposes three kinds of capability" items={['Tools: actions the model calls', 'Resources: read-only data the client fetches', 'Prompts: templates the user invokes']} />
-
-### Transports
-
-<VsPair
-  left={{ title: 'stdio', meaning: 'The client launches the server as a local subprocess and talks over stdin/stdout. Runs on ONE machine.', example: 'A personal script, a local database tool, a dev server.' }}
-  right={{ title: 'Streamable HTTP', meaning: 'The server runs remotely; clients connect to its URL over the network.', example: 'A shared team server or a hosted integration.' }}
-/>
-
-SSE is the older remote transport and isn't recommended for new servers. Each connected server's tool definitions cost context, so connect only the servers a task needs. Claude Code defers loading tool definitions until they're needed.
-
-<Gotcha
-  title={"The shared server only one person could use"}
-  scenario={"A developer adds a stdio MCP server to the committed `.mcp.json`, pointing at a script on their laptop."}
-  gotcha={"It works for them. For everyone else Claude Code fails to start the server, because the script and runtime only exist on one machine."}
-  fix={"Host shared servers over HTTP (project or enterprise scope); keep stdio servers in local or user scope, or bundle the script so every machine has it."}
-/>
-
-<SectionSummary points={[
-  "MCP turns integrations into reusable servers any MCP client can attach to: build once, use everywhere.",
-  "A server exposes tools (actions), resources (read-only data) and prompts (templates).",
-  "stdio = local subprocess on one machine; Streamable HTTP = remote and shared. SSE is legacy.",
-]} />
-
-## 5.5 MCP scope, permissions and auth
-
-### Scope in Claude Code
-
-| Scope | Stored in | Who gets it | Right for |
-|---|---|---|---|
-| Local | `~/.claude.json` under the project | Only you, in this project | A tool tied to one project |
-| User | Your personal Claude settings | Only you, every project | Your own local utilities |
-| Project | `.mcp.json` at the repo root (committed) | Everyone who clones the repo | Team-wide servers |
-| Enterprise | Managed settings, set by an admin | Everyone in the organisation | Internal services, security tooling |
-
-Transport and scope are separate decisions with linked consequences: a **stdio server in `.mcp.json` looks shared but isn't**, because it only runs where it's installed. A shared team server needs HTTP plus project or enterprise scope.
-
-### Per-tool permissions
-
-Connecting a server exposes its whole tool list. Permission rules can target one tool by name: `mcp__server__tool`. For example, allow `mcp__github__create_issue` without a prompt while other GitHub tools still prompt, or deny a write tool while read tools stay available. **A deny on one tool beats an allow on the server.** Through the API's **MCP connector** (remote servers called straight from the Messages API), an `mcp_toolset` can enable or disable each tool: a permission rule decides "can it run", enabling decides "can the model see it".
-
-### Authentication
-
-<MythReality rows={[
-  { myth: 'Put the API key in .mcp.json so teammates can connect', reality: 'The key goes into git history for good: rotate it. Reference an environment variable; the file holds only the server address' },
-  { myth: 'OAuth that works in staging will work in production', reality: 'Redirect URIs are registered per host: add production\'s before go-live' },
-]} />
-
-- **User identity (SaaS, cloud)** - OAuth, browser sign-in · audit with a PostToolUse hook
-- **Service identity (internal API)** - API key in an environment variable or secrets manager · never in committed config
-- **Local (filesystem, local DB)** - stdio, no network auth · deny rules enforce path access
-
-<Exercise title="Configure it" id="exercise-mcp-config">
-
-Your team wants everyone's Claude Code to use the company's hosted Jira MCP server, but nobody should be able to delete issues. What transport, scope and permission rule do you use, and where does the credential go?
+Your system prompt is 6,000 tokens of policy text, marked with `cache_control`. It starts with the line `Today is 2026-11-20 14:03:22. The user is Priya.` Every call shows `cache_read_input_tokens: 0`. Why, and how do you fix it?
 
 <div slot="answer">
 
-**HTTP** transport (it's hosted), **project scope** in a committed `.mcp.json` (or enterprise managed settings for the whole org), a **deny rule** on the delete tool (`mcp__jira__delete_issue`), and the credential via **OAuth** per user or an environment variable, never in the file.
+The first line changes on every call, so the prefix is never identical and every call writes a new cache entry (paying 1.25× instead of 0.1×). Move the stable policy text first, put the breakpoint after it, and put the date and user name in a later block or in the user message.
 
 </div>
 </Exercise>
 
-### Where this is in your course notes
+<PictureIt title="Caching gone wrong, then fixed">
+**The scenario:** the Acme support bot sends a 20,000-token policy document as its system prompt on every call, about 10,000 calls a day on Sonnet 5.5 ($2 per million input tokens). A developer turns on caching, but someone put the time and user ID at the top.
 
-- **Production-Grade Prompting §04** - the tool loop, block types, descriptions that misroute
-- **Claude Code, MCP & Integration §05–06** - transports, scopes, per-tool permissions, GitHub server, enterprise auth
+#### Before: the buggy code
 
-<Resource kind="docs" href="https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview" title="Tool use with Claude" text="Client and server tools, the loop, tool_choice, pause_turn and pricing." />
-<Resource kind="docs" href="https://modelcontextprotocol.io" title="Model Context Protocol" text="The open specification: servers, clients, transports and primitives." />
+<CodeSwitch>
+
+```java
+String system = "Time: " + Instant.now() + " | User: " + userId + "\n" + policy;   // changes every call
+
+client.messages().create(MessageCreateParams.builder()
+    .model(Model.CLAUDE_SONNET_5_5).maxTokens(1024L)
+    .systemOfTextBlockParams(List.of(TextBlockParam.builder()
+        .text(system)
+        .cacheControl(CacheControlEphemeral.builder().build())   // breakpoint AFTER the timestamp
+        .build()))
+    .addUserMessage(question)
+    .build());
+```
+
+```python
+system = f"Time: {datetime.now()} | User: {user_id}\n{policy}"     # changes every call
+
+client.messages.create(
+    model="claude-sonnet-5-5", max_tokens=1024,
+    system=[{"type": "text", "text": system,
+             "cache_control": {"type": "ephemeral"}}],              # breakpoint AFTER the timestamp
+    messages=[{"role": "user", "content": question}],
+)
+```
+
+```typescript
+const system = `Time: ${new Date().toISOString()} | User: ${userId}\n${policy}`;   // changes every call
+
+await client.messages.create({
+  model: 'claude-sonnet-5-5', max_tokens: 1024,
+  system: [{ type: 'text', text: system,
+             cache_control: { type: 'ephemeral' } }],                // breakpoint AFTER the timestamp
+  messages: [{ role: 'user', content: question }],
+});
+```
+
+</CodeSwitch>
+
+What `usage` shows on **every** call:
+
+```json
+"usage": { "cache_creation_input_tokens": 20012, "cache_read_input_tokens": 0, "input_tokens": 40 }
+```
+
+Every call **writes** a new cache entry (1.25× price) and none ever reads one: about **$0.050 per call, ≈ $500 a day**. Caching made it more expensive than not caching.
+
+#### After: the fix
+
+<CodeSwitch>
+
+```java
+client.messages().create(MessageCreateParams.builder()
+    .model(Model.CLAUDE_SONNET_5_5).maxTokens(1024L)
+    .systemOfTextBlockParams(List.of(TextBlockParam.builder()
+        .text(policy)                                            // identical every call
+        .cacheControl(CacheControlEphemeral.builder().build())
+        .build()))
+    .addUserMessage("Time: " + Instant.now() + " | User: " + userId + "\n" + question)   // dynamic part moved here
+    .build());
+```
+
+```python
+client.messages.create(
+    model="claude-sonnet-5-5", max_tokens=1024,
+    system=[{"type": "text", "text": policy,                         # identical every call
+             "cache_control": {"type": "ephemeral"}}],
+    messages=[{"role": "user",
+               "content": f"Time: {datetime.now()} | User: {user_id}\n{question}"}],   # dynamic part moved here
+)
+```
+
+```typescript
+await client.messages.create({
+  model: 'claude-sonnet-5-5', max_tokens: 1024,
+  system: [{ type: 'text', text: policy,                             // identical every call
+             cache_control: { type: 'ephemeral' } }],
+  messages: [{ role: 'user',
+               content: `Time: ${new Date().toISOString()} | User: ${userId}\n${question}` }],   // dynamic part moved here
+});
+```
+
+</CodeSwitch>
+
+```json
+// call 1 (writes the cache)
+"usage": { "cache_creation_input_tokens": 20000, "cache_read_input_tokens": 0, "input_tokens": 52 }
+// call 2, 3, 4 … within 5 minutes of the last hit
+"usage": { "cache_creation_input_tokens": 0, "cache_read_input_tokens": 20000, "input_tokens": 49 }
+```
+
+A cache hit costs 0.05× on Sonnet 5.5: about **$0.002 per call, ≈ $20 a day**. Same answers, same model, about 25× cheaper on the system prompt, and faster too.
+
+</PictureIt>
 
 <Gotcha
-  title={"The key in .mcp.json"}
-  scenario={"To get a teammate unblocked, someone pastes a service API key into `.mcp.json` and commits it. A day later they delete it."}
-  gotcha={"The key is still in git history and anyone with repo access can recover it. Deleting the line didn't revoke anything."}
-  fix={"Rotate the key now; reference an environment variable in `.mcp.json`; add a PreToolUse hook that blocks credential-like values in that file."}
+  title={"The cache that never hit"}
+  scenario={"A 6,000-token policy prompt is marked with `cache_control`. Its first line is `Today is <timestamp>. User: <name>`."}
+  gotcha={"The prefix changes on every call, so every request pays the 1.25× WRITE price and `cache_read_input_tokens` stays 0. Caching made it MORE expensive."}
+  fix={"Put stable content first and variable content after the last breakpoint, then check the usage fields to prove hits."}
 />
 
 <SectionSummary points={[
-  "Scopes: local, user, project (`.mcp.json`, committed) and enterprise (managed).",
-  "A stdio server in `.mcp.json` looks shared but isn't: shared servers need HTTP.",
-  "Permission rules can target one tool (`mcp__server__tool`); a deny on a tool beats an allow on the server.",
-  "OAuth for user identity, env-var keys for service identity, never secrets in committed config.",
+  "Caching reuses the processed prefix tools → system → messages, up to a `cache_control` breakpoint (automatic, or up to 4 explicit).",
+  "Writes cost 1.25× (5 min) or 2× (1 h); reads cost a fraction (0.1×, 0.05× on Opus/Sonnet 5.5). It pays only when reads outnumber writes.",
+  "The prefix must be byte-identical: changing tools invalidates everything; put variable content after the last breakpoint.",
+  "Prove it with `cache_read_input_tokens` and `cache_creation_input_tokens`; both 0 means no caching happened.",
+]} />
+
+## 5.4 Batch processing
+
+<ExamRef section="5.4" />
+
+
+
+
+
+### The Message Batches API
+
+For work that doesn't need an answer now (overnight classification, dataset backfills, eval runs, scheduled reports), the Message Batches API processes requests asynchronously at **50% off** input and output.
+
+<Flow caption="A batch job: submit, poll, collect (Exam guide: Cost and Token Management)" steps={[
+  { title: 'Submit', sub: 'up to 100,000 requests or 256 MB' },
+  { title: 'Get a batch ID', sub: 'returned immediately' },
+  { title: 'Poll for status', sub: 'often < 1 h, up to 24 h' },
+  { title: 'Download results', sub: 'one per request' },
+]} />
+
+<MythReality rows={[
+  { myth: 'Batch gives faster answers for big jobs', reality: 'It trades latency for cost: timing is non-deterministic, up to 24 hours. Never use it when a user is waiting' },
+  { myth: 'Batch results are lower quality', reality: 'Same models and quality; only the scheduling and price differ' },
+  { myth: 'A loop of synchronous calls is a batch job', reality: '"Serialisation with extra steps": you pay full price and still block. Use the Batches API, or the async client for concurrency' },
+]} />
+
+For high volume that **does** need prompt answers, use the async client (`client.async()`, returning `CompletableFuture<Message>`) for concurrency without blocking threads.
+
+<Gotcha
+  title={"The batch job a user was waiting for"}
+  scenario={"To save 50%, a team moves its \"summarise this document\" button onto the Batch API."}
+  gotcha={"Results arrive anywhere from minutes to hours later. Users click the button, see nothing, and file bugs."}
+  fix={"Batch is for work nobody is waiting on. For interactive volume use the async client for concurrency, and cache shared prefixes to cut cost."}
+/>
+
+<SectionSummary points={[
+  "The Batch API halves token prices in exchange for up to 24 hours' turnaround (up to 100,000 requests or 256 MB).",
+  "Same models and quality: only scheduling and price differ. It stacks with caching.",
+  "Never use it when a user is waiting; for prompt high-volume work use the async client instead.",
+]} />
+
+<RoleLens dev={"The Batch API takes up to 100k requests, returns within 24 hours (usually much faster) and costs half. Use it for anything nobody is waiting on."} test={"Use Batch to run large eval suites cheaply overnight: thousands of cases at 50% of the cost."} data={"This is your default for backfills and nightly enrichment: submit, poll, then load the results by `custom_id`."} ba={"If the user doesn't need an answer immediately (overnight reports, monthly reviews), Batch halves the cost. Ask \"how fast does this really need to be?\""} />
+
+## 5.5 Token budgets
+
+<ExamRef section="5.5" />
+
+
+
+
+
+### Everything is tokens
+
+The context window holds the system prompt, the whole conversation, injected documents, tool definitions, every tool result and the model's output. Two edge behaviours: an input larger than the window is **rejected** with a validation error; a reply that runs out of room **stops early** with a stop reason telling you so.
+
+In development the window rarely fills because test inputs are short. In production, longer inputs and more turns fill it fast, so measure real traffic.
+
+- **Count before sending** - the token counting endpoint measures a request before you send it, so you can gate or trim instead of failing
+- **Images cost tokens** - roughly (width × height) / 784: a 1,000 × 1,000 px image ≈ 1,296 tokens
+- **Tool definitions cost tokens** - on every call, so register only the tools the task needs
+
+{/* diagram */}
+<Hub center="Tokens per call" caption="Where the tokens in one call come from: every item counts against cost and the window (Exam guide: Cost and Token Management)" items={['System prompt', 'Conversation history', 'Tool definitions', 'Documents and images', 'Tool results', 'Output (max_tokens)']} />
+
+<RoleLens dev={"Count tokens before sending, trim history, cap `max_tokens`, and log usage. Tokens are your cost and latency drivers."} test={"Add a budget assertion: this flow must stay under N input tokens. That catches prompt bloat before it hits the bill."} data={"Model cost as tokens × price × volume, per pipeline. It's a simple fact table with a big impact on the forecast."} ba={"Put a cost ceiling in the requirements, e.g. \"under 1p per ticket\". It forces the right model and prompt choices early."} />
+
+### Cost levers, in the order to reach for them
+
+1. **Right-size the model**, with routing for mixed traffic.
+2. **Cache** stable prefixes: long system prompts, tool sets, reference documents.
+3. **Batch** anything that can wait.
+4. **Tune effort** down for simple work.
+5. **Shrink the context**: fewer tools, trimmed history, compaction (Domain 6).
+
+### Where this is in your course notes
+
+- **MSO Foundations §02–04** - tokens, context window, sampling, model tiers, reasoning modes, prompting modes
+- **Production Engineering, Evals & Security §05** - model selection in production, routing, caching economics, Batches
+
+<Resource kind="docs" href="https://platform.claude.com/docs/en/models-overview" title="Models overview" text="Current models, IDs, prices, context windows and default effort." />
+<Resource kind="docs" href="https://platform.claude.com/docs/en/build-with-claude/prompt-caching" title="Prompt caching" text="Breakpoints, TTLs, multipliers, minimum lengths and what invalidates the cache." />
+
+<Gotcha
+  title={"Fine in dev, over the limit in prod"}
+  scenario={"An agent was tested with short tickets and three-turn chats. In production, customers paste whole email threads and conversations run to 60 turns."}
+  gotcha={"Requests start failing, or replies stop early, when the context fills. Nobody had measured token usage on production-sized inputs."}
+  fix={"Count tokens before sending, trim or compact history, and load-test with real input sizes."}
+/>
+
+<SectionSummary points={[
+  "Everything in a request is tokens: history, documents, tool definitions, tool results, images (≈ width × height / 784).",
+  "Oversized input is rejected; a reply that runs out of room stops early.",
+  "Count tokens before sending, and measure with production-sized inputs.",
+  "Levers in order: right-size the model, cache, batch, lower effort, shrink the context.",
 ]} />

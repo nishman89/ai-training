@@ -1,6 +1,6 @@
 ---
 /**
- * A code example in Java and Python, with a tab to switch between them.
+ * A code example in Java, Python and TypeScript, with a tab to switch between them.
  * Put one ```java fence and one ```python fence inside. The choice is remembered across pages.
  *
  *   <CodeSwitch>
@@ -21,6 +21,7 @@ const { title } = Astro.props;
     <div class="code-switch__tabs" role="group" aria-label="Code language">
       <button type="button" data-lang="java" aria-pressed="true" data-testid="code-tab-java">Java</button>
       <button type="button" data-lang="python" aria-pressed="false" data-testid="code-tab-python">Python</button>
+      <button type="button" data-lang="typescript" aria-pressed="false" data-testid="code-tab-typescript">TypeScript</button>
     </div>
   </div>
   <slot />
@@ -58,6 +59,13 @@ const { title } = Astro.props;
   .code-switch__tabs button:hover:not([aria-pressed='true']) { color: #fff; }
   .code-switch :global(pre.astro-code) { margin-top: 0; border-top-right-radius: 0; }
   .code-switch[data-active='java'] :global(pre[data-language='python']),
+  .code-switch[data-active='java'] :global(pre[data-language='typescript']),
+  .code-switch[data-active='java'] :global(pre[data-language='bash']),
   .code-switch[data-active='python'] :global(pre[data-language='java']),
-  .code-switch[data-active='python'] :global(pre[data-language='xml']) { display: none; }
+  .code-switch[data-active='python'] :global(pre[data-language='xml']),
+  .code-switch[data-active='python'] :global(pre[data-language='typescript']),
+  .code-switch[data-active='python'] :global(pre[data-language='bash']),
+  .code-switch[data-active='typescript'] :global(pre[data-language='java']),
+  .code-switch[data-active='typescript'] :global(pre[data-language='xml']),
+  .code-switch[data-active='typescript'] :global(pre[data-language='python']) { display: none; }
 </style>

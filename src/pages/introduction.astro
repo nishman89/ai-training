@@ -3,6 +3,7 @@ import { Code } from 'astro:components';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import PageHead from '../components/PageHead.astro';
 import CodeSwitch from '../components/CodeSwitch.astro';
+import { GUIDE_V1_URL, GUIDE_V11_URL } from '../data/blueprint';
 import { getChapters } from '../lib/data';
 import { url, QUESTIONS_PER_CHAPTER } from '../lib/site';
 
@@ -18,27 +19,27 @@ const different = [
 ];
 
 const map = [
-  ['Messages API (POST /v1/messages)', 'Stateless JSON REST endpoint with an API-key header', 1],
-  ['Java SDK (com.anthropic:anthropic-java)', 'Typed OkHttp client with builders and built-in retries', 1],
-  ['stop_reason', 'An exit code you must branch on: 200 OK does not mean a complete answer', 1],
-  ['429 / 529 + retry-after', 'Throttling vs upstream overload: backoff with jitter', 1],
-  ['Streaming (SSE events)', 'A reactive stream: assemble chunks, commit only on completion', 1],
-  ['Model tiers (Haiku → Fable)', 'Instance sizing: right-size per workload, route by job type', 2],
-  ['max_tokens', 'A LIMIT on reply size: hitting it truncates silently, it does not throw', 2],
-  ['Prompt caching', 'Memoising an identical request prefix: any byte change is a miss', 2],
-  ['Batch API (50% off, ≤ 24 h)', 'A nightly batch job instead of a real-time call', 2],
-  ['Workflows (chain, route, parallel)', 'A pipeline DAG you define, as in Airflow', 3],
-  ['Agent loop', 'A while loop / state machine until a terminal state, with an iteration cap', 3],
-  ['System prompt + few-shot examples', 'The spec, plus fixtures showing the expected output shape', 4],
-  ['Structured outputs / strict tools', 'Schema validation at the boundary (JSON Schema)', 4],
-  ['Context management', 'Managing a bounded buffer: trim, summarise, offload', 4],
-  ['RAG', 'An indexing pipeline: chunk → embed → store → query → assemble', 4],
-  ['Tool use', 'Command pattern: the model returns a command, your code executes it', 5],
-  ['MCP', 'A driver standard like JDBC: one server, any compatible client', 5],
-  ['Prompt injection', 'SQL injection / XSS: untrusted input treated as instructions', 6],
-  ['Least privilege, secrets in a vault', 'Exactly what you do for any service account', 6],
-  ['Evals + LLM-as-judge', 'A regression suite on a golden dataset; the judge is a fuzzy assertion you calibrate', 7],
-  ['CLAUDE.md / hooks', 'A CONTRIBUTING.md for the agent / git hooks and CI gates', 8],
+  ['Messages API (POST /v1/messages)', 'Stateless JSON REST endpoint with an API-key header', 2],
+  ['Java SDK (com.anthropic:anthropic-java)', 'Typed OkHttp client with builders and built-in retries', 2],
+  ['stop_reason', 'An exit code you must branch on: 200 OK does not mean a complete answer', 2],
+  ['429 / 529 + retry-after', 'Throttling vs upstream overload: backoff with jitter', 2],
+  ['Streaming (SSE events)', 'A reactive stream: assemble chunks, commit only on completion', 2],
+  ['Model tiers (Haiku → Fable)', 'Instance sizing: right-size per workload, route by job type', 5],
+  ['max_tokens', 'A LIMIT on reply size: hitting it truncates silently, it does not throw', 5],
+  ['Prompt caching', 'Memoising an identical request prefix: any byte change is a miss', 5],
+  ['Batch API (50% off, ≤ 24 h)', 'A nightly batch job instead of a real-time call', 5],
+  ['Workflows (chain, route, parallel)', 'A pipeline DAG you define, as in Airflow', 1],
+  ['Agent loop', 'A while loop / state machine until a terminal state, with an iteration cap', 1],
+  ['System prompt + few-shot examples', 'The spec, plus fixtures showing the expected output shape', 6],
+  ['Structured outputs / strict tools', 'Schema validation at the boundary (JSON Schema)', 6],
+  ['Context management', 'Managing a bounded buffer: trim, summarise, offload', 6],
+  ['RAG', 'An indexing pipeline: chunk → embed → store → query → assemble', 6],
+  ['Tool use', 'Command pattern: the model returns a command, your code executes it', 8],
+  ['MCP', 'A driver standard like JDBC: one server, any compatible client', 8],
+  ['Prompt injection', 'SQL injection / XSS: untrusted input treated as instructions', 7],
+  ['Least privilege, secrets in a vault', 'Exactly what you do for any service account', 7],
+  ['Evals + LLM-as-judge', 'A regression suite on a golden dataset; the judge is a fuzzy assertion you calibrate', 4],
+  ['CLAUDE.md / hooks', 'A CONTRIBUTING.md for the agent / git hooks and CI gates', 3],
 ];
 
 const firstCall = `AnthropicClient client = AnthropicOkHttpClient.fromEnv();   // reads ANTHROPIC_API_KEY
@@ -54,6 +55,19 @@ reply.content().forEach(b -> b.text().ifPresent(t -> System.out.println(t.text()
 System.out.println(reply.stopReason() + " | in=" + reply.usage().inputTokens()
                    + " out=" + reply.usage().outputTokens());`;
 
+const firstCallTs = `import Anthropic from '@anthropic-ai/sdk';
+
+const client = new Anthropic();             // reads ANTHROPIC_API_KEY
+
+const reply = await client.messages.create({
+  model: 'claude-haiku-5-5',                // which Claude: cheap and fast
+  max_tokens: 200,                          // cap on the reply length
+  system: 'You are a terse tutor.',         // standing instructions
+  messages: [{ role: 'user', content: 'Explain idempotency in one sentence.' }],
+});
+
+console.log(reply.content.filter((b) => b.type === 'text').map((b) => b.text).join(''));
+console.log(reply.stop_reason, '| in =', reply.usage.input_tokens, 'out =', reply.usage.output_tokens);`;
 const firstCallPy = `import anthropic
 
 client = anthropic.Anthropic()            # reads ANTHROPIC_API_KEY
@@ -102,13 +116,16 @@ const pom = `<dependency>
                 <td><a href={url(`chapters/${data.number}`)}><strong>{data.number}.</strong> {data.title}</a></td>
                 <td>{data.weight}%</td>
                 <td>{QUESTIONS_PER_CHAPTER[data.number]}</td>
-                <td class="weights__bar"><span style={`width:${(data.weight / 33) * 100}%`}></span></td>
+                <td class="weights__bar"><span style={`width:${(data.weight / 33.1) * 100}%`}></span></td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <p class="muted small">Domains 1–3 are about two-thirds of the exam: spend about two-thirds of your time there.</p>
+      <p class="muted small">Weights and numbering from the official <a href={GUIDE_V1_URL} target="_blank" rel="noopener">CCDV-F exam guide v1.0 ↗</a>
+        (exams up to 6 December 2026). From 7 December the exam follows <a href={GUIDE_V11_URL} target="_blank" rel="noopener">guide v1.1 ↗</a>: 70 questions and new weights.
+        Each domain page lists that domain's official skills.</p>
+      <p class="muted small">Domains 2, 5 and 1 (Applications, Model Selection, Agents) are about two-thirds of the exam: spend about two-thirds of your time there.</p>
     </section>
 
     <section>
@@ -137,8 +154,8 @@ const pom = `<dependency>
     <section>
       <h2 class="dot">Where your background gives you a head start</h2>
       <div class="grid">
-        <div class="card"><span class="eyebrow">Business analysis</span><h3>Requirements → evals</h3><p>Acceptance criteria become eval cases. Functional vs infrastructure requirements (residency, latency, identity) and lifecycle gates are Domain 1.</p></div>
-        <div class="card"><span class="eyebrow">Test automation</span><h3>Almost all of Domain 7</h3><p>Same discipline: golden dataset, baseline, one change at a time, release gate. The twist is non-determinism: property checks and a calibrated model judge instead of assertEquals on text.</p></div>
+        <div class="card"><span class="eyebrow">Business analysis</span><h3>Requirements → evals</h3><p>Acceptance criteria become eval cases. Functional vs infrastructure requirements (residency, latency, identity) and lifecycle gates are Domain 2.</p></div>
+        <div class="card"><span class="eyebrow">Test automation</span><h3>Almost all of Domain 4</h3><p>Same discipline: golden dataset, baseline, one change at a time, release gate. The twist is non-determinism: property checks and a calibrated model judge instead of assertEquals on text.</p></div>
         <div class="card"><span class="eyebrow">Data engineering</span><h3>Batch, RAG, budgets</h3><p>The Batch API, chunk-and-embed pipelines, cost per run, idempotent retries, and token budgets as capacity planning.</p></div>
         <div class="card"><span class="eyebrow">Java (or Python)</span><h3>Every API concept</h3><p>The Java SDK is builder-pattern code with CompletableFuture async and a typed exception per HTTP status. The Python SDK is the same API with keyword arguments.</p></div>
       </div>
@@ -146,13 +163,15 @@ const pom = `<dependency>
 
     <section class="card first">
       <h2>Your first call</h2>
-      <p>Add the official SDK (Maven for Java, <code>pip install anthropic</code> for Python), set <code>ANTHROPIC_API_KEY</code> from the Claude Console, then run.
-        Every code example on this site has a <strong>Java / Python</strong> switch, and your choice is remembered.</p>
+      <p>Add the official SDK (Maven for Java, <code>pip install anthropic</code> for Python, <code>npm install @anthropic-ai/sdk</code> for TypeScript), set <code>ANTHROPIC_API_KEY</code> from the Claude Console, then run.
+        Every code example on this site has a <strong>Java / Python / TypeScript</strong> switch, and your choice is remembered.</p>
       <CodeSwitch>
         <Code code={pom} lang="xml" />
         <Code code={firstCall} lang="java" />
         <Code code={'pip install anthropic'} lang="python" />
         <Code code={firstCallPy} lang="python" />
+        <Code code={'npm install @anthropic-ai/sdk'} lang="bash" />
+        <Code code={firstCallTs} lang="typescript" />
       </CodeSwitch>
       <p><strong>Then experiment, one variable at a time:</strong> drop <code>maxTokens</code> to 10 and watch <code>stop_reason</code> become
         <code>max_tokens</code>; ask the same question five times and diff the answers; send a long system prompt twice with caching on and read
@@ -162,7 +181,7 @@ const pom = `<dependency>
     <section class="card card--tint">
       <h2>How to use this site</h2>
       <ol class="steps">
-        <li><strong>Read the domain notes in order.</strong> Each section is collapsible; tick sections off as you go. Every domain opens with a plain-English summary, then the detail, Java and Python examples and a link back to your course notes.</li>
+        <li><strong>Read the domain notes in order.</strong> Each section is collapsible; tick sections off as you go. Every domain opens with a plain-English summary, then the detail, Java, Python and TypeScript examples and a link back to your course notes.</li>
         <li><strong>Spend most time on what's new to everyone:</strong> token and cost arithmetic, reading <code>stop_reason</code> and <code>usage</code>, the tool-use round trip, workflow vs agent, context strategies, and why prompt rules are never security controls.</li>
         <li><strong>Check the "Watch out for…" box</strong> at the end of each domain: the confusions exam questions like to test.</li>
         <li><strong>Revise from the <a href={url('summaries')}>Summaries</a> page:</strong> every section's key points on one page.</li>
@@ -171,7 +190,7 @@ const pom = `<dependency>
       </ol>
     </section>
 
-    <p class="source muted">Exam format: CCDV-F exam guide v1.0 (July 2026) as reported by several independent prep sites. Model names, prices and limits are from
+    <p class="source muted">Exam format: the official CCDV-F exam guide v1.0 (July 2026). Model names, prices and limits are from
       the <a href="https://platform.claude.com/docs/en/models-overview" target="_blank" rel="noopener">Claude Platform docs</a> as of November 2026 and change often.</p>
   </div>
 </BaseLayout>

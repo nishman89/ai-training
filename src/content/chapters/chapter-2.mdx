@@ -1,268 +1,725 @@
 ---
 number: 2
-title: "Model Selection and Optimization"
-weight: 16
-summary: "Picking the right Claude for each job and keeping it affordable: the model lineup, effort and reasoning, prompt caching, the Batch API and token budgets."
+title: "Applications and Integration"
+weight: 33.1
+summary: "The Messages API from request to response: every parameter, stop reasons, streaming, errors and retries, rate limits, and taking a Claude app through its lifecycle."
 objectives:
-  - "Choose a model tier from cost, latency and capability, and justify moving up or down with an eval"
-  - "Route traffic between models by task signal"
-  - "Explain prompt caching: what it caches, what it costs, what breaks it, and how to prove it works"
-  - "Decide when the Batch API fits, and when it doesn't"
-  - "Estimate and control token usage, including images and long contexts"
+  - "Build a correct Messages API request and read every part of the response"
+  - "Explain each request parameter, with a real-life example of getting it wrong"
+  - "Handle streaming safely and only commit a complete message"
+  - "Classify any API error as retriable or terminal, and know what the SDK already retries"
+  - "Place a Claude application in its lifecycle, choose a platform and pin what ships"
 ---
+import ExamRef from '../../components/ExamRef.astro';
+import RoleLens from '../../components/RoleLens.astro';
+import PictureIt from '../../components/PictureIt.astro';
 import Gotcha from '../../components/Gotcha.astro';
 import SectionSummary from '../../components/SectionSummary.astro';
 import CodeSwitch from '../../components/CodeSwitch.astro';
-import Compare from '../../components/diagrams/Compare.astro';
 import Flow from '../../components/diagrams/Flow.astro';
+import VsPair from '../../components/VsPair.astro';
 import WhenThen from '../../components/WhenThen.astro';
 import MythReality from '../../components/MythReality.astro';
 import Exercise from '../../components/Exercise.astro';
 import Resource from '../../components/Resource.astro';
 
-## 2.1 Choosing a model
+## 2.1 The Messages API
+
+<ExamRef section="2.1" />
+
+
+
+
 
 ### In plain English
 
-Picking which Claude to use, and not wasting money. Bigger models are smarter but cost more and respond more slowly. Sorting emails into "billing" or "tech" is easy, so use Haiku; reviewing a tricky contract is hard, so use a bigger model. The two big money-savers are **caching** (re-sending the same long document is far cheaper the second time) and **batching** (send a pile of jobs to run overnight at half price).
+This domain is how your program talks to Claude. You send one HTTP request, a package of settings plus the conversation so far, and get back a message, a note on why it stopped and an itemised bill. Everything else in the exam is a field on that request, a way to handle the reply, or a pattern for sending many requests in a row.
 
-### The current lineup
+**Real-life example:** a bank's help chat. Behind it, the bank's Java service sends each customer question to Claude and shows the answer. When 10,000 customers ask at once, some calls get a "slow down" error (429), and the service should wait and retry instead of crashing. That's Domain 2.
 
-All four current models have a 1M-token context window, 128K max output and adaptive thinking.
-
-| Model | API ID | Input / output per 1M tokens | Default effort | Speed | Best for |
-|---|---|---|---|---|---|
-| Fable 5.2 | `claude-fable-5-2` | $8 / $40 | high | Moderate | Hardest reasoning, long-horizon agents |
-| Opus 5.5 | `claude-opus-5-5` | $4 / $20 | medium | Moderate | Long-running agentic coding and knowledge work |
-| Sonnet 5.5 | `claude-sonnet-5-5` | $2 / $10 | high | Fast | The balanced default |
-| Haiku 5.5 | `claude-haiku-5-5` | from $0.10 / $0.50 | medium | Fastest | Classification, extraction, routing, high volume |
-
-Prices and IDs change: check the [models overview](https://platform.claude.com/docs/en/models-overview) when you build. Use the Models API (`GET /v1/models`) to read limits and capabilities in code, and read its `line` field rather than parsing the ID.
-
-### The course rule: let the eval decide
-
-<Flow caption="Model choice is an eval-gated decision, in both directions" steps={[
-  { title: 'Start on Sonnet', sub: 'balanced default' },
-  { title: 'Run the eval', sub: 'on your real cases' },
-  { title: 'Misses the bar?', sub: 'step UP a tier' },
-  { title: 'Cheaper tier holds?', sub: 'step DOWN to Haiku' },
+<Flow caption="One Claude call: a stateless request and response (Exam guide: Claude API Mechanics)" steps={[
+  { title: 'Your app', sub: 'builds the request' },
+  { title: 'POST /v1/messages', sub: 'API key + JSON' },
+  { title: 'Claude', sub: 'reads, writes a reply' },
+  { title: 'Response', sub: 'content · stop_reason · usage' },
 ]} />
 
-The current docs page recommends Opus 5.5 for most workloads, while your course says start with Sonnet. **For the exam, use the course rule:** start on Sonnet and move only on a measured score.
+<RoleLens dev={"One `POST /v1/messages`: model, `max_tokens`, `system`, `messages`. The response is a list of content blocks plus `stop_reason` and `usage`. It's stateless, so you resend history each call."} test={"Assert on `stop_reason` and `usage` as well as text. A REST Assured test that checks `stop_reason == end_turn` catches truncation that a text check would miss."} data={"Every response carries `usage.input_tokens` and `output_tokens`. Land them in a table per call: that's your cost data model."} ba={"The API has no memory between calls. If the user story says \"the assistant remembers what I said earlier\", that's something the team must build by resending history."} />
 
-### Routing: a default plus an override
+### Anatomy of a request
 
-You don't have to use one model for everything. The common production pattern sends most traffic to a balanced default and routes specific requests up or down by task type, input length or a difficulty classification.
+A request to `POST /v1/messages` needs three fields and two headers. Everything else is optional.
 
-- **Handles well** - matching each workload to the cheapest model that meets its quality bar
-- **Costs** - a classification step and a second model path to maintain
-- **Skip it when** - traffic is uniform at one quality bar: pin one model
+| Part | What it is | Required? |
+|---|---|---|
+| `x-api-key` header | Your secret key; proves who you are and who pays | Yes |
+| `anthropic-version` header | API version, `2023-06-01`; beta features add `anthropic-beta` | Yes |
+| `model` | Which Claude does the work, e.g. `claude-sonnet-5-5` | Yes |
+| `max_tokens` | Ceiling on the reply length, in tokens | Yes |
+| `messages` | The conversation: alternating `user` and `assistant` turns | Yes |
+| `system` | Standing instructions for the whole conversation (a top-level field, **not** a role) | No |
+| `tools`, `tool_choice` | Functions Claude may ask you to run (Domain 8) | No |
+| `stream` | Receive the reply as server-sent events | No |
 
-<Gotcha
-  title={"The classifier that cost more than the product"}
-  scenario={"A prototype used the most capable model for everything, including tagging 2 million support tickets a month."}
-  gotcha={"The bill scales with volume. Haiku would have held the quality bar on this simple task at a small fraction of the cost."}
-  fix={"Start on the default, run the eval on real tickets, and route bulk classification to the smallest model that passes."}
-/>
-
-<SectionSummary points={[
-  "Four tiers trade capability for cost and speed: Fable, Opus, Sonnet, Haiku.",
-  "Course rule: start on Sonnet, step up when an eval shows a miss, step down to Haiku when an eval shows the drop is acceptable.",
-  "Route mixed traffic: a default model plus an override by task type, length or difficulty.",
-  "Check IDs and prices in the docs (or the Models API) at build time: they change.",
-]} />
-
-## 2.2 Reasoning and effort
-
-### Two separate decisions
-
-Choosing the model and choosing how much it reasons are set separately. Current models use **adaptive thinking**: they decide when to think and how much. You tune depth with `effort` (low → max) rather than a fixed token budget. Thinking content is omitted by default on the newest models; ask for a summarised display when you need to show it.
-
-<Compare middle="vs" caption="Where reasoning earns its cost" columns={[
-  { title: 'Worth it', sub: 'raise effort', points: ['Multi-step debugging', 'Planning an agent task', 'Complex analysis or maths', 'Ambiguous requirements'] },
-  { title: 'Wasted', sub: 'lower effort', points: ['Lookups', 'Classification and routing', 'Simple extraction', 'Reformatting'] },
-]} />
-
-More thinking means more output tokens, so more cost and latency. In a multi-turn conversation, pass thinking blocks back unchanged (Domain 4).
-
-<SectionSummary points={[
-  "Choosing a model and choosing how much it reasons are separate decisions.",
-  "Current models think adaptively; tune depth with `effort`, not a token budget.",
-  "Spend reasoning on multi-step problems, not lookups, classification or reformatting: thinking tokens are output tokens.",
-]} />
-
-## 2.3 Prompt caching
-
-### How it works
-
-Prompt caching stores the processing of a stable **prefix** of your request so the next request with the same prefix reads it back instead of recomputing it. The prefix is built in a fixed order: **tools → system → messages**, up to and including the block marked with `cache_control`.
-
-Think of a barista who remembers your usual order: the first visit takes longer to set up, and every repeat is quick and cheap.
-
-- **Automatic** - one top-level cache_control; the breakpoint moves forward as the conversation grows · best for multi-turn chat
-- **Explicit** - cache_control on specific blocks, up to 4 breakpoints · best when sections change at different rates (tools rarely, RAG context daily)
-
-### What it costs
-
-| Operation | Price vs base input |
-|---|---|
-| Cache write, 5-minute TTL (default) | 1.25× |
-| Cache write, 1-hour TTL | 2× |
-| Cache read | 0.1× on most models; **0.05× on Opus and Sonnet 5.5**; **0.025× on Fable** |
-
-Writes cost **more** than normal input, so caching pays only when reads outnumber writes. The 5-minute lifetime refreshes free on every hit. These multipliers stack with the Batch API discount. The minimum cacheable prefix is 512 tokens on the 5.x models; shorter prompts silently don't cache.
-
-### What breaks the cache
-
-The prefix must be **byte-identical**. A change at one level invalidates that level and everything after it.
-
-<WhenThen whenLabel="If you change…" thenLabel="…this is invalidated" rows={[
-  { when: 'tool definitions', then: 'Everything: tools, system and messages' },
-  { when: 'web search or citations on/off', then: 'System and messages' },
-  { when: 'tool_choice, or add/remove images', then: 'Messages only' },
-  { when: 'a timestamp or user name near the top', then: 'Everything after it, on every call (move it below the last breakpoint)' },
-]} />
-
-### Proving it works
-
-Read the usage fields: `total input = cache_read_input_tokens + cache_creation_input_tokens + input_tokens`. Note that `input_tokens` counts only the uncached tokens **after** the last breakpoint. If both cache fields are 0, the prefix was too short or not identical.
+The API is **stateless**: it keeps no conversation. Your app stores the history and resends it every turn, which is why long chats get slower and pricier.
 
 <CodeSwitch>
 
 ```java
-MessageCreateParams params = MessageCreateParams.builder()
+AnthropicClient client = AnthropicOkHttpClient.builder()
+    .fromEnv()          // reads ANTHROPIC_API_KEY - never hard-code it
+    .maxRetries(4)      // default is 2
+    .build();           // create ONE client per app: it owns the connection pool
+
+Message msg = client.messages().create(MessageCreateParams.builder()
     .model(Model.CLAUDE_SONNET_5_5)
     .maxTokens(1024L)
-    .systemOfTextBlockParams(List.of(
-        TextBlockParam.builder()
-            .text(LONG_POLICY_DOCUMENT)                               // stable, reused prefix
-            .cacheControl(CacheControlEphemeral.builder().build())    // 5-minute TTL
-            .build()))
-    .addUserMessage(userQuestion)                                     // changes every call
-    .build();
-
-Usage u = client.messages().create(params).usage();
-long read  = u.cacheReadInputTokens().orElse(0L);
-long write = u.cacheCreationInputTokens().orElse(0L);
-// first call: write > 0. Repeat within 5 minutes: read > 0. Both 0: not cached.
+    .system("You are a concise support assistant.")
+    .addUserMessage("Summarise this ticket: ...")
+    .build());
 ```
 
 ```python
+import anthropic
+
+client = anthropic.Anthropic(max_retries=4)   # reads ANTHROPIC_API_KEY; default retries is 2
+                                               # create ONE client per app and reuse it
 msg = client.messages.create(
     model="claude-sonnet-5-5",
     max_tokens=1024,
-    system=[{
-        "type": "text",
-        "text": LONG_POLICY_DOCUMENT,                    # stable, reused prefix
-        "cache_control": {"type": "ephemeral"},         # 5-minute TTL
-    }],
-    messages=[{"role": "user", "content": user_question}],   # changes every call
+    system="You are a concise support assistant.",
+    messages=[{"role": "user", "content": "Summarise this ticket: ..."}],
 )
+```
 
-read = msg.usage.cache_read_input_tokens or 0
-write = msg.usage.cache_creation_input_tokens or 0
-# first call: write > 0. Repeat within 5 minutes: read > 0. Both 0: not cached.
+```typescript
+import Anthropic from '@anthropic-ai/sdk';
+
+const client = new Anthropic({ maxRetries: 4 });   // reads ANTHROPIC_API_KEY; default retries is 2
+                                                   // create ONE client per app and reuse it
+const msg = await client.messages.create({
+  model: 'claude-sonnet-5-5',
+  max_tokens: 1024,
+  system: 'You are a concise support assistant.',
+  messages: [{ role: 'user', content: 'Summarise this ticket: ...' }],
+});
 ```
 
 </CodeSwitch>
 
-<Exercise title="Why is caching not working?" id="exercise-cache-miss">
+<PictureIt title="What a request really looks like">
+**The scenario:** Acme's support site has a "Ask us anything" box. Behind it is a Java (or Python) service. The long instructions Claude follows live in a text file in the project, not inside Claude.
 
-Your system prompt is 6,000 tokens of policy text, marked with `cache_control`. It starts with the line `Today is 2026-11-20 14:03:22. The user is Priya.` Every call shows `cache_read_input_tokens: 0`. Why, and how do you fix it?
+#### 1. Where the system prompt lives
+
+```text
+acme-support/
+├── src/main/resources/prompts/
+│   └── support-system.txt      ← "You are Acme's support assistant…" + policies (the system prompt)
+└── src/main/java/com/acme/support/
+    └── AskController.java      ← loads the file, calls Claude, returns the answer
+```
+
+#### 2. The code that sends it
+
+<CodeSwitch>
+
+```java
+String systemPrompt = Files.readString(Path.of("src/main/resources/prompts/support-system.txt"));
+
+Message reply = client.messages().create(MessageCreateParams.builder()
+    .model(Model.CLAUDE_SONNET_5_5)
+    .maxTokens(1024L)
+    .system(systemPrompt)                       // the file's contents, sent with EVERY call
+    .addUserMessage("Where's my order A-1234?")
+    .build());
+```
+
+```python
+system_prompt = Path("prompts/support-system.txt").read_text()
+
+reply = client.messages.create(
+    model="claude-sonnet-5-5",
+    max_tokens=1024,
+    system=system_prompt,                       # the file's contents, sent with EVERY call
+    messages=[{"role": "user", "content": "Where's my order A-1234?"}],
+)
+```
+
+```typescript
+const systemPrompt = await readFile('prompts/support-system.txt', 'utf8');   // node:fs/promises
+
+const reply = await client.messages.create({
+  model: 'claude-sonnet-5-5',
+  max_tokens: 1024,
+  system: systemPrompt,                       // the file's contents, sent with EVERY call
+  messages: [{ role: 'user', content: "Where's my order A-1234?" }],
+});
+```
+
+</CodeSwitch>
+
+#### 3. What actually goes over the wire
+
+The SDK turns that into one HTTPS POST to `https://api.anthropic.com/v1/messages`, with your key in the `x-api-key` header and this JSON body:
+
+```json
+{
+  "model": "claude-sonnet-5-5",
+  "max_tokens": 1024,
+  "system": "You are Acme's support assistant. Only answer about Acme orders...",
+  "messages": [
+    { "role": "user", "content": "Where's my order A-1234?" }
+  ]
+}
+```
+
+#### 4. What comes back
+
+```json
+{
+  "id": "msg_01XFDUDYJgAACzvnptvVoYEL",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-sonnet-5-5",
+  "content": [
+    { "type": "text", "text": "I can help with that. Could you confirm the email on the order?" }
+  ],
+  "stop_reason": "end_turn",
+  "usage": { "input_tokens": 1840, "output_tokens": 18,
+             "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0 }
+}
+```
+
+Your code shows the `text` block to the customer (pick blocks by `type`, never `content[0]`: on current models a reply can start with `thinking` blocks), checks `stop_reason`, and can log `usage` to track cost. On the customer's next message, your code sends the system prompt **again**, plus both earlier turns: the API remembers nothing.
+
+</PictureIt>
+
+### The response: content, stop_reason, usage
+
+| Field | Meaning | Real-life comparison |
+|---|---|---|
+| `content` | A list of blocks: `text`, `tool_use`, `thinking` | The work delivered |
+| `stop_reason` | Why it stopped (below) | The contractor's note: "done", "ran out of hours", "need you to fetch something" |
+| `usage` | `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens` | The itemised invoice |
+
+| `stop_reason` | Means | Your code should… |
+|---|---|---|
+| `end_turn` | Claude finished naturally | Use the answer |
+| `max_tokens` | Hit your `max_tokens` cap; the reply is cut off | Raise the cap, ask for less, or continue |
+| `stop_sequence` | Wrote one of your stop strings | Use the text before it |
+| `tool_use` | Wants you to run a tool | Run it, send back a `tool_result` (Domain 8) |
+| `pause_turn` | A server-tool loop paused | Resend the conversation as it is |
+| `refusal` | Declined for safety reasons | Read `stop_details`, log it, and surface it or retry on a fallback model; don't resend the same request with backoff |
+| `model_context_window_exceeded` | The reply filled the model's context window | Treat it as truncated, like `max_tokens` |
+
+A 200 OK does **not** mean a complete answer. Branch on `stop_reason` every time, like checking an exit code.
+
+<CodeSwitch>
+
+```java
+msg.content().forEach(b -> b.text().ifPresent(t -> System.out.println(t.text())));
+
+if (msg.stopReason().map(StopReason.MAX_TOKENS::equals).orElse(false)) {
+    // truncated: never parse this as complete JSON
+}
+System.out.printf("in=%d out=%d%n", msg.usage().inputTokens(), msg.usage().outputTokens());
+```
+
+```python
+for block in msg.content:
+    if block.type == "text":
+        print(block.text)
+
+if msg.stop_reason == "max_tokens":
+    ...  # truncated: never parse this as complete JSON
+print(f"in={msg.usage.input_tokens} out={msg.usage.output_tokens}")
+```
+
+```typescript
+for (const block of msg.content) {
+  if (block.type === 'text') console.log(block.text);
+}
+
+if (msg.stop_reason === 'max_tokens') {
+  // truncated: never parse this as complete JSON
+}
+console.log(`in=${msg.usage.input_tokens} out=${msg.usage.output_tokens}`);
+```
+
+</CodeSwitch>
+
+<Gotcha
+  title={"The chatbot with amnesia"}
+  scenario={"A Java service sends each new customer message to Claude on its own, using only the latest user turn."}
+  gotcha={"The second answer ignores everything said before (\"What order number?\"). The API is stateless, so Claude never saw turn one."}
+  fix={"Keep the conversation in your app (session store or database) and resend the full history, trimmed or summarised, on every call."}
+/>
+
+<SectionSummary points={[
+  "A call is one stateless `POST /v1/messages`: your app resends the whole history every time.",
+  "Required: `model`, `max_tokens`, `messages` plus the API-key and `anthropic-version` headers. `system` is a top-level field, not a role.",
+  "The response gives you `content` blocks, a `stop_reason` and `usage`.",
+  "A 200 OK isn't a complete answer: branch on `stop_reason` (end_turn, max_tokens, stop_sequence, tool_use, pause_turn, refusal, model_context_window_exceeded).",
+]} />
+
+## 2.2 Request parameters, explained
+
+<ExamRef section="2.2" />
+
+
+
+
+
+### Think of a call as a job for a contractor
+
+You pick the contractor (`model`), hand over the standing brief (`system`) and the case file so far (`messages`), and cap the billable hours (`max_tokens`). You get back the work (`content`), a note on why they stopped (`stop_reason`) and an invoice (`usage`).
+
+<RoleLens dev={"`max_tokens` is a hard cap on the reply, not a target. `temperature` is randomness. `stop_sequences` cut output at a marker. All go in the same request builder."} test={"Set low temperature for anything you assert on, and always test the `max_tokens` boundary: what does the app do with a half-finished reply?"} data={"For bulk extraction, set `max_tokens` to fit the largest expected output plus margin, and fail the row (not the batch) when `stop_reason` is `max_tokens`."} ba={"Response length and tone are requirements: \"answers under 80 words, formal tone\" becomes `max_tokens` and system-prompt wording. Agree them with stakeholders."} />
+
+### Tokens
+
+A token is the unit Claude reads, writes and bills in: a chunk of text of roughly ¾ of an English word. Think of a taxi meter that ticks per chunk of road. Your prompt, the whole history, tool definitions, tool results and images all tick the **input** meter. Everything Claude writes ticks the **output** meter, which costs 5× more per token on every current model.
+
+### model
+
+Which Claude does the work. Think of choosing junior, mid or senior staff: seniors are better, slower and pricier.
+
+- **Haiku** - tagging 1M support tickets overnight
+- **Sonnet** - a customer-facing chatbot
+- **Opus** - a multi-hour coding agent
+- **Fable** - the hardest reasoning, when Opus still falls short on your evals
+
+<CodeSwitch>
+
+```java
+.model(Model.CLAUDE_SONNET_5_5)      // or .model("claude-sonnet-5-5"); pin the full ID in production
+```
+
+```python
+model="claude-sonnet-5-5"      # pin the full ID in production
+```
+
+```typescript
+model: 'claude-sonnet-5-5',      // pin the full ID in production
+```
+
+</CodeSwitch>
+
+### max_tokens
+
+A hard ceiling on how many tokens Claude may **write** in this reply. It isn't a target, it doesn't limit the input, and you only pay for what's actually written. Think of a word limit on an essay.
+
+If Claude reaches the limit mid-sentence, the reply is simply cut off and `stop_reason` is `max_tokens`. There's **no error**: just truncated text or broken JSON. Size it to the longest good answer: about 300 tokens for a label plus a reason, 1,024–4,096 for chat, and much more (with streaming) for long documents or code.
+
+<PictureIt title="A truncated reply in the wild">
+**The scenario:** a nightly job asks Claude for 150 product descriptions as one JSON array, with `max_tokens` set to 1,024. In testing (10 products) it was perfect.
+
+#### What comes back in production
+
+```json
+{
+  "content": [{ "type": "text",
+    "text": "[{\"sku\":\"A-001\",\"description\":\"Waterproof hiking boot with...\"},{\"sku\":\"A-002\",\"descr" }],
+  "stop_reason": "max_tokens",
+  "usage": { "input_tokens": 2210, "output_tokens": 1024 }
+}
+```
+
+HTTP status: **200 OK**. No exception. The text simply stops mid-word, so `JSON.parse` / `objectMapper.readValue` throws in **your** code, and the log says "invalid JSON", which sends people looking in the wrong place.
+
+#### The tell-tale signs in your logs
+
+```text
+02:14:07 WARN  ProductJob  stop_reason=max_tokens output_tokens=1024 (== max_tokens)
+02:14:07 ERROR ProductJob  JsonParseException: Unexpected end-of-input at line 1, column 4096
+```
+
+`output_tokens` exactly equal to your `max_tokens` is the giveaway. Fix: check `stop_reason` before parsing, and send one product per request (via the Batch API) instead of 150 in one reply.
+
+</PictureIt>
+
+### messages and system
+
+<VsPair
+  left={{ title: 'system', meaning: 'Standing rules for the whole conversation: role, scope, format. A top-level field.', example: '"You are Acme\'s support agent. Answer only about Acme products, in under 80 words."' }}
+  right={{ title: 'messages', meaning: 'The conversation so far, as alternating user and assistant turns, resent every call.', example: 'user: refund policy? → assistant: 30 days → user: and without a receipt?' }}
+/>
+
+Think of it as the employee handbook versus today's case file. Because the API remembers nothing, it's like phoning a call-centre agent who has no notes: you read out the whole file each time.
+
+<CodeSwitch>
+
+```java
+.system("You are Acme's support agent. Answer only about Acme products, in under 80 words.")
+.addUserMessage("What's your refund policy?")
+.addAssistantMessage("Refunds within 30 days with a receipt.")
+.addUserMessage("And without a receipt?")         // Claude sees all three turns
+```
+
+```python
+system="You are Acme's support agent. Answer only about Acme products, in under 80 words.",
+messages=[
+    {"role": "user", "content": "What's your refund policy?"},
+    {"role": "assistant", "content": "Refunds within 30 days with a receipt."},
+    {"role": "user", "content": "And without a receipt?"},   # Claude sees all three turns
+]
+```
+
+```typescript
+system: "You are Acme's support agent. Answer only about Acme products, in under 80 words.",
+messages: [
+  { role: 'user', content: "What's your refund policy?" },
+  { role: 'assistant', content: 'Refunds within 30 days with a receipt.' },
+  { role: 'user', content: 'And without a receipt?' },   // Claude sees all three turns
+],
+```
+
+</CodeSwitch>
+
+### stop_sequences, temperature and effort
+
+- **stop_sequences** - strings that end the reply as soon as Claude writes them; stop_reason becomes stop_sequence · e.g. stop at a closing answer tag so no commentary follows
+- **temperature / top_p** - randomness knobs, low = predictable · on the newest models you can't set them: steer with the prompt and test properties, not exact wording
+- **effort** - how hard the model thinks before answering · current models think adaptively: low for routing an email, high for a tricky bug · more thinking = more output tokens, cost and latency
+
+### Worked cost example
+
+Sonnet 5.5 costs $2 per million input tokens and $10 per million output tokens. A support-bot call with a 3,000-token system prompt, 1,500 tokens of history and a 400-token answer:
+
+| Item | Tokens | Rate | Cost |
+|---|---|---|---|
+| Input | 4,500 | $2 / 1M | $0.0090 |
+| Output | 400 | $10 / 1M | $0.0040 |
+| **Per call** | | | **$0.0130** |
+| **100,000 calls a day** | | | **≈ $1,300 a day** |
+
+Caching the 3,000-token system prompt (cache reads cost 0.05× base on Sonnet 5.5) cuts that slice from $0.006 to $0.0003 per call, saving about $570 a day. Domain 5 covers how.
+
+<Exercise title="What went wrong?" id="exercise-max-tokens">
+
+A nightly job asks Claude to return 200 product descriptions as one JSON array, with `max_tokens` set to 1,024. Your JSON parser throws on about half the runs, but there are no API errors. What's happening, and what are two fixes?
 
 <div slot="answer">
 
-The first line changes on every call, so the prefix is never identical and every call writes a new cache entry (paying 1.25× instead of 0.1×). Move the stable policy text first, put the breakpoint after it, and put the date and user name in a later block or in the user message.
+The reply is longer than 1,024 tokens, so it's **cut off** (`stop_reason: max_tokens`) and the JSON is incomplete. The API returned 200 OK because truncation isn't an error.
+
+Fixes: check `stop_reason` before parsing; raise `max_tokens` or, better, **split the work** (fewer items per call, or the Batch API with one item per request).
 
 </div>
 </Exercise>
 
 <Gotcha
-  title={"The cache that never hit"}
-  scenario={"A 6,000-token policy prompt is marked with `cache_control`. Its first line is `Today is <timestamp>. User: <name>`."}
-  gotcha={"The prefix changes on every call, so every request pays the 1.25× WRITE price and `cache_read_input_tokens` stays 0. Caching made it MORE expensive."}
-  fix={"Put stable content first and variable content after the last breakpoint, then check the usage fields to prove hits."}
+  title={"The JSON that broke on Tuesdays"}
+  scenario={"A nightly job asks for 150 product records as one JSON array with `max_tokens` set to 1,024. It passed every test with 10 records."}
+  gotcha={"Production batches are longer, the reply is cut off mid-array, and the parser throws. There's no API error, because `stop_reason: max_tokens` arrives with a 200 OK."}
+  fix={"Check `stop_reason` before parsing, size `max_tokens` to the real output, or split the work into one record per request (ideally through the Batch API)."}
 />
 
 <SectionSummary points={[
-  "Caching reuses the processed prefix tools → system → messages, up to a `cache_control` breakpoint (automatic, or up to 4 explicit).",
-  "Writes cost 1.25× (5 min) or 2× (1 h); reads cost a fraction (0.1×, 0.05× on Opus/Sonnet 5.5). It pays only when reads outnumber writes.",
-  "The prefix must be byte-identical: changing tools invalidates everything; put variable content after the last breakpoint.",
-  "Prove it with `cache_read_input_tokens` and `cache_creation_input_tokens`; both 0 means no caching happened.",
+  "Tokens are the unit of reading, writing and billing; output costs about 5× input.",
+  "`model` picks the tier: Haiku for volume, Sonnet as the default, Opus or Fable for the hardest work.",
+  "`max_tokens` caps the reply only. Hitting it truncates silently with `stop_reason: max_tokens`, never an error.",
+  "`system` holds standing rules; `messages` holds the alternating conversation.",
+  "Cost = input tokens × input price + output tokens × output price: estimate it before you scale.",
 ]} />
 
-## 2.4 Batch processing
+## 2.3 Streaming
 
-### The Message Batches API
+<ExamRef section="2.3" />
 
-For work that doesn't need an answer now (overnight classification, dataset backfills, eval runs, scheduled reports), the Message Batches API processes requests asynchronously at **50% off** input and output.
 
-<Flow caption="A batch job: submit, poll, collect" steps={[
-  { title: 'Submit', sub: 'up to 100,000 requests or 256 MB' },
-  { title: 'Get a batch ID', sub: 'returned immediately' },
-  { title: 'Poll for status', sub: 'often < 1 h, up to 24 h' },
-  { title: 'Download results', sub: 'one per request' },
+
+
+
+### When to stream
+
+Streaming sends the reply as it's written, like watching a live broadcast instead of waiting for the recording. Use it for chat UIs and long outputs. Skip it for short backend jobs where nobody is watching: it adds code (you assemble the message yourself) without benefit.
+
+<RoleLens dev={"Streaming sends text as server-sent events so the UI updates as it's written. Only commit the message to history once the stream has completed cleanly."} test={"Test the interrupted-stream case: kill the connection mid-reply and check the app doesn't save half an answer or show it as final."} data={"You rarely stream in batch pipelines: you want the whole result. Streaming matters for long outputs on the request path, where it avoids HTTP timeouts."} ba={"Streaming is a UX decision: users see words appear immediately. It makes no difference to cost or quality, so it belongs in the non-functional requirements."} />
+
+### The event sequence
+
+<Flow caption="Server-sent events for one streamed message (Exam guide: Claude API Mechanics)" steps={[
+  { title: 'message_start', sub: 'empty shell' },
+  { title: 'content_block_start', sub: 'block type + index' },
+  { title: 'content_block_delta', sub: 'append fragment' },
+  { title: 'content_block_stop', sub: 'block complete' },
+  { title: 'message_delta', sub: 'stop_reason, usage' },
+  { title: 'message_stop', sub: 'message is whole' },
 ]} />
 
-<MythReality rows={[
-  { myth: 'Batch gives faster answers for big jobs', reality: 'It trades latency for cost: timing is non-deterministic, up to 24 hours. Never use it when a user is waiting' },
-  { myth: 'Batch results are lower quality', reality: 'Same models and quality; only the scheduling and price differ' },
-  { myth: 'A loop of synchronous calls is a batch job', reality: '"Serialisation with extra steps": you pay full price and still block. Use the Batches API, or the async client for concurrency' },
+A `tool_use` block's input arrives as JSON fragments, so it isn't valid JSON until its `content_block_stop`. **Never act on a partial block.**
+
+### Interrupted streams
+
+A stream *ending* isn't the same as a message *completing*. Only `message_stop` means the message is whole. If your handler saves a turn whenever its read loop exits, a dropped connection writes a half-built block into history, and the failure shows up on the **next** request.
+
+<WhenThen whenLabel="When the stream…" thenLabel="…do this" rows={[
+  { when: 'reaches message_stop', then: 'Append the assembled message to history, then check stop_reason' },
+  { when: 'drops (network, timeout, client disconnect)', then: 'Discard the partial turn and retry from the last complete turn' },
+  { when: 'a retry then fails with a tool-use error', then: 'Check whether the previous turn was built from an interrupted stream before touching the schema' },
 ]} />
 
-For high volume that **does** need prompt answers, use the async client (`client.async()`, returning `CompletableFuture<Message>`) for concurrency without blocking threads.
+<CodeSwitch>
+
+```java
+MessageAccumulator acc = MessageAccumulator.create();
+try (StreamResponse<RawMessageStreamEvent> stream = client.messages().createStreaming(params)) {
+    stream.stream()
+        .peek(acc::accumulate)                              // rebuilds the full Message
+        .flatMap(e -> e.contentBlockDelta().stream())
+        .flatMap(d -> d.delta().text().stream())
+        .forEach(t -> System.out.print(t.text()));         // show text as it arrives
+}
+Message complete = acc.message();   // only reached if the stream ended cleanly
+history.add(complete.toParam());    // commit to history AFTER completion
+```
+
+```python
+with client.messages.stream(model="claude-sonnet-5-5", max_tokens=1024, messages=history) as stream:
+    for text in stream.text_stream:          # show text as it arrives
+        print(text, end="", flush=True)
+    complete = stream.get_final_message()     # only reached if the stream ended cleanly
+
+history.append({"role": "assistant", "content": complete.content})   # commit AFTER completion
+```
+
+```typescript
+const stream = client.messages.stream({ model: 'claude-sonnet-5-5', max_tokens: 1024, messages: history });
+stream.on('text', (text) => process.stdout.write(text));   // show text as it arrives
+
+const complete = await stream.finalMessage();   // rejects if the stream didn't end cleanly
+history.push({ role: 'assistant', content: complete.content });   // commit AFTER completion
+```
+
+</CodeSwitch>
+
+In Java, `MessageAccumulator` rebuilds the full message and mid-stream failures throw `SseException`; in Python, `stream.get_final_message()` does the same job.
+
+<PictureIt title="A dropped stream, step by step">
+**The scenario:** a chat UI streams Claude's reply. Claude has decided to call a tool, and the customer's train goes into a tunnel.
+
+#### What the app received before the connection dropped
+
+```text
+event: message_start          {"message": {"id": "msg_01...", "content": []}}
+event: content_block_start    {"index": 0, "content_block": {"type": "tool_use", "id": "toolu_01A", "name": "get_order_status", "input": {}}}
+event: content_block_delta    {"index": 0, "delta": {"type": "input_json_delta", "partial_json": "{\"order_id\": \"A-12"}}
+   ✂  connection lost: no content_block_stop, no message_delta, no message_stop
+```
+
+#### The bug
+
+The app's read loop ends, and it saves what it has to the conversation history: an assistant turn with a `tool_use` whose input is the half-finished text `{"order_id": "A-12`.
+
+#### Where it blows up: the NEXT request, not this one
+
+```text
+400 invalid_request_error: the tool_use block in the previous assistant turn
+has no matching tool_result / malformed input
+```
+
+The team spends a morning looking at the tool schema, which was never the problem. **Fix:** only append to history after `message_stop`. If the stream drops, throw away the partial turn and retry from the last complete one.
+
+</PictureIt>
 
 <Gotcha
-  title={"The batch job a user was waiting for"}
-  scenario={"To save 50%, a team moves its \"summarise this document\" button onto the Batch API."}
-  gotcha={"Results arrive anywhere from minutes to hours later. Users click the button, see nothing, and file bugs."}
-  fix={"Batch is for work nobody is waiting on. For interactive volume use the async client for concurrency, and cache shared prefixes to cut cost."}
+  title={"The error that appeared one request late"}
+  scenario={"A streaming chat app saves whatever it has received to history when its read loop exits. A user's Wi-Fi drops mid-reply."}
+  gotcha={"A half-built `tool_use` block is saved. The NEXT request fails with a validation error, so the team spends a day debugging the tool schema, which was fine."}
+  fix={"Append to history only after `message_stop`; on interruption, discard the partial turn and retry from the last complete one."}
 />
 
 <SectionSummary points={[
-  "The Batch API halves token prices in exchange for up to 24 hours' turnaround (up to 100,000 requests or 256 MB).",
-  "Same models and quality: only scheduling and price differ. It stacks with caching.",
-  "Never use it when a user is waiting; for prompt high-volume work use the async client instead.",
+  "Stream when a person is watching or the output is long; skip it for short backend jobs.",
+  "Events run message_start → content_block_start/delta/stop → message_delta → message_stop.",
+  "Never act on a partial block: a tool_use input isn't valid JSON until its block stops.",
+  "Only `message_stop` means complete: commit to history then, and discard a partial turn on interruption.",
 ]} />
 
-## 2.5 Token budgets
+## 2.4 Errors, retries and rate limits
 
-### Everything is tokens
+<ExamRef section="2.4" />
 
-The context window holds the system prompt, the whole conversation, injected documents, tool definitions, every tool result and the model's output. Two edge behaviours: an input larger than the window is **rejected** with a validation error; a reply that runs out of room **stops early** with a stop reason telling you so.
 
-In development the window rarely fills because test inputs are short. In production, longer inputs and more turns fill it fast, so measure real traffic.
 
-- **Count before sending** - the token counting endpoint measures a request before you send it, so you can gate or trim instead of failing
-- **Images cost tokens** - roughly (width × height) / 784: a 1,000 × 1,000 px image ≈ 1,296 tokens
-- **Tool definitions cost tokens** - on every call, so register only the tools the task needs
 
-### Cost levers, in the order to reach for them
 
-1. **Right-size the model**, with routing for mixed traffic.
-2. **Cache** stable prefixes: long system prompts, tool sets, reference documents.
-3. **Batch** anything that can wait.
-4. **Tune effort** down for simple work.
-5. **Shrink the context**: fewer tools, trimmed history, compaction (Domain 4).
+### Retriable or terminal?
+
+Ask one question of every failure: could waiting and sending the **same** request succeed?
+
+| Status | `error.type` | Meaning | Retry? |
+|---|---|---|---|
+| 400 | `invalid_request_error` | Bad request shape (or a spend limit you set) | **No**: fix the request |
+| 401 / 403 | authentication / permission | Bad key or no access | **No** |
+| 404 / 413 | not_found / request_too_large | Wrong model or path; payload too big | **No** |
+| 429 | `rate_limit_error` | Your org hit a rate or spend limit | **Yes**, after `retry-after`. A spend-cap 429 has no `retry-after` and won't clear by waiting |
+| 500 / 504 | `api_error` / `timeout_error` | Server-side fault | **Yes**, bounded backoff |
+| 529 | `overloaded_error` | Anthropic-wide capacity, not your quota | **Yes**, backoff with jitter |
+| 200 + `refusal` | (not an error) | A content decision by the model | **Not as-is**: read `stop_details`, log it, then surface it or fall back to another model |
+
+<VsPair
+  left={{ title: '429 rate_limit_error', meaning: 'YOU are sending too much: your organisation hit RPM, ITPM or OTPM.', example: 'Fix: honour retry-after, reduce concurrency, ask for a higher tier.' }}
+  right={{ title: '529 overloaded_error', meaning: 'ANTHROPIC is busy across the board, whatever your rate.', example: 'Fix: backoff with jitter, fail over or degrade gracefully if it persists.' }}
+/>
+
+<RoleLens dev={"429 = rate limited, 529 = overloaded, 5xx = server: the SDK retries these with backoff. 400 = your bug, so don't retry. Catch the typed exceptions and degrade gracefully."} test={"Use WireMock (or a stub client) to return 429/529/400 and assert the app retries, backs off, and gives up cleanly. These are the resilience tests reviewers ask for."} data={"In a big backfill, rate limits are the bottleneck. Throttle concurrency, or use the Batch API, instead of hammering the endpoint and retrying."} ba={"Write the unhappy paths into the story: \"If Claude is unavailable, the user sees a polite message and the request is queued.\" That's an acceptance criterion, not a dev detail."} />
+
+### Rate limits
+
+Limits are set **per organisation, per model**, as requests per minute (RPM), input tokens per minute (ITPM) and output tokens per minute (OTPM). They use a token-bucket model and rise with your usage tier. Cached input reads typically don't count against ITPM on current models, so caching raises throughput as well as cutting cost.
+
+### What the SDK already does
+
+The official SDKs retry connection errors, 408, 409, 429 and 5xx automatically, **twice by default**, with exponential backoff, honouring `retry-after`. Don't wrap your own retry loop around that: it multiplies attempts. Tune `maxRetries`, then handle what's left.
+
+<CodeSwitch>
+
+```java
+try {
+    Message msg = client.messages().create(params);
+} catch (RateLimitException e) {          // 429, after the SDK's retries ran out
+    // queue the work, or fall back to a cached or simpler answer
+} catch (BadRequestException e) {         // 400: terminal, fix the request
+    throw e;
+} catch (InternalServerException e) {     // 5xx after retries
+    // degrade gracefully, alert
+} catch (AnthropicServiceException e) {   // any other HTTP status: e.statusCode()
+    log.error("Claude call failed", e);
+} catch (AnthropicIoException e) {        // network problem
+    // retry later
+}
+```
+
+```python
+try:
+    msg = client.messages.create(**params)
+except anthropic.RateLimitError:          # 429, after the SDK's retries ran out
+    ...  # queue the work, or fall back to a cached or simpler answer
+except anthropic.BadRequestError:         # 400: terminal, fix the request
+    raise
+except anthropic.InternalServerError:     # 5xx after retries
+    ...  # degrade gracefully, alert
+except anthropic.APIStatusError as e:     # any other HTTP status: e.status_code
+    log.exception("Claude call failed")
+except anthropic.APIConnectionError:      # network problem
+    ...  # retry later
+```
+
+```typescript
+try {
+  const msg = await client.messages.create(params);
+} catch (err) {
+  if (err instanceof Anthropic.RateLimitError) {            // 429, after the SDK's retries ran out
+    // queue the work, or fall back to a cached or simpler answer
+  } else if (err instanceof Anthropic.BadRequestError) {    // 400: terminal, fix the request
+    throw err;
+  } else if (err instanceof Anthropic.InternalServerError) { // 5xx after retries
+    // degrade gracefully, alert
+  } else if (err instanceof Anthropic.APIConnectionError) {  // network problem
+    // retry later
+  } else if (err instanceof Anthropic.APIError) {           // any other HTTP status: err.status
+    log.error('Claude call failed', err);
+  } else {
+    throw err;
+  }
+}
+```
+
+</CodeSwitch>
+
+Python raises `anthropic.BadRequestError`, `RateLimitError`, `InternalServerError` and so on. Java exception map: 400 `BadRequestException` · 401 `UnauthorizedException` · 403 `PermissionDeniedException` · 404 `NotFoundException` · 422 `UnprocessableEntityException` · 429 `RateLimitException` · 5xx `InternalServerException`. Log the `request-id` response header for support (Java: `withRawResponse()...requestId()`; Python: `msg._request_id`).
+
+<MythReality rows={[
+  { myth: 'Retry every failure a few times to be safe', reality: 'Retrying a 400 just burns the retry budget: the identical request fails identically' },
+  { myth: 'A tool failure can be returned as an empty result', reality: 'Return the error with is_error so the model can react; it treats an empty result as valid data' },
+  { myth: 'Refusals are transient errors', reality: 'A refusal is a content decision returned with 200 OK. Read stop_details and log it; surface it, or retry on a fallback model as the docs suggest' },
+]} />
+
+<Gotcha
+  title={"The retry storm"}
+  scenario={"Each service wraps Claude calls in its own 5-attempt retry loop, on top of the SDK's built-in retries."}
+  gotcha={"One brief 529 overload turns every user request into up to 15 calls, amplifying the outage. Meanwhile a spend-cap 429 (no `retry-after`) is retried forever and never clears."}
+  fix={"Rely on the SDK's backoff and tune `maxRetries`; never retry 4xx except 429; treat a 429 without `retry-after` as a billing or limit problem, alert, and fail gracefully."}
+/>
+
+<SectionSummary points={[
+  "First question for any failure: could the same request succeed later? Retriable: 429, 500, 504, 529. Terminal: 400, 401, 403, 404, 413.",
+  "429 is your organisation's limit (honour `retry-after`); 529 is Anthropic-wide overload.",
+  "Limits are per organisation and model: RPM, ITPM, OTPM.",
+  "The SDK already retries with backoff (2× by default): tune `maxRetries`, don't stack your own loop.",
+  "A refusal arrives as 200 OK: read `stop_details` and log it; surface it or fall back to another model, never back off and resend the same request.",
+]} />
+
+## 2.5 The lifecycle and deployment
+
+<ExamRef section="2.5" />
+
+
+
+
+
+### Seven lifecycle phases
+
+A Claude application moves through the same lifecycle as any engineered system. Your Accelerators notes frame each phase with a gate.
+
+<Flow caption="The lifecycle of a Claude application, with gates between phases (Exam guide: Systems Life Cycle)" steps={[
+  { title: 'Requirements', sub: 'functional + infra' },
+  { title: 'Design', sub: 'platform, model, trust' },
+  { title: 'Build', sub: 'agent, tools, prompts' },
+  { title: 'Test', sub: 'evals + test levels' },
+  { title: 'Deploy', sub: 'pin, gate on eval' },
+  { title: 'Operate', sub: 'cost, latency, errors' },
+  { title: 'Iterate', sub: 'findings → requirements' },
+]} />
+
+- **Functional requirements** - what the system must do, with enough detail to check · these become your eval cases
+- **Infrastructure requirements** - latency, scale, data residency, identity, audit · some of these decide the platform, so capture them first
+- **Gates** - don't build until the platform meets residency · don't release until the new version clears the eval
+
+<RoleLens dev={"Pin full model IDs, keep prompts in version control, roll out new models behind a flag, and watch the deprecation dates."} test={"A model upgrade is a regression risk: run your eval suite against the new model ID before switching, just as you would run the regression pack before a release."} data={"Prompt and model versions belong in your lineage metadata, so you can explain why last month's classifications differ from this month's."} ba={"Model deprecations are planned change. Put them on the roadmap with an owner, a test window and sign-off, the same as any dependency upgrade."} />
+
+### Choosing a platform
+
+The customer's existing cloud, identity and compliance agreements usually decide the platform.
+
+| Platform | Identity and data | Choose when |
+|---|---|---|
+| Claude API (first-party) | Anthropic identity and terms; new features first | No binding cloud or residency constraint |
+| Claude Platform on AWS | Through the customer's AWS account, Anthropic model IDs and lifecycle | On AWS but wants first-party parity |
+| Amazon Bedrock | AWS identity; data stays in the configured AWS boundary | On AWS with a compliance posture there |
+| Google Vertex AI | Google Cloud IAM; regional or global endpoints | On Google Cloud |
+| Microsoft Foundry | Wrapping product's identity and billing | Customer already runs Foundry |
+
+Compare platforms on **latency** (measured from the customer's region), **compliance** (usually pass or fail) and **total cost** (tokens plus egress, fees and integration effort), not token price alone.
+
+### Pin what ships
+
+Every full model ID is a fixed snapshot; an alias moves over time and may resolve differently per platform. Pin the full ID in configuration, keep the previous version available for rollback, and promote a new model only after it clears your eval baseline (Domain 4). A moving alias is fine for a throwaway prototype, never for production.
 
 ### Where this is in your course notes
 
-- **MSO Foundations §02–04** - tokens, context window, sampling, model tiers, reasoning modes, prompting modes
-- **Production Engineering, Evals & Security §05** - model selection in production, routing, caching economics, Batches
+- **MSO Foundations §05** - SDK vs REST, sync vs streaming vs async, Batches
+- **Production-Grade Prompting §05** - the streaming event table and the half-written tool call
+- **Production Engineering, Evals & Security §04** - retriable vs terminal, the error decision table
+- **Accelerators & IP Contribution §04–06** - requirements, lifecycle gates, platforms, pinning
 
-<Resource kind="docs" href="https://platform.claude.com/docs/en/models-overview" title="Models overview" text="Current models, IDs, prices, context windows and default effort." />
-<Resource kind="docs" href="https://platform.claude.com/docs/en/build-with-claude/prompt-caching" title="Prompt caching" text="Breakpoints, TTLs, multipliers, minimum lengths and what invalidates the cache." />
+<Resource kind="docs" href="https://platform.claude.com/docs/en/api/errors" title="API errors" text="Every status code and error type, and the request-id header." />
+<Resource kind="docs" href="https://platform.claude.com/docs/en/cli-sdks-libraries/sdks/java" title="Java SDK" text="Client setup, streaming, MessageAccumulator, exceptions and retries." />
+<Resource kind="docs" href="https://platform.claude.com/docs/en/cli-sdks-libraries/sdks/python" title="Python SDK" text="The anthropic package: sync and async clients, streaming helpers, errors and retries." />
 
 <Gotcha
-  title={"Fine in dev, over the limit in prod"}
-  scenario={"An agent was tested with short tickets and three-turn chats. In production, customers paste whole email threads and conversations run to 60 turns."}
-  gotcha={"Requests start failing, or replies stop early, when the context fills. Nobody had measured token usage on production-sized inputs."}
-  fix={"Count tokens before sending, trim or compact history, and load-test with real input sizes."}
+  title={"The Monday-morning behaviour change"}
+  scenario={"A production app calls Claude with a model alias. Nobody deployed anything over the weekend."}
+  gotcha={"The alias moved to a newer snapshot, outputs changed format, and a downstream parser broke, with no commit to roll back."}
+  fix={"Pin the full model ID in config, keep the previous version available, and promote upgrades only after the eval passes."}
 />
 
 <SectionSummary points={[
-  "Everything in a request is tokens: history, documents, tool definitions, tool results, images (≈ width × height / 784).",
-  "Oversized input is rejected; a reply that runs out of room stops early.",
-  "Count tokens before sending, and measure with production-sized inputs.",
-  "Levers in order: right-size the model, cache, batch, lower effort, shrink the context.",
+  "Requirements → design → build → test → deploy → operate → iterate, with a gate between phases.",
+  "Capture infrastructure requirements (residency, latency, identity) first: they often decide the platform.",
+  "The customer's cloud and compliance posture usually pick the platform; compare latency, compliance and total cost.",
+  "Pin the full model ID, keep the previous version, and promote a new one only when it clears the eval.",
 ]} />

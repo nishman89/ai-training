@@ -4,8 +4,8 @@
 export const PASS_MARK = 0.72;
 export const MAIN_SET = 'A';
 
-/** Approximate questions per domain in the 53-question exam, from the published domain weights. */
-export const QUESTIONS_PER_CHAPTER: Record<number, number> = { 1: 18, 2: 9, 3: 7, 4: 6, 5: 5, 6: 4, 7: 2, 8: 2 };
+/** Approximate questions per domain in the 53-question exam, from the exam guide v1.0 weights (official domain numbering). */
+export const QUESTIONS_PER_CHAPTER: Record<number, number> = { 1: 8, 2: 18, 3: 2, 4: 1, 5: 9, 6: 6, 7: 4, 8: 5 };
 
 /** The real exam: 53 questions in 120 minutes. */
 export const EXAM_QUESTIONS = 53;

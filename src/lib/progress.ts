@@ -3,7 +3,7 @@
  * Nothing leaves the device: no server, no cookies, no tracking.
  */
 
-const KEY = 'sparta-ccdvf-progress'; // distinct from the ISTQB site: both share the nishman89.github.io origin
+const KEY = 'sparta-ccdvf-progress-v2'; // v2: domains renumbered to the official exam-guide order // distinct from the ISTQB site: both share the nishman89.github.io origin
 
 export interface QuizAttempt {
   score: number;

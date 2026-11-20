@@ -3,6 +3,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import PageHead from '../components/PageHead.astro';
 import Quiz from '../components/Quiz.astro';
 import { getMockExam } from '../lib/data';
+import { GUIDE_V1_URL } from '../data/blueprint';
 import { url, QUESTIONS_PER_CHAPTER, EXAM_QUESTIONS, EXAM_MINUTES } from '../lib/site';
 
 const questions = await getMockExam(QUESTIONS_PER_CHAPTER);
@@ -15,6 +16,19 @@ const questions = await getMockExam(QUESTIONS_PER_CHAPTER);
     <p class="back no-print"><a href={url()}>← All domains</a></p>
   </PageHead>
   <div class="container">
+    <aside class="card official" data-testid="official-samples">
+      <span class="eyebrow">📘 Official practice material</span>
+      <h2>Is there an official mock exam?</h2>
+      <p><strong>No.</strong> Anthropic doesn't publish a practice exam for CCDV-F. The only official practice items are the
+        <strong>three sample questions in Section 8</strong> of the <a href={GUIDE_V1_URL} target="_blank" rel="noopener">exam guide v1.0 (PDF) ↗</a>.
+        The guide says they aren't taken from the live question bank. Its Section 7 recommends the blueprint, the official docs, hands-on building and those samples.</p>
+      <ul>
+        <li><strong>Sample 1 · Domain 2:</strong> a large overnight document job where cost matters most. Practise with the Batch API questions in Domain 5.</li>
+        <li><strong>Sample 2 · Domain 7:</strong> prompt injection in an agent that summarises web pages. Practise with the injection questions in Domain 7.</li>
+        <li><strong>Sample 3 · Domain 8:</strong> giving several Claude apps reusable access to an internal REST service. Practise with the MCP questions in Domain 8.</li>
+      </ul>
+      <p class="official__note">Try the official three first, then this mock. Free "CCDV-F practice exam" sites are unofficial, and some still teach behaviour that has since changed.</p>
+    </aside>
     <Quiz questions={questions} quizId="mock-a" examMode />
   </div>
 </BaseLayout>
@@ -22,4 +36,7 @@ const questions = await getMockExam(QUESTIONS_PER_CHAPTER);
 <style>
   .lead { max-width: 52rem; }
   .back { margin: 1rem 0 0; font-weight: 700; }
+  .official { margin: 0 0 2rem; border-top: 6px solid #3b6fd8; }
+  .official h2 { margin-top: 0.2rem; }
+  .official__note { color: var(--grey); font-size: 0.9rem; margin-bottom: 0; }
 </style>

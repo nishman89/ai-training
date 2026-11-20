@@ -1,170 +1,377 @@
 ---
 number: 8
-title: "Claude Code"
-weight: 3
-summary: "Claude Code's explore–plan–code loop, permission modes and settings layers, durable context with CLAUDE.md, rules, skills, hooks and subagents, and sharing a setup as a plugin."
+title: "Tools and MCPs"
+weight: 10.6
+summary: "How tool use works end to end, designing tools Claude picks correctly, client vs server tools, and the Model Context Protocol: primitives, transports, scopes, permissions and authentication."
 objectives:
-  - "Choose a permission mode by risk, and know how settings layers and deny rules interact"
-  - "Put each kind of rule in the right place: CLAUDE.md, rules, skills, hooks or subagents"
-  - "Use hooks for guarantees and know the main lifecycle events"
-  - "Package a setup as a plugin that works on every teammate's machine"
+  - "Trace the tool-use round trip and implement it correctly"
+  - "Write tool descriptions and schemas that Claude selects reliably"
+  - "Distinguish client and server tools, and use tool_choice and pause_turn"
+  - "Explain MCP's tools, resources and prompts, and choose stdio or HTTP transport"
+  - "Configure MCP scope, per-tool permissions and authentication safely"
 ---
+import Tiles from '../../components/diagrams/Tiles.astro';
+import Compare from '../../components/diagrams/Compare.astro';
+import ExamRef from '../../components/ExamRef.astro';
+import RoleLens from '../../components/RoleLens.astro';
+import PictureIt from '../../components/PictureIt.astro';
 import Gotcha from '../../components/Gotcha.astro';
 import SectionSummary from '../../components/SectionSummary.astro';
+import CodeSwitch from '../../components/CodeSwitch.astro';
 import Flow from '../../components/diagrams/Flow.astro';
-import Tiles from '../../components/diagrams/Tiles.astro';
-import WhenThen from '../../components/WhenThen.astro';
+import Hub from '../../components/diagrams/Hub.astro';
+import VsPair from '../../components/VsPair.astro';
+import MythReality from '../../components/MythReality.astro';
 import Exercise from '../../components/Exercise.astro';
 import Resource from '../../components/Resource.astro';
 
-## 8.1 How Claude Code works
+## 8.1 How tool use works
+
+<ExamRef section="8.1" />
+
+
+
+
 
 ### In plain English
 
-Claude Code is Claude working as a coding assistant inside your project folder. It can read files, write code and run commands, but asks permission first (how often depends on the permission mode). You give it standing project rules in a file called CLAUDE.md, and you can add automatic checks ("hooks") that always run, like "run the tests after every edit" or "never touch the secrets file".
+This domain is about letting Claude **do** things, not just talk. You describe a function ("get_order_status takes an order ID"). Claude replies "please run get_order_status with A-1234", **your** code runs it and sends back the answer, and Claude continues. **MCP** is a standard way to package tools so they plug into any Claude app, like USB for tools.
 
-### Explore, plan, code
+**Real-life example:** connect the GitHub MCP server once, and Claude can search code and open issues in any app that supports MCP.
 
-<Flow caption="The sequence matters: plan mode holds Claude in exploration until you approve" steps={[
-  { title: 'Explore', sub: 'read files, trace logic' },
-  { title: 'Plan', sub: 'describe the edits' },
-  { title: 'You approve', sub: 'the human gate' },
-  { title: 'Code', sub: 'edit and run' },
+<RoleLens dev={"You define tools with a JSON schema. Claude replies with `tool_use`, your code runs it, and you send back a `tool_result` with the same id. Claude never runs anything itself."} test={"Unit test each tool function on its own, then test the round trip with a mocked model that requests the tool."} data={"A \"query the warehouse\" tool is common: Claude writes the parameters, your code runs a safe, parameterised query."} ba={"Tools are the AI's access to your systems. Each one is effectively an integration requirement: what it can read or change, and under what rules."} />
+
+### The round trip
+
+<Flow caption="Claude never runs your tools: it asks, your code runs them (Exam guide: Tool Implementation)" steps={[
+  { title: 'Send tools + question', sub: 'name, description, input_schema' },
+  { title: 'stop_reason: tool_use', sub: 'tool_use block: name, id, input' },
+  { title: 'Your code runs it', sub: 'Claude is not connected meanwhile' },
+  { title: 'Send tool_result', sub: 'same tool_use_id' },
+  { title: 'Claude continues', sub: 'answer or another tool' },
 ]} />
 
-The same agent loop is available programmatically through the Agent SDK (Python and TypeScript), with the same permission model.
+A tool conversation is built from typed blocks: `text`, `tool_use`, `tool_result` and (with thinking) `thinking`. The API enforces the pairing: each `tool_use` must be answered by a `tool_result` with the matching ID in the next user turn. Most bugs sit on that boundary between what Claude owns and what your code owns.
+
+<CodeSwitch title="One tool call, answered">
+
+```java
+// Claude asked for a tool: echo its turn, then answer every tool_use with a tool_result
+history.add(reply.toParam());
+List<ContentBlockParam> results = new ArrayList<>();
+for (ContentBlock block : reply.content()) {
+    block.toolUse().ifPresent(use -> {
+        try {
+            String out = orders.status(use.input().toString());
+            results.add(ContentBlockParam.ofToolResult(ToolResultBlockParam.builder()
+                .toolUseId(use.id()).content(out).build()));
+        } catch (Exception e) {
+            results.add(ContentBlockParam.ofToolResult(ToolResultBlockParam.builder()
+                .toolUseId(use.id())
+                .content("Order service unavailable: " + e.getMessage())
+                .isError(true)                          // tell Claude it failed
+                .build()));
+        }
+    });
+}
+history.add(MessageParam.builder().role(MessageParam.Role.USER).contentOfBlockParams(results).build());
+```
+
+```python
+# Claude asked for a tool: echo its turn, then answer every tool_use with a tool_result
+history.append({"role": "assistant", "content": reply.content})
+results = []
+for block in reply.content:
+    if block.type != "tool_use":
+        continue
+    try:
+        out = orders.status(**block.input)
+        results.append({"type": "tool_result", "tool_use_id": block.id, "content": out})
+    except Exception as e:
+        results.append({
+            "type": "tool_result", "tool_use_id": block.id,
+            "content": f"Order service unavailable: {e}",
+            "is_error": True,                           # tell Claude it failed
+        })
+history.append({"role": "user", "content": results})
+```
+
+```typescript
+// Claude asked for a tool: echo its turn, then answer every tool_use with a tool_result
+history.push({ role: 'assistant', content: reply.content });
+const results: Anthropic.ToolResultBlockParam[] = [];
+for (const block of reply.content) {
+  if (block.type !== 'tool_use') continue;
+  try {
+    const out = await orders.status(block.input as { order_id: string });
+    results.push({ type: 'tool_result', tool_use_id: block.id, content: out });
+  } catch (e) {
+    results.push({
+      type: 'tool_result', tool_use_id: block.id,
+      content: `Order service unavailable: ${(e as Error).message}`,
+      is_error: true,                             // tell Claude it failed
+    });
+  }
+}
+history.push({ role: 'user', content: results });
+```
+
+</CodeSwitch>
+
+<PictureIt title="One tool call, as the actual messages">
+**The scenario:** the customer asks "Where's order A-1234?". Your app has registered one tool, `get_order_status`. These are the real messages, in order.
+
+#### Request 1: your app sends the question and the tool definition
+
+```json
+{
+  "model": "claude-sonnet-5-5", "max_tokens": 1024,
+  "tools": [{
+    "name": "get_order_status",
+    "description": "Look up the delivery status of an order by ID. Do not use for refunds.",
+    "input_schema": { "type": "object",
+                      "properties": { "order_id": { "type": "string" } },
+                      "required": ["order_id"] }
+  }],
+  "messages": [{ "role": "user", "content": "Where's order A-1234?" }]
+}
+```
+
+#### Response 1: Claude asks you to run the tool
+
+```json
+{
+  "stop_reason": "tool_use",
+  "content": [
+    { "type": "text", "text": "Let me check that for you." },
+    { "type": "tool_use", "id": "toolu_01A09q90qw90lq917835lq9",
+      "name": "get_order_status", "input": { "order_id": "A-1234" } }
+  ]
+}
+```
+
+Claude has **not** looked anything up. It has asked your code to.
+
+#### Your code runs it
+
+Your code calls your own order database or API (`orderService.status("A-1234")`), gets `{"status":"out for delivery","eta":"today 14:00–16:00"}`, and sends request 2.
+
+#### Request 2: the whole conversation again, plus the result
+
+```json
+"messages": [
+  { "role": "user", "content": "Where's order A-1234?" },
+  { "role": "assistant", "content": [ …the text + tool_use blocks from response 1, unchanged… ] },
+  { "role": "user", "content": [
+      { "type": "tool_result", "tool_use_id": "toolu_01A09q90qw90lq917835lq9",
+        "content": "{\"status\":\"out for delivery\",\"eta\":\"today 14:00-16:00\"}" } ] }
+]
+```
+
+#### Response 2: the final answer
+
+```json
+{ "stop_reason": "end_turn",
+  "content": [{ "type": "text", "text": "Good news: A-1234 is out for delivery and should arrive today between 2 and 4pm." }] }
+```
+
+Two HTTP calls, one tool run by **your** code, and the IDs tie them together.
+
+</PictureIt>
 
 <SectionSummary points={[
-  "Claude Code runs the agent loop in your terminal: explore, plan, then code.",
-  "Plan mode holds it in exploration until you approve.",
-  "The Agent SDK exposes the same loop and permission model in code.",
+  "Claude only requests a tool call; your code runs it and returns a `tool_result` with the matching `tool_use_id`.",
+  "Conversations are typed blocks (text, tool_use, tool_result, thinking), and the API enforces the pairing.",
+  "Most bugs sit on the boundary between what Claude owns and what your code owns.",
 ]} />
 
-## 8.2 Permission modes and settings
+## 8.2 Designing tools Claude picks correctly
 
-### Pick the mode by risk, not speed
+<ExamRef section="8.2" />
 
-| Mode | Auto-approves | Still gated | Use for |
-|---|---|---|---|
-| `default` | Reads | Edits and shell commands | New or unfamiliar codebases |
-| `acceptEdits` | Reads, edits and common file commands in the working dir | Other shell commands, writes outside the dir, protected paths | Trusted local work where shell still needs an eye |
-| `plan` | Reads only | Everything until you approve a plan | Sensitive or unfamiliar code |
-| `auto` | Most actions, after a classifier reviews each one | Deploys, mass deletes, credential access, force-push | Fewer prompts (research preview; not a safety guarantee) |
-| `dontAsk` | Only pre-approved tools | Everything else, auto-denied | Locked-down CI and scripts |
-| `bypassPermissions` | Everything | Almost nothing | Disposable containers or VMs only, never a live workstation |
 
-### Settings layers
 
-| Level | File | Applies to |
-|---|---|---|
-| User | `~/.claude/settings.json` | All your projects |
-| Project | `.claude/settings.json` (committed) | Everyone who clones the repo |
-| Local | `.claude/settings.local.json` (git-ignored) | Your overrides for one project |
-| Enterprise | Managed settings, set by admins | Everyone; can't be overridden |
 
-**Deny beats allow**, and an enterprise deny can't be overridden, even in bypass mode. Put the human gate where the worst case is hard to undo: the agent's work is an input to a human decision on sensitive code, not a replacement for one.
+
+### The description is the interface
+
+Claude picks a tool by reasoning over every registered description in the context of the conversation. When two descriptions look alike, it has no reliable signal and picks on surface details.
+
+- **Say when NOT to use it** - one sentence of exclusion gives a decision boundary · "Look up an order's status. Do not use for refunds."
+- **Merge what you can't separate** - two overlapping tools → one tool with a type parameter
+- **Use the schema** - enum for fixed values, required only for truly required fields, clear parameter descriptions
+- **Don't over-tool** - every definition costs tokens on every call, and overlap makes selection erratic · start minimal
+
+{/* diagram */}
+<Compare caption="A tool Claude struggles with, and one it picks correctly (Exam guide: Tool Implementation)" columns={[
+  { title: 'Vague tool', sub: 'run_sql(query)', points: ['One-line description', 'Free-text parameter', 'Overlaps other tools'] },
+  { title: 'Clear tool', sub: 'get_daily_sales(region, date)', points: ['Says when to use it and when not', 'Typed params, enums, required', 'One clear job'] },
+]} />
+
+<RoleLens dev={"Clear names, detailed descriptions, tight schemas and enums. Claude picks tools by reading the descriptions, so write them like good Javadoc."} test={"If Claude picks the wrong tool, that's a test failure to fix in the description. Add the case to the eval set."} data={"Prefer `get_daily_sales(region, date)` over a generic `run_sql(query)` tool: it's safer and easier for Claude to call correctly."} ba={"Tool descriptions read like a service catalogue. A BA can review whether each one matches the business capability it represents."} />
+
+### Errors go back to Claude
+
+Return failures as a `tool_result` with `is_error: true` and a useful message, so the model can retry, try another approach, ask the user or stop. An empty result is read as valid data ("no orders found"), and the model carries on confidently.
 
 <Gotcha
-  title={"bypassPermissions on a laptop"}
-  scenario={"To stop the approval prompts, a developer runs Claude Code in bypassPermissions mode on their workstation against the live repo."}
-  gotcha={"A misread instruction leads to a destructive git command, and there was no checkpoint left to stop it."}
-  fix={"Use bypass only in a disposable container or VM; locally prefer acceptEdits or plan, with deny rules on dangerous commands and paths."}
+  title={"\"Sorry, that item is out of stock\""}
+  scenario={"The inventory API times out, and the tool catches the exception and returns an empty list."}
+  gotcha={"Claude reads the empty result as real data and confidently tells a customer the item is unavailable. A lost sale and a false statement."}
+  fix={"Return `is_error: true` with a message (\"inventory service timed out\") so Claude can retry, apologise, or hand off."}
 />
 
 <SectionSummary points={[
-  "Choose the permission mode by risk: default, acceptEdits, plan, auto, dontAsk, bypassPermissions (disposable environments only).",
-  "Settings layer user → project → local → enterprise; enterprise can't be overridden.",
-  "Deny beats allow, even in bypass mode.",
+  "The description is the interface: say what the tool does AND when not to use it.",
+  "Merge tools you can't separate; use enums and only truly required fields.",
+  "Return failures with `is_error: true`: an empty result reads as valid data.",
+  "Start with the fewest tools: each costs tokens every call and overlap makes selection erratic.",
 ]} />
 
-## 8.3 Durable context
+## 8.3 Client tools, server tools and tool_choice
 
-### Each rule in its right place
+<ExamRef section="8.3" />
 
-<Tiles cols={5} caption="Five mechanisms, five jobs" tiles={[
-  { title: 'CLAUDE.md', sub: 'every session, always' },
-  { title: 'Rules', sub: 'when a path matches' },
-  { title: 'Skills', sub: 'loaded on demand' },
-  { title: 'Hooks', sub: 'guaranteed, outside the model' },
-  { title: 'Subagents', sub: 'isolated context' },
+
+
+
+
+### Who runs it?
+
+<VsPair
+  left={{ title: 'Client tools', meaning: 'Defined by you (or Anthropic-schema tools like bash and text_editor) and run in YOUR application.', example: 'Response stops with stop_reason tool_use; you run it and send tool_result.' }}
+  right={{ title: 'Server tools', meaning: 'Run on Anthropic\'s side, e.g. web search, web fetch, code execution. Declared in the request; nothing to implement.', example: 'May cost extra per use. A long server loop returns pause_turn.' }}
+/>
+
+| `tool_choice` | Meaning |
+|---|---|
+| `auto` (default) | Claude decides whether to call a tool |
+| `any` | Must call some tool |
+| `tool` + name | Must call that specific tool (forced) |
+| `none` | Must not call tools |
+
+**Model check:** Claude Opus 5.5 rejects the forcing options (`any` and `tool`) with a 400 error, so code that forced a tool breaks when you upgrade. On that model, keep `auto`, make the tool `strict`, and say in the prompt when it applies. For a guaranteed JSON shape, use structured outputs (`output_config.format`).
+
+Add `disable_parallel_tool_use: true` to allow at most one tool call per turn. When a server-tool loop hits its iteration cap the response has `stop_reason: pause_turn`. Resend the conversation as it is; don't add a "please continue" message.
+
+<SectionSummary points={[
+  "Client tools run in your app; server tools (web search, web fetch, code execution) run on Anthropic's side.",
+  "`tool_choice`: auto, any, tool (forced) or none; Opus 5.5 rejects any and tool, so use auto plus strict tools or structured outputs.",
+  "`pause_turn` means a server-tool loop paused: resend as it is, no \"continue\" message.",
 ]} />
 
-| Mechanism | Loads | Context cost | Belongs here |
-|---|---|---|---|
-| CLAUDE.md | At every session start (`/init` drafts one) | Constant; dilutes as it grows | Universal rules, build and test commands |
-| `.claude/rules` | When a file matches its `paths` glob | Only when triggered | Path-specific guidance |
-| Skills (`SKILL.md`) | Description at start, body on demand | Only when used | Reusable procedures; also replaces custom slash commands |
-| Hooks | At lifecycle events, as your script | Minimal | Guardrails, side effects, audit logs |
-| Subagents | Own context; returns a summary | Keeps the main context small | Exploration and parallel work |
+<RoleLens dev={"Client tools run in your code; server tools (such as web search) run on Anthropic's side. `tool_choice` can force a specific tool, any tool, or none."} test={"For structured-output tests, assert the reply matches the schema. Note that Opus 5.5 rejects forced `tool_choice`, so don't build tests that rely on forcing."} data={"Structured outputs (`output_config.format`) give you schema-shaped extraction for every row, every time."} ba={"Ask which actions the AI must always take and which are optional. \"Always\" means a rule enforced in code or a fixed workflow step, not a prompt instruction."} />
 
-CLAUDE.md is a working set of rules, not an append log: every line weakens the others. Past a few hundred lines, audit it. Instructions are **probabilistic**; hooks are **guarantees**. If a rule must always hold, make it a hook. Custom subagents don't inherit your skills unless they're listed in the subagent's definition.
+## 8.4 The Model Context Protocol
 
-### Hook events
+<ExamRef section="8.4" />
 
-<WhenThen whenLabel="Event" thenLabel="Typical use" rows={[
-  { when: 'PreToolUse', then: 'Block an action before it runs (exit code 2), e.g. writes to .env or credentials in .mcp.json' },
-  { when: 'PostToolUse', then: 'Format after an edit, run tests, write an audit log entry' },
-  { when: 'UserPromptSubmit', then: 'Validate a prompt or inject context before the model sees it' },
-  { when: 'Stop', then: 'Follow-up when Claude finishes: notify, clean up, commit the audit log' },
-  { when: 'SessionStart / SessionEnd', then: 'Check environment variables and services; final audit writes' },
-]} />
 
-**For Java teams:** put `mvn -q test` or `./gradlew test` in CLAUDE.md and add a PostToolUse hook that runs your formatter (e.g. Spotless) after every edit. **For Python:** `pytest -q` and a `ruff format` hook.
+
+
+
+### Why MCP
+
+Wiring a tool straight into each app means three apps need three integrations. MCP moves the tool into a **server** that any MCP client (Claude Code, Claude apps, your own app) can attach to, so you build the integration once. Think JDBC: one driver standard, many databases and clients.
+
+<Hub center="MCP server" caption="An MCP server exposes three kinds of capability (Exam guide: MCP Server Development)" items={['Tools: actions the model calls', 'Resources: read-only data the client fetches', 'Prompts: templates the user invokes']} />
+
+<RoleLens dev={"MCP is a standard way to expose tools and data to Claude: build one MCP server, and every MCP-capable client can use it."} test={"MCP servers for Jira or your test management tool let an agent read requirements and log defects directly."} data={"An MCP server in front of the warehouse gives Claude governed, read-only access to agreed views."} ba={"With MCP, Claude can read Confluence or Jira directly, so it can draft stories from real context. Agree what it's allowed to see."} />
+
+### Transports
+
+<VsPair
+  left={{ title: 'stdio', meaning: 'The client launches the server as a local subprocess and talks over stdin/stdout. Runs on ONE machine.', example: 'A personal script, a local database tool, a dev server.' }}
+  right={{ title: 'Streamable HTTP', meaning: 'The server runs remotely; clients connect to its URL over the network.', example: 'A shared team server or a hosted integration.' }}
+/>
+
+SSE is the older remote transport and isn't recommended for new servers. Each connected server's tool definitions cost context, so connect only the servers a task needs. Claude Code defers loading tool definitions until they're needed.
 
 <Gotcha
-  title={"The CLAUDE.md rule that stopped working"}
-  scenario={"CLAUDE.md says \"never edit db/migrations\". It worked for weeks; then the file grew to 600 lines."}
-  gotcha={"Late in a long session the agent edits a migration. Instructions are probabilistic and get diluted as the file grows."}
-  fix={"Enforce must-hold rules with a PreToolUse hook or deny rule, and keep CLAUDE.md short; move path rules to `.claude/rules`."}
+  title={"The shared server only one person could use"}
+  scenario={"A developer adds a stdio MCP server to the committed `.mcp.json`, pointing at a script on their laptop."}
+  gotcha={"It works for them. For everyone else Claude Code fails to start the server, because the script and runtime only exist on one machine."}
+  fix={"Host shared servers over HTTP (project or enterprise scope); keep stdio servers in local or user scope, or bundle the script so every machine has it."}
 />
 
 <SectionSummary points={[
-  "CLAUDE.md: short universal rules, loaded every session. Rules: path-scoped. Skills: on demand. Hooks: guarantees. Subagents: isolated context.",
-  "Instructions are probabilistic, hooks are guaranteed: PreToolUse can block (exit code 2), PostToolUse formats, tests and logs.",
-  "Custom subagents don't inherit skills unless listed.",
+  "MCP turns integrations into reusable servers any MCP client can attach to: build once, use everywhere.",
+  "A server exposes tools (actions), resources (read-only data) and prompts (templates).",
+  "stdio = local subprocess on one machine; Streamable HTTP = remote and shared. SSE is legacy.",
 ]} />
 
-## 8.4 Sharing a setup
+## 8.5 MCP scope, permissions and auth
 
-### Skills, commands and plugins
+<ExamRef section="8.5" />
 
-- **Skill** - a SKILL.md in .claude/skills · loads when its description matches, or by name · the same skill can run in Claude Code, the API (code execution container) and the Agent SDK (set settingSources)
-- **Custom command** - a named, explicit entry point · now written as a skill (set disable-model-invocation to stop automatic use) · the old .claude/commands folder is legacy
-- **Plugin** - a versioned bundle of skills, hooks, subagents and MCP servers · installed from a marketplace in one step · admins can deploy org-wide
 
-### Make it portable
 
-A plugin that hard-codes `/Users/you/...` works for its author and fails for everyone else. Use `$CLAUDE_PROJECT_DIR` for project scripts and `${CLAUDE_PLUGIN_ROOT}` for scripts inside the plugin, bundle every file the plugin depends on, document and validate the environment variables it needs, and test the install on a clean machine. A deny rule or hook you relied on locally only travels with the plugin if it's bundled.
 
-<Exercise title="Where does it go?" id="exercise-where">
 
-1. "Never edit files in `migrations/`." It must hold every time.
-2. "Use the repository pattern for data access in `src/data/`."
-3. A 40-step release checklist you run once a fortnight.
-4. "Run `./gradlew test` to test."
+### Scope in Claude Code
+
+| Scope | Stored in | Who gets it | Right for |
+|---|---|---|---|
+| Local | `~/.claude.json` under the project | Only you, in this project | A tool tied to one project |
+| User | Your personal Claude settings | Only you, every project | Your own local utilities |
+| Project | `.mcp.json` at the repo root (committed) | Everyone who clones the repo | Team-wide servers |
+| Enterprise | Managed settings, set by an admin | Everyone in the organisation | Internal services, security tooling |
+
+Transport and scope are separate decisions with linked consequences: a **stdio server in `.mcp.json` looks shared but isn't**, because it only runs where it's installed. A shared team server needs HTTP plus project or enterprise scope.
+
+{/* diagram */}
+<Tiles cols={3} caption="Where an MCP server is configured in Claude Code decides who gets it (Exam guide: MCP Server Development)" tiles={[
+  { label: 'Local', title: 'Just you, this project', sub: 'Private to your machine' },
+  { label: 'Project', title: 'Everyone on the repo', sub: '.mcp.json, committed' },
+  { label: 'User', title: 'You, every project', sub: 'Your user config' },
+]} />
+
+<RoleLens dev={"Scope MCP servers per project or user, use OAuth for remote servers, and grant the narrowest permissions. Treat third-party servers as untrusted code."} test={"Check what each MCP server can do before enabling it in CI: read-only for test runs."} data={"Give the MCP database server a read-only role on curated views, never admin credentials."} ba={"Which systems the AI can reach, and with whose permissions, is an access-control decision that needs an owner and a record."} />
+
+### Per-tool permissions
+
+Connecting a server exposes its whole tool list. Permission rules can target one tool by name: `mcp__server__tool`. For example, allow `mcp__github__create_issue` without a prompt while other GitHub tools still prompt, or deny a write tool while read tools stay available. **A deny on one tool beats an allow on the server.** Through the API's **MCP connector** (remote servers called straight from the Messages API), an `mcp_toolset` can enable or disable each tool: a permission rule decides "can it run", enabling decides "can the model see it".
+
+### Authentication
+
+<MythReality rows={[
+  { myth: 'Put the API key in .mcp.json so teammates can connect', reality: 'The key goes into git history for good: rotate it. Reference an environment variable; the file holds only the server address' },
+  { myth: 'OAuth that works in staging will work in production', reality: 'Redirect URIs are registered per host: add production\'s before go-live' },
+]} />
+
+- **User identity (SaaS, cloud)** - OAuth, browser sign-in · audit with a PostToolUse hook
+- **Service identity (internal API)** - API key in an environment variable or secrets manager · never in committed config
+- **Local (filesystem, local DB)** - stdio, no network auth · deny rules enforce path access
+
+<Exercise title="Configure it" id="exercise-mcp-config">
+
+Your team wants everyone's Claude Code to use the company's hosted Jira MCP server, but nobody should be able to delete issues. What transport, scope and permission rule do you use, and where does the credential go?
 
 <div slot="answer">
 
-1. **A PreToolUse hook or deny rule.** It must be guaranteed. 2. **A path-scoped rule** in `.claude/rules`. 3. **A skill.** It loads only when needed. 4. **CLAUDE.md.** It's universal and short.
+**HTTP** transport (it's hosted), **project scope** in a committed `.mcp.json` (or enterprise managed settings for the whole org), a **deny rule** on the delete tool (`mcp__jira__delete_issue`), and the credential via **OAuth** per user or an environment variable, never in the file.
 
 </div>
 </Exercise>
 
 ### Where this is in your course notes
 
-- **Claude Code, MCP & Integration §02–04** - permission modes, settings, durable context, hooks, skills, plugins
+- **Production-Grade Prompting §04** - the tool loop, block types, descriptions that misroute
+- **Claude Code, MCP & Integration §05–06** - transports, scopes, per-tool permissions, GitHub server, enterprise auth
 
-<Resource kind="docs" href="https://code.claude.com/docs/en/features-overview" title="Claude Code features overview" text="When to use CLAUDE.md, skills, subagents, hooks, MCP and plugins." />
+<Resource kind="docs" href="https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview" title="Tool use with Claude" text="Client and server tools, the loop, tool_choice, pause_turn and pricing." />
+<Resource kind="docs" href="https://modelcontextprotocol.io" title="Model Context Protocol" text="The open specification: servers, clients, transports and primitives." />
 
 <Gotcha
-  title={"The plugin that only worked for its author"}
-  scenario={"A team plugin's hook runs `/Users/sam/scripts/lint.sh`. Sam tested it and it's perfect."}
-  gotcha={"Everyone else's install fails, because the path only exists on Sam's machine, and the deny rule Sam relied on wasn't bundled."}
-  fix={"Bundle scripts and reference them with `${CLAUDE_PLUGIN_ROOT}`, bundle every guardrail, document environment variables, and test the install on a clean machine."}
+  title={"The key in .mcp.json"}
+  scenario={"To get a teammate unblocked, someone pastes a service API key into `.mcp.json` and commits it. A day later they delete it."}
+  gotcha={"The key is still in git history and anyone with repo access can recover it. Deleting the line didn't revoke anything."}
+  fix={"Rotate the key now; reference an environment variable in `.mcp.json`; add a PreToolUse hook that blocks credential-like values in that file."}
 />
 
 <SectionSummary points={[
-  "Skills are portable procedures; custom commands are now skills; plugins bundle skills, hooks, subagents and MCP servers.",
-  "Use `$CLAUDE_PROJECT_DIR` and `${CLAUDE_PLUGIN_ROOT}`, never absolute paths.",
-  "Bundle every dependency and guardrail, and test the install on a clean machine.",
+  "Scopes: local, user, project (`.mcp.json`, committed) and enterprise (managed).",
+  "A stdio server in `.mcp.json` looks shared but isn't: shared servers need HTTP.",
+  "Permission rules can target one tool (`mcp__server__tool`); a deny on a tool beats an allow on the server.",
+  "OAuth for user identity, env-var keys for service identity, never secrets in committed config.",
 ]} />
