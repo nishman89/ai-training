@@ -16,7 +16,7 @@ export const TRAPS: Record<number, Trap[]> = {
     { trap: 'Use the model alias in production so you get upgrades for free', truth: 'Pin the full model ID, keep the previous version available, and promote a new version only after it passes your eval.' },
   ],
   5: [
-    { trap: 'Always use the most capable model to be safe', truth: 'Start on the balanced default (Sonnet in the course), step up only when an eval shows a miss, step down to Haiku when an eval shows the drop is acceptable.' },
+    { trap: 'Always use the most capable model to be safe', truth: 'Start capability-first (Opus 5.5) or efficiency-first (Haiku 5.5), tune effort before switching, and change tier only when an eval shows a miss or shows the cheaper option holds.' },
     { trap: 'Caching is free, so cache everything', truth: 'Cache writes cost more than normal input (1.25× for 5 min, 2× for 1 h). Caching pays only when reads outnumber writes on an identical, stable prefix.' },
     { trap: 'A cached prompt with a timestamp near the top still hits the cache', truth: 'The prefix must be byte-identical. Put stable content (tools, then system, then old messages) first and anything that changes after the last breakpoint.' },
     { trap: 'max_tokens limits the whole request', truth: 'max_tokens caps the OUTPUT only. The context window limits input plus output.' },

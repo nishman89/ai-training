@@ -93,6 +93,9 @@ const mainCount = (await getQuestions(MAIN_SET, data.number)).length;
       <div class="section-controls no-print">
         <button type="button" class="link" id="expand-all" data-testid="expand-all" data-expand="open">Expand all sections</button>
         <button type="button" class="link" id="collapse-all" data-testid="collapse-all" data-expand="close">Collapse all</button>
+        <label class="first-read" title="Hides code, role examples and exam-guide boxes so you can get the ideas first">
+          <input type="checkbox" data-first-read data-testid="first-read" /> <span><strong>First read</strong>: hide code and extras</span>
+        </label>
       </div>
       <div class="prose" id="chapter-notes" data-testid="chapter-notes"><Content /></div>
 
@@ -165,10 +168,20 @@ const mainCount = (await getQuestions(MAIN_SET, data.number)).length;
   if (location.hash) reveal(location.hash.slice(1));
   window.addEventListener('hashchange', () => reveal(location.hash.slice(1)));
 
+  // ---- "First read": hide code, role examples and exam-guide boxes (remembered across pages)
+  const FIRST = 'ccdvf-first-read';
+  const firstBox = document.querySelector<HTMLInputElement>('[data-first-read]');
+  const setFirst = (on: boolean) => { document.documentElement.classList.toggle('first-read', on); if (firstBox) firstBox.checked = on; };
+  try { setFirst(localStorage.getItem(FIRST) === '1'); } catch { /* storage blocked */ }
+  firstBox?.addEventListener('change', () => {
+    setFirst(firstBox.checked);
+    try { localStorage.setItem(FIRST, firstBox.checked ? '1' : '0'); } catch { /* storage blocked */ }
+  });
+
   document.querySelectorAll<HTMLButtonElement>('[data-expand]').forEach((btn) =>
     btn.addEventListener('click', () => {
       const open = btn.dataset.expand === 'open';
-      document.querySelectorAll<HTMLDetailsElement>('details.chapter-section, details.chapter-topic').forEach((d) => (d.open = open));
+      document.querySelectorAll<HTMLDetailsElement>('details.chapter-section, details.chapter-topic, details.fold').forEach((d) => (d.open = open));
     }),
   );
 
@@ -224,6 +237,14 @@ const mainCount = (await getQuestions(MAIN_SET, data.number)).length;
 </script>
 
 <style>
+  .first-read { display: inline-flex; align-items: center; gap: 0.4rem; margin-left: auto; padding: 0.3rem 0.75rem; border-radius: 999px; background: var(--pink-tint); cursor: pointer; font-size: 0.9rem; }
+  .first-read input { accent-color: var(--pink); width: 1.05rem; height: 1.05rem; }
+  :global(html.first-read .prose .code-switch),
+  :global(html.first-read .prose pre.astro-code),
+  :global(html.first-read .prose .lens),
+  :global(html.first-read .prose .exref__box),
+  :global(html.first-read .prose .exref__line) { display: none !important; }
+  :global(html.first-read .prose .picture pre.astro-code) { display: block !important; }
   .summary { max-width: 46rem; font-size: 1.1rem; color: var(--grey); margin: 1rem 0 0; }
   .downloads { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0 0; }
   .downloads .btn { padding: 0.55rem 1.1rem; font-size: 0.95rem; }

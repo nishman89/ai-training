@@ -15,7 +15,7 @@ same engine and Sparta theme as the [ISTQB revision site](https://nishman89.gith
 |---|---|
 | **Home** | The eight exam domains as cards (weight, ≈ exam questions, progress), a "continue where you left off" link, Summaries and the mock exam |
 | **Start here** | Claude for engineers: what's different about an LLM, a concept map onto Java / test automation / data engineering, the exam at a glance and a first API call |
-| **Domains 1–8** | Collapsible notes for each domain: a plain-English summary first, then the detail, diagrams, exercises, "Watch out for…" traps and links back to the course notes |
+| **Domains 1–8** | Collapsible notes for each domain: a plain-English summary first, then the detail, diagrams, exercises, "Watch out for…" traps and links to the official docs |
 | **Summaries** | Every section summary on one page, grouped by domain, with links into the notes and to each section's Gotcha |
 | **Domain quizzes** | 5–18 original questions per domain, every option explained, each linked (📚) to the official Claude doc or Anthropic article it's based on |
 | **Mock exam** | 53 questions weighted like the real exam, timed (120 min), scored by domain, each with its 📚 source link |
@@ -152,5 +152,5 @@ automated-testing practice.
 
 ## Credits
 
-Built on the Sparta Global ISTQB revision site's Astro engine. Content draws on the Sparta CCDV-F course notes and the
-official Claude Platform and Claude Code documentation.
+Built on the Sparta Global ISTQB revision site's Astro engine. Content is based on the official CCDV-F exam guide and the
+Claude Platform and Claude Code documentation.

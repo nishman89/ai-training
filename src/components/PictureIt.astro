@@ -7,14 +7,15 @@
 interface Props { title: string; }
 const { title } = Astro.props;
 ---
-<section class="picture" data-testid="picture-it">
-  <p class="picture__head"><span class="picture__icon" aria-hidden="true">🎬</span><span><span class="eyebrow">Picture it · real life</span><strong class="picture__title">{title}</strong></span></p>
+<details class="picture fold" data-testid="picture-it">
+  <summary class="picture__head"><span class="picture__icon" aria-hidden="true">🎬</span><span><span class="eyebrow">Real-life walk-through</span><strong class="picture__title">{title}</strong></span></summary>
   <div class="picture__body"><slot /></div>
-</section>
+</details>
 
 <style>
   .picture { margin: 1.5rem 0; border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); border-top: 6px solid var(--charcoal); overflow: hidden; }
-  .picture__head { display: flex; gap: 0.75rem; align-items: center; margin: 0; padding: 1rem 1.4rem; background: var(--bg); border-bottom: 1px solid var(--line); }
+  .picture__head { margin: 0; padding: 1rem 1.4rem; background: var(--bg); }
+  .picture[open] > .picture__head { border-bottom: 1px solid var(--line); }
   .picture__icon { flex: none; display: grid; place-items: center; width: 2.4rem; height: 2.4rem; border-radius: 50%; background: var(--charcoal); font-size: 1.15rem; }
   .picture__head .eyebrow { margin-bottom: 0.1rem; }
   .picture__title { display: block; font: 700 1.2rem/1.25 var(--font-head); }

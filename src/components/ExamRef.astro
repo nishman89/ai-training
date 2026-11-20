@@ -5,6 +5,9 @@
  * and the matching Anthropic Academy chapters.   <ExamRef section="5.3" />
  */
 import { BLUEPRINT, GUIDE_V1_URL, type Skill } from '../data/blueprint';
+import { PREREQS } from '../data/prerequisites';
+import { getSummaries } from '../lib/summaries';
+import { url } from '../lib/site';
 
 interface Props { section: string; }
 const { section } = Astro.props;
@@ -16,17 +19,24 @@ const own = Number(section.split('.')[0]);
 const hits: { domain: number; skill: Skill }[] = Object.entries(BLUEPRINT)
   .flatMap(([d, skills]) => skills.filter((s) => s.sections.includes(section)).map((skill) => ({ domain: Number(d), skill })))
   .sort((a, b) => Number(b.domain === own) - Number(a.domain === own) || b.skill.weight - a.skill.weight);
+const all = (await getSummaries()).flatMap((d) => d.sections.map((x) => ({ ...x, href: `${url(`chapters/${d.number}`)}#${x.slug}` })));
+const before = (PREREQS[section] ?? []).map((n) => all.find((x) => x.number === n)).filter(Boolean) as typeof all;
 const academy = [...new Map(hits.flatMap((h) => h.skill.academy).map((a) => [`${a.course}|${a.section}`, a])).values()];
 ---
 <div class="exref" data-testid={`exam-ref-${section.replace('.', '-')}`}>
+  {before.length > 0 && (
+    <p class="exref__pre" data-testid="read-first"><span class="exref__k">📖 Read first:</span>{' '}
+      {before.map((b, i) => <>{i > 0 && ' · '}<a href={b.href}>{b.number} {b.title}</a></>)}
+    </p>
+  )}
   <p class="exref__line">
     <a href={GUIDE_V1_URL} target="_blank" rel="noopener">Exam guide v1.0</a>
     {hits.length > 0
       ? hits.map((h) => <span> · Domain {h.domain} · {h.skill.name} ({h.skill.weight}%)</span>)
       : <span> · Domain {own}: {DOMAINS[own]} · supporting material, not a named skill</span>}
   </p>
-  <aside class="exref__box">
-    <p class="exref__title"><span aria-hidden="true">📘</span> What the exam guide says</p>
+  <details class="exref__box fold">
+    <summary class="exref__title"><span><span aria-hidden="true">📘</span> What the exam guide says</span></summary>
     {hits.length > 0 ? (
       <ul class="exref__skills">
         {hits.map((h) => (
@@ -42,15 +52,19 @@ const academy = [...new Map(hits.flatMap((h) => h.skill.academy).map((a) => [`${
       </p>
     )}
     <p class="exref__src">Source: <a href={GUIDE_V1_URL} target="_blank" rel="noopener">Claude Certified Developer – Foundations Exam Guide v1.0</a> © Anthropic. Skill names and weights quoted; descriptions paraphrased.</p>
-  </aside>
+  </details>
 </div>
 
 <style>
   .exref { margin: 0 0 1.1rem; }
+  .exref__pre { margin: 0 0 0.35rem; font-size: 0.9rem; }
+  .exref__pre a { font-weight: 700; }
   .exref__line { margin: 0 0 0.6rem; font-size: 0.85rem; color: var(--grey); }
   .exref__line a { color: var(--grey); font-weight: 700; }
-  .exref__box { border: 1px solid var(--line); border-left: 6px solid #3b6fd8; background: var(--bg); border-radius: var(--radius); padding: 0.8rem 1.1rem; font-size: 0.93rem; }
-  .exref__title { margin: 0 0 0.4rem; font-weight: 700; }
+  .exref__box { border: 1px solid var(--line); border-left: 6px solid #3b6fd8; background: var(--bg); border-radius: var(--radius); padding: 0.6rem 1.1rem; font-size: 0.93rem; }
+  .exref__title { margin: 0; font-weight: 700; }
+  .exref__box[open] > .exref__title { margin-bottom: 0.4rem; }
+  .exref__box > summary::after { width: 1.6rem; height: 1.6rem; font-size: 1rem; }
   .exref__skills { margin: 0 0 0.4rem; padding-left: 1.1rem; }
   .exref__skills li { margin: 0.2rem 0; }
   .exref__meta { color: var(--grey); }

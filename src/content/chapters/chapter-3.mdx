@@ -28,13 +28,15 @@ import Resource from '../../components/Resource.astro';
 
 
 
+
+
 ### In plain English
 
 Claude Code is Claude working as a coding assistant inside your project folder. It can read files, write code and run commands, but asks permission first (how often depends on the permission mode). You give it standing project rules in a file called CLAUDE.md, and you can add automatic checks ("hooks") that always run, like "run the tests after every edit" or "never touch the secrets file".
 
 <RoleLens dev={"Claude Code is an agent in your terminal: it reads the repo, edits files and runs `mvn test` or `npm test` itself, asking permission before risky actions."} test={"Ask it to \"write REST Assured tests for this controller and run them until green\". It loops on the real test output, so the tests it hands back have actually run."} data={"Useful for SQL and dbt models: \"add a test for null customer_ids and run dbt test\". It reads the project, writes the test and runs it."} ba={"Point it at a repo and ask \"explain what this service does in business terms\" or \"which code implements the refund rule?\". It's good for impact analysis."} />
 
-### Explore, plan, code
+### Explore, plan, then code
 
 <Flow caption="The sequence matters: plan mode holds Claude in exploration until you approve (Exam guide: Claude Code Operation)" steps={[
   { title: 'Explore', sub: 'read files, trace logic' },
@@ -54,6 +56,8 @@ The same agent loop is available programmatically through the Agent SDK (Python 
 ## 3.2 Permission modes and settings
 
 <ExamRef section="3.2" />
+
+
 
 
 
@@ -112,7 +116,9 @@ The same agent loop is available programmatically through the Agent SDK (Python 
 
 
 
-### Each rule in its right place
+
+
+### Where each kind of rule goes
 
 <Tiles cols={5} caption="Five mechanisms, five jobs (Exam guide: Claude Code Operation)" tiles={[
   { title: 'CLAUDE.md', sub: 'every session, always' },
@@ -167,6 +173,8 @@ CLAUDE.md is a working set of rules, not an append log: every line weakens the o
 
 
 
+
+
 ### Skills, commands and plugins
 
 - **Skill** - a SKILL.md in .claude/skills · loads when its description matches, or by name · the same skill can run in Claude Code, the API (code execution container) and the Agent SDK (set settingSources)
@@ -200,9 +208,7 @@ A plugin that hard-codes `/Users/you/...` works for its author and fails for eve
 </div>
 </Exercise>
 
-### Where this is in your course notes
-
-- **Claude Code, MCP & Integration §02–04** - permission modes, settings, durable context, hooks, skills, plugins
+### Further reading
 
 <Resource kind="docs" href="https://code.claude.com/docs/en/features-overview" title="Claude Code features overview" text="When to use CLAUDE.md, skills, subagents, hooks, MCP and plugins." />
 

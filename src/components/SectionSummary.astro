@@ -10,16 +10,18 @@ const { points, title = 'Section summary' } = Astro.props;
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const fmt = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
 ---
-<aside class="section-summary" data-testid="section-summary">
-  <span class="eyebrow">{title}</span>
+<details class="section-summary fold" data-testid="section-summary">
+  <summary><span class="eyebrow">{title}</span></summary>
   <div class="pts">
     {points.map((p) => <p class="pt" set:html={fmt(p)} />)}
   </div>
-</aside>
+</details>
 
 <style>
-  .section-summary { margin: 1.5rem 0 0.5rem; padding: 1.1rem 1.4rem 1.2rem; border-radius: var(--radius); background: var(--charcoal); color: #fff; border-left: 8px solid var(--pink); }
-  .section-summary .eyebrow { color: var(--pink-soft); margin-bottom: 0.5rem; }
+  .section-summary { margin: 1.5rem 0 0.5rem; padding: 0.9rem 1.4rem; border-radius: var(--radius); background: var(--charcoal); color: #fff; border-left: 8px solid var(--pink); }
+  .section-summary .eyebrow { color: var(--pink-soft); margin: 0; }
+  .section-summary[open] > summary { margin-bottom: 0.6rem; }
+  .section-summary > summary::after { color: var(--pink-soft); }
   .section-summary .pts { display: grid; gap: 0.45rem; }
   .section-summary .pt { position: relative; margin: 0; padding-left: 1.6rem; line-height: 1.5; color: #fff; }
   .section-summary .pt::before { content: '✓'; position: absolute; left: 0; top: 0; color: var(--pink-soft); font-weight: 700; }

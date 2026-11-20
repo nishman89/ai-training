@@ -30,6 +30,8 @@ import Resource from '../../components/Resource.astro';
 
 
 
+
+
 ### In plain English
 
 This domain is about writing good instructions and managing what Claude can "see". Clear instructions, an example of the answer you want and a stated format beat long rambling prompts. Claude only knows what's in the current request, and there's a size limit, so long conversations have to be trimmed or summarised.
@@ -47,7 +49,7 @@ This domain is about writing good instructions and managing what Claude can "see
 
 <RoleLens dev={"When outputs are wrong, first check what Claude actually received: missing context, vague instructions or no examples cause most failures."} test={"Build a minimal failing case like a bug repro: smallest prompt and input that shows the problem, then fix and add it to the eval set."} data={"Bad extraction is usually a vague spec of the output fields. Define each field, its type and what to do when it's missing."} ba={"A weak prompt is a weak requirement. The fixes are the same: be specific, give context and examples, and define done."} />
 
-### Find the missing piece, don't add words
+### Fix a weak prompt by adding what's missing, not more words
 
 A prompt that works once in testing often breaks on untested production inputs. The fix is to identify which **structural** piece is missing and add that one piece. A prompt that grows longer with every revision, without getting better, is the classic warning sign.
 
@@ -76,6 +78,8 @@ Diagnose, change one thing, re-run the eval (Domain 4), and repeat.
 ## 6.2 The techniques
 
 <ExamRef section="6.2" />
+
+
 
 
 
@@ -128,7 +132,9 @@ Say exactly what you need: field names and types, length limits, whether to incl
 
 
 
-### Format control in the API
+
+
+### Let the API enforce the output format
 
 Instead of describing the format in the prompt, give the API a schema and the response is constrained to it (constrained decoding).
 
@@ -252,6 +258,8 @@ const fields = msg.content.find((b) => b.type === 'tool_use')?.input;
 
 
 
+
+
 ### When it's worth it
 
 Thinking makes the model reason step by step before answering. It helps hard multi-step problems and wastes money on simple lookups or deterministic tasks. On current models it's adaptive: tune depth with `effort` (Domain 5).
@@ -282,7 +290,9 @@ Thinking makes the model reason step by step before answering. It helps hard mul
 
 
 
-### The window is a budget
+
+
+### The context window is a budget
 
 Everything the model sees in one request (system prompt, history, documents, tool results and its own output) shares one budget. Your application decides what goes in, what comes back as a summary, and what never enters.
 
@@ -342,6 +352,8 @@ A sensible default is sentence- or section-sized chunks with a little overlap. *
 
 
 
+
+
 ### Sending images
 
 Images are processed in roughly 28 × 28 pixel tiles, about (width × height) / 784 tokens, so a 1,000 × 1,000 px image costs about 1,296 tokens. Resize before sending if detail isn't needed.
@@ -379,11 +391,7 @@ PDFs use a `document` block (base64, URL or `file_id`). Apply the same prompting
 
 <RoleLens dev={"Images and PDFs go in as content blocks next to text. Claude reads charts, scans and tables, but they cost tokens per page or image."} test={"Screenshots of a failing UI can go straight to Claude: \"what's wrong with this page against the design?\" It's useful for visual checks."} data={"Extracting tables from supplier PDFs into rows is a classic use. Validate against a schema, because scanned layouts vary."} ba={"Upload a process diagram or a scanned form and ask Claude to turn it into user stories or a field list. It's a quick start, but review it."} />
 
-### Where this is in your course notes
-
-- **Production-Grade Prompting §02** - the diagnosis table, structured outputs, the prompt that grew longer
-- **Production-Grade Prompting §03, §06, §10** - thinking, context strategies and RAG, images and batch
-- **MSO Foundations §04** - zero, one and few-shot prompting
+### Further reading
 
 <Resource kind="docs" href="https://platform.claude.com/docs/en/build-with-claude/structured-outputs" title="Structured outputs" text="JSON outputs and strict tool use, with limits." />
 

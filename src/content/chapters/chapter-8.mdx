@@ -33,6 +33,8 @@ import Resource from '../../components/Resource.astro';
 
 
 
+
+
 ### In plain English
 
 This domain is about letting Claude **do** things, not just talk. You describe a function ("get_order_status takes an order ID"). Claude replies "please run get_order_status with A-1234", **your** code runs it and sends back the answer, and Claude continues. **MCP** is a standard way to package tools so they plug into any Claude app, like USB for tools.
@@ -193,7 +195,9 @@ Two HTTP calls, one tool run by **your** code, and the IDs tie them together.
 
 
 
-### The description is the interface
+
+
+### Claude picks tools by their description
 
 Claude picks a tool by reasoning over every registered description in the context of the conversation. When two descriptions look alike, it has no reliable signal and picks on surface details.
 
@@ -236,7 +240,9 @@ Return failures as a `tool_result` with `is_error: true` and a useful message, s
 
 
 
-### Who runs it?
+
+
+### Client tools vs server tools: where the tool runs
 
 <VsPair
   left={{ title: 'Client tools', meaning: 'Defined by you (or Anthropic-schema tools like bash and text_editor) and run in YOUR application.', example: 'Response stops with stop_reason tool_use; you run it and send tool_result.' }}
@@ -270,6 +276,8 @@ Add `disable_parallel_tool_use: true` to allow at most one tool call per turn. W
 
 
 
+
+
 ### Why MCP
 
 Wiring a tool straight into each app means three apps need three integrations. MCP moves the tool into a **server** that any MCP client (Claude Code, Claude apps, your own app) can attach to, so you build the integration once. Think JDBC: one driver standard, many databases and clients.
@@ -278,7 +286,7 @@ Wiring a tool straight into each app means three apps need three integrations. M
 
 <RoleLens dev={"MCP is a standard way to expose tools and data to Claude: build one MCP server, and every MCP-capable client can use it."} test={"MCP servers for Jira or your test management tool let an agent read requirements and log defects directly."} data={"An MCP server in front of the warehouse gives Claude governed, read-only access to agreed views."} ba={"With MCP, Claude can read Confluence or Jira directly, so it can draft stories from real context. Agree what it's allowed to see."} />
 
-### Transports
+### Transports: how Claude connects to an MCP server
 
 <VsPair
   left={{ title: 'stdio', meaning: 'The client launches the server as a local subprocess and talks over stdin/stdout. Runs on ONE machine.', example: 'A personal script, a local database tool, a dev server.' }}
@@ -308,7 +316,9 @@ SSE is the older remote transport and isn't recommended for new servers. Each co
 
 
 
-### Scope in Claude Code
+
+
+### MCP server scopes in Claude Code
 
 | Scope | Stored in | Who gets it | Right for |
 |---|---|---|---|
@@ -354,10 +364,7 @@ Your team wants everyone's Claude Code to use the company's hosted Jira MCP serv
 </div>
 </Exercise>
 
-### Where this is in your course notes
-
-- **Production-Grade Prompting §04** - the tool loop, block types, descriptions that misroute
-- **Claude Code, MCP & Integration §05–06** - transports, scopes, per-tool permissions, GitHub server, enterprise auth
+### Further reading
 
 <Resource kind="docs" href="https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview" title="Tool use with Claude" text="Client and server tools, the loop, tool_choice, pause_turn and pricing." />
 <Resource kind="docs" href="https://modelcontextprotocol.io" title="Model Context Protocol" text="The open specification: servers, clients, transports and primitives." />

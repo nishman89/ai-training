@@ -5,6 +5,7 @@
 import type { APIRoute } from 'astro';
 import GithubSlugger from 'github-slugger';
 import { getChapters } from '../lib/data';
+import { GLOSSARY, slugOf } from '../data/glossary.mjs';
 
 export interface SearchEntry {
   title: string;
@@ -52,6 +53,8 @@ export const GET: APIRoute = async () => {
     ['Summaries', 'summaries', 'Every section summary on one page, grouped by domain, with links to the gotchas'],
     ['Mock exam', 'mock-exam', '53 questions in 120 minutes, weighted like the real CCDV-F exam'],
   ];
+  pages.push(['Glossary', 'glossary', 'Every Claude term used in the notes, in plain English']);
   for (const [title, path, text] of pages) entries.push({ title, where: 'Page', path, text });
+  for (const g of GLOSSARY) entries.push({ title: g.term, where: 'Glossary', path: `glossary/#${slugOf(g.term)}`, text: g.def });
   return new Response(JSON.stringify(entries), { headers: { 'Content-Type': 'application/json' } });
 };

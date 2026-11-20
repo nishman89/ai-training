@@ -26,6 +26,8 @@ import Exercise from '../../components/Exercise.astro';
 
 
 
+
+
 ### In plain English
 
 This domain is about proving your Claude feature works, and noticing when it breaks. Collect example inputs with the correct answers, run your feature on all of them, and score it. Re-run the score after every change.
@@ -62,6 +64,8 @@ Cover the unhappy paths too: ask Claude to brainstorm edge cases that could brea
 
 
 
+
+
 ### Match the grader to the output
 
 <Compare caption="Three ways to grade, from cheapest to most flexible (Exam guide: Domain 4)" columns={[
@@ -82,6 +86,8 @@ A common split: code checks on every commit, the slower judge on a scheduled qua
 ## 4.3 Calibrating an LLM judge
 
 <ExamRef section="4.3" />
+
+
 
 
 
@@ -185,6 +191,8 @@ The same eval gates deployments: run a new model version against a **pinned base
 
 
 
+
+
 ### Test levels
 
 | Level | For a Claude feature | Catches |
@@ -228,10 +236,6 @@ Record each step of a run: the prompt, tool calls, intermediate outputs and timi
 
 </div>
 </Exercise>
-
-### Where this is in your course notes
-
-- **Production Engineering, Evals & Security §02–03** - the design document, graders, calibration, test levels and tracing
 
 <Gotcha
   title={"Every test green, production wrong"}

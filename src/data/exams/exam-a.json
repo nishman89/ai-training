@@ -1931,44 +1931,44 @@
    "exam": "A",
    "n": 39,
    "chapter": 5,
-   "lo": "Apply the eval-gated model rule",
+   "lo": "Apply the eval-gated model choice",
    "ref": "5.1 Choosing",
    "k": "Apply",
    "select": 1,
    "blocks": [
     {
      "t": "p",
-     "text": "Following the course's default approach, a new feature should start on which model, and what justifies changing it?"
+     "text": "A team starts a new agentic coding feature capability-first on Claude Opus 5.5. Costs are higher than planned, but quality is comfortably above the bar. Following Anthropic's guidance, what should they try first?"
     }
    ],
    "options": [
     {
      "key": "a",
-     "text": "Whichever model is newest"
+     "text": "Switch straight to Haiku 5.5 for every request"
     },
     {
      "key": "b",
-     "text": "Haiku, stepping up whenever a user complains"
+     "text": "Move up to Fable 5.2, because more capability lowers retries"
     },
     {
      "key": "c",
-     "text": "Fable, stepping down only if the bill is too high"
+     "text": "Keep Opus 5.5 but lower the effort setting, re-run the eval, and consider a cheaper tier only if quality still holds"
     },
     {
      "key": "d",
-     "text": "Sonnet, stepping up when an eval shows it missing the bar and down to Haiku when an eval shows the drop is acceptable"
+     "text": "Leave it: model choice can't change after launch"
     }
    ],
    "answer": [
-    "d"
+    "c"
    ],
    "explanation": {
-    "intro": "Start on the balanced default and let measured scores move you up or down.",
+    "intro": "Effort is often the better lever than switching models; move tiers only on measured results.",
     "options": {
-     "c": "Starting at the top wastes money with no evidence it's needed.",
-     "d": "Correct.",
-     "b": "Anecdotes aren't an eval.",
-     "a": "Newest doesn't mean right-sized."
+     "c": "Correct.",
+     "a": "A jump without measuring risks a quality drop the eval would have caught.",
+     "b": "Fable is for when evals fall short at the highest effort; here quality is already above the bar.",
+     "d": "Model and effort choices should be revisited as the workload matures."
     }
    },
    "source": {

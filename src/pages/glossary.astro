@@ -1,0 +1,69 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHead from '../components/PageHead.astro';
+import { GLOSSARY, FORMULAS, slugOf } from '../data/glossary.mjs';
+import { getSummaries } from '../lib/summaries';
+import { url } from '../lib/site';
+
+const domains = await getSummaries();
+const where = new Map(domains.flatMap((d) => d.sections.map((s) => [s.number, { href: `${url(`chapters/${d.number}`)}#${s.slug}`, title: s.title }])));
+const byName = (a: { term: string }, b: { term: string }) => a.term.localeCompare(b.term, 'en', { sensitivity: 'base' });
+const cats = [...new Set(GLOSSARY.map((g) => g.cat))];
+const groups = cats.map((c) => ({ cat: c, id: slugOf(c), terms: GLOSSARY.filter((g) => g.cat === c).sort(byName) }));
+---
+<BaseLayout title="Glossary" description="Every Claude term used in the CCDV-F notes, explained in plain English.">
+  <PageHead eyebrow="Look it up" title="Glossary">
+    <p class="lead">Every Claude term used in the notes, in plain English. In the notes, terms with a <span class="demo">dotted underline</span> show
+      their definition when you hover over or tap them, and link here. Each entry links to the section that explains it in full.</p>
+    <nav class="letters no-print" aria-label="Jump to a topic">{groups.map((g) => <a href={`#${g.id}`}>{g.cat}</a>)}</nav>
+  </PageHead>
+  <div class="container">
+    <section class="formulas card" data-testid="formulas">
+      <h2>The big ideas in one line each</h2>
+      <ul>
+        {FORMULAS.map((f) => { const sec = where.get(f.see); return (
+          <li><code>{f.f}</code>{sec && <a href={sec.href} class="formulas__see">{f.see} →</a>}</li>
+        ); })}
+      </ul>
+    </section>
+    {groups.map((g) => (
+      <section class="group">
+        <h2 class="dot" id={g.id}>{g.cat}</h2>
+        <dl class="gloss" data-testid="glossary">
+          {g.terms.map((t) => { const sec = where.get(t.see); return (
+            <div class="gloss__item card" id={slugOf(t.term)} data-testid={`glossary-${slugOf(t.term)}`}>
+              <dt>{t.term}</dt>
+              <dd>
+                <p>{t.def}</p>
+                {sec && <p class="gloss__see">Explained in <a href={sec.href}>{t.see} {sec.title} →</a></p>}
+              </dd>
+            </div>
+          ); })}
+        </dl>
+      </section>
+    ))}
+  </div>
+</BaseLayout>
+
+<style>
+  .lead { max-width: 52rem; }
+  .demo { text-decoration: underline dotted var(--pink); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+  .letters { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 1rem; }
+  .letters a { display: inline-block; padding: 0.35rem 0.8rem; border-radius: 8px; background: var(--surface); box-shadow: var(--shadow); font-weight: 700; text-decoration: none; color: var(--charcoal); }
+  .letters a:hover { background: var(--pink); color: #fff; }
+  .gloss { display: grid; grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr)); gap: 1rem; margin: 2rem 0; }
+  .gloss__item { position: relative; margin: 0; scroll-margin-top: 6rem; }
+  .gloss__item:target { outline: 3px solid var(--pink); }
+  .group h2 { scroll-margin-top: 6rem; margin-top: 2.5rem; }
+  .gloss { margin: 1rem 0; }
+  .formulas { margin: 2rem 0 0; border-top: 6px solid var(--pink); }
+  .formulas h2 { margin-top: 0; }
+  .formulas ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.5rem; }
+  .formulas li { display: flex; gap: 0.75rem; align-items: baseline; justify-content: space-between; flex-wrap: wrap; }
+  .formulas code { white-space: normal; font-size: 0.92rem; line-height: 1.5; }
+  .formulas__see { font-size: 0.85rem; font-weight: 700; white-space: nowrap; }
+  dt { font: 700 1.15rem var(--font-head); margin-bottom: 0.35rem; }
+  dd { margin: 0; }
+  dd p { margin: 0 0 0.4rem; line-height: 1.5; }
+  .gloss__see { font-size: 0.88rem; }
+</style>

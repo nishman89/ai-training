@@ -35,5 +35,41 @@ const { title, description = 'Claude Certified Developer – Foundations (CCDV-F
     <DiagramZoom />
     <TableFit />
     <Footer />
+    <script>
+      // Glossary terms: hover or keyboard focus shows the definition; on touch, first tap shows it, second tap opens the glossary.
+      let tip: HTMLDivElement | null = null;
+      let shownFor: Element | null = null;
+      const hide = () => { tip?.remove(); tip = null; shownFor = null; };
+      const show = (a: HTMLAnchorElement) => {
+        hide();
+        const def = a.dataset.def ?? '';
+        const i = def.indexOf(': ');
+        tip = document.createElement('div');
+        tip.className = 'gl-tip';
+        tip.setAttribute('role', 'tooltip');
+        const strong = document.createElement('strong'); strong.textContent = def.slice(0, i);
+        const small = document.createElement('small'); small.textContent = 'Click or tap again for the glossary';
+        tip.append(strong, ': ' + def.slice(i + 2), small);
+        document.body.append(tip);
+        const r = a.getBoundingClientRect(), t = tip.getBoundingClientRect();
+        const left = Math.min(Math.max(8, r.left), window.innerWidth - t.width - 8);
+        const top = r.top - t.height - 8 > 8 ? r.top - t.height - 8 : r.bottom + 8;
+        tip.style.left = `${left}px`; tip.style.top = `${top}px`;
+        shownFor = a;
+      };
+      let pointer = 'mouse';
+      document.addEventListener('pointerdown', (e) => { pointer = e.pointerType; }, { capture: true });
+      const term = (e: Event) => (e.target as Element)?.closest?.('a.gl') as HTMLAnchorElement | null;
+      document.addEventListener('mouseover', (e) => { const a = term(e); if (a && pointer !== 'touch') show(a); });
+      document.addEventListener('mouseout', (e) => { if (term(e) && pointer !== 'touch') hide(); });
+      document.addEventListener('focusin', (e) => { const a = term(e); if (a && pointer !== 'touch') show(a); });
+      document.addEventListener('focusout', (e) => { if (term(e) && pointer !== 'touch') hide(); });
+      document.addEventListener('scroll', hide, { passive: true });
+      document.addEventListener('click', (e) => {
+        const a = term(e);
+        if (!a) { hide(); return; }
+        if (pointer === 'touch' && shownFor !== a) { e.preventDefault(); show(a); }
+      });
+    </script>
   </body>
 </html>

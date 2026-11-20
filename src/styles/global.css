@@ -246,3 +246,20 @@ pre.astro-code code { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regula
   background: var(--pink-tint); color: var(--pink-dark); padding: 0.1em 0.4em; border-radius: 6px;
 }
 .card--dark :not(pre) > code, .hero :not(pre) > code { background: rgb(255 255 255 / 0.12); color: var(--pink-soft); }
+
+/* Collapsible boxes (gotcha, section summary, exam guide, picture it, your lens): closed by default, same +/− as topics */
+details.fold > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 0.75rem; }
+details.fold > summary::-webkit-details-marker { display: none; }
+details.fold > summary::after { content: '+'; margin-left: auto; flex: none; display: grid; place-items: center; width: 1.9rem; height: 1.9rem; border-radius: 50%; border: 2px solid currentColor; font: 700 1.1rem/1 var(--font-head); color: var(--pink-dark); opacity: 0.85; }
+details.fold[open] > summary::after { content: '−'; }
+details.fold > summary:focus-visible { outline: 3px solid var(--pink); outline-offset: 3px; border-radius: 8px; }
+@media print { details.fold > summary::after { display: none; } }
+
+/* Glossary terms in the notes: dotted underline; hover or focus shows the plain-English definition */
+a.gl { position: relative; color: inherit; text-decoration: underline dotted var(--pink); text-decoration-thickness: 2px; text-underline-offset: 3px; cursor: help; }
+a.gl:hover, a.gl:focus-visible { color: var(--pink-dark); }
+@media print { a.gl { text-decoration: none; } .gl-tip { display: none !important; } }
+.gl-tip { position: fixed; z-index: 1000; max-width: min(22rem, calc(100vw - 16px)); padding: 0.55rem 0.75rem; border-radius: 10px; background: var(--charcoal); color: #fff;
+  font: 400 0.85rem/1.45 var(--font-body); box-shadow: var(--shadow); pointer-events: none; }
+.gl-tip strong { color: var(--pink-soft); }
+.gl-tip small { display: block; margin-top: 0.3rem; opacity: 0.7; }

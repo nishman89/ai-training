@@ -31,6 +31,7 @@ const chapters = await getChapters();
 
   <section class="container chapters">
     <h2 class="dot">Exam domains</h2>
+    <p class="newcomer" data-testid="newcomer-tip">New to Claude? Don't start at Domain 1: follow the <a href={url('introduction/#reading-order')}>beginner reading order</a>, and use the <a href={url('glossary')}>Glossary</a> for unfamiliar words.</p>
     <div class="overall" id="overall-progress" data-testid="overall-progress" data-overall>
       <p class="overall__label"><strong data-overall-count>0</strong> of <span data-overall-total>22</span> sections done</p>
       <div class="bar" aria-hidden="true"><span data-overall-bar></span></div>
@@ -156,4 +157,5 @@ const chapters = await getChapters();
   .papers-cta p a { color: var(--pink-soft); font-weight: 700; }
   .reset { margin-top: 2rem; color: var(--grey); font-size: 0.9rem; }
   .link { background: none; border: 0; color: var(--pink-dark); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
+  .newcomer { margin: 0 0 1rem; padding: 0.75rem 1rem; border-radius: 10px; background: var(--pink-tint); font-weight: 600; }
 </style>

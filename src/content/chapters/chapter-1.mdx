@@ -33,6 +33,8 @@ import Resource from '../../components/Resource.astro';
 
 
 
+
+
 ### In plain English
 
 This domain is about getting Claude to finish jobs that take several steps. A **workflow** is a fixed recipe you write: step 1 summarise, step 2 translate. An **agent** chooses its own steps: it asks for a tool, looks at the result, decides what to do next, and repeats until the job is done.
@@ -64,6 +66,8 @@ This domain is about getting Claude to finish jobs that take several steps. A **
 ## 1.2 The five workflow patterns
 
 <ExamRef section="1.2" />
+
+
 
 
 
@@ -126,6 +130,8 @@ One call generates, another critiques against clear criteria, and the loop repea
 
 
 
+
+
 ### The loop
 
 An agent is a multi-step tool-use loop with managed context and a defined goal.
@@ -139,7 +145,7 @@ An agent is a multi-step tool-use loop with managed context and a defined goal.
 
 <RoleLens dev={"It's a `while` loop: call, check `stop_reason`, run each `tool_use` with your own code, append the `tool_result`, repeat. The bugs are always a missing exit condition or a dropped `tool_use_id`."} test={"Test the loop's exits, not just the happy path: max-turns reached, tool throws, model never stops asking. Mock the Claude client to return a scripted `tool_use` sequence so the test is deterministic."} data={"Treat each loop iteration like a pipeline retry: log turn number, tokens and tool calls to your warehouse so you can see runaway loops and cost per run in a dashboard."} ba={"The human-in-the-loop gate is a business rule: \"refunds over £100 need approval\". Write it as an acceptance criterion, e.g. **Given** an agent proposes a £150 refund **then** it waits for a supervisor."} />
 
-### In code
+### The agent loop in code
 
 This is the raw loop. In **Python** (or TypeScript) the Claude Agent SDK can run this loop for you; it isn't available for **Java**, where you write the loop yourself or use the Java SDK's beta tool runner.
 
@@ -279,7 +285,7 @@ What was missing: an **iteration cap** (e.g. stop at 15 turns), a **budget**, an
 
 </PictureIt>
 
-### Tool orchestration
+### How many tools to give an agent
 
 Routing depends on how tools are described and how many are registered. Too many overlapping tools make choices erratic; too few and the agent invents a path or returns an incomplete result. Start with the minimum set and add a tool only for a specific gap.
 
@@ -305,7 +311,9 @@ Routing depends on how tools are described and how many are registered. Too many
 
 
 
-### Who runs the loop?
+
+
+### Who runs the agent loop: you, the SDK or Anthropic?
 
 | | Raw Messages API loop | Agent SDK | Claude Managed Agents |
 |---|---|---|---|
@@ -346,6 +354,8 @@ Whichever path you take, the four steps are the same: register tools, scope the 
 
 
 
+
+
 ### Memory scopes
 
 Choose at design time what the agent should know when a new session starts.
@@ -363,6 +373,13 @@ Choose at design time what the agent should know when a new session starts.
   { title: 'Work', sub: 'a chunk of the task', tone: 'green' },
   { title: 'Write state', sub: 'what is done, what is next', tone: 'yellow' },
   { title: 'Compact or new session', sub: 'context stays small', tone: 'purple' },
+]} />
+
+<Flow caption="A subagent keeps the main conversation small (Exam guide: Agent Patterns and Frameworks)" steps={[
+  { title: 'Main agent', sub: 'hands off one sub-task' },
+  { title: 'Subagent', sub: 'fresh context; reads 50 files' },
+  { title: 'Returns a summary', sub: 'a few hundred tokens' },
+  { title: 'Main context', sub: 'gets the answer, not the 50 files' },
 ]} />
 
 <RoleLens dev={"Keep long-lived facts in a memory store or file the agent reads and writes, not in an ever-growing `messages` list. Compact or summarise history before it hits the context limit."} test={"Long-running agents need checkpoints you can assert on: after step 5, does the progress file say what it should? Resume-from-checkpoint is a test case on its own."} data={"Memory is just state: decide its scope (per user, per project) and retention like any table. A progress file is the agent's equivalent of a watermark column."} ba={"Ask what the agent must remember between sessions and for how long. That's a data-retention requirement, and it may have GDPR implications."} />
@@ -388,11 +405,7 @@ Pick the simplest pattern for each:
 </div>
 </Exercise>
 
-### Where this is in your course notes
-
-- **Production-Grade Prompting §07** - workflow vs agent, the three wiring paths, loop checklist, human-in-the-loop points
-- **Production-Grade Prompting §08** - memory scopes and skills
-- **Production Engineering, Evals & Security §05** - orchestrator-worker cost (about 15×)
+### Further reading
 
 <Resource kind="article" href="https://www.anthropic.com/engineering/building-effective-agents" title="Building effective agents" text="Anthropic's guide to workflows vs agents and the five workflow patterns." />
 

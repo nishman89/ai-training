@@ -5,6 +5,7 @@ import PageHead from '../components/PageHead.astro';
 import CodeSwitch from '../components/CodeSwitch.astro';
 import { GUIDE_V1_URL, GUIDE_V11_URL } from '../data/blueprint';
 import { getChapters } from '../lib/data';
+import { READING_ORDER } from '../data/prerequisites';
 import { url, QUESTIONS_PER_CHAPTER } from '../lib/site';
 
 const chapters = await getChapters();
@@ -99,6 +100,29 @@ const pom = `<dependency>
         already do in Java, test automation, data engineering and business analysis.</p>
     </section>
 
+    <section id="reading-order" data-testid="reading-order">
+      <h2 class="dot">New to Claude? Read the domains in this order</h2>
+      <p>The site keeps the official domain numbers, which put agents first. For a first read, go in this order instead: each domain only
+        builds on the ones before it. Unfamiliar words have a <span class="gl-demo">dotted underline</span>: hover over or tap them for a plain-English
+        definition, or open the <a href={url('glossary')}>Glossary</a>. Each section also says what to <strong>📖 read first</strong>.</p>
+      <ol class="order">
+        {READING_ORDER.map((r, i) => {
+          const ch = chapters.find((c) => c.data.number === r.domain)!;
+          return (
+            <li class="order__step card">
+              <span class="order__n">{i + 1}</span>
+              <div>
+                <a class="order__title" href={url(`chapters/${r.domain}`)}>Domain {r.domain}: {ch.data.title} →</a>
+                <p>{r.why}</p>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      <p class="muted small">Tip: on your first pass through a domain, switch on <strong>First read</strong> at the top of the notes. It hides the code,
+        the role examples and the exam-guide boxes so you can get the ideas first.</p>
+    </section>
+
     <section>
       <h2 class="dot">The exam at a glance</h2>
       <div class="facts">
@@ -181,7 +205,7 @@ const pom = `<dependency>
     <section class="card card--tint">
       <h2>How to use this site</h2>
       <ol class="steps">
-        <li><strong>Read the domain notes in order.</strong> Each section is collapsible; tick sections off as you go. Every domain opens with a plain-English summary, then the detail, Java, Python and TypeScript examples and a link back to your course notes.</li>
+        <li><strong>Follow the <a href="#reading-order">reading order</a> above.</strong> Each section is collapsible; tick sections off as you go. Every domain opens with a plain-English summary, then the detail, Java, Python and TypeScript examples, and links to the official docs.</li>
         <li><strong>Spend most time on what's new to everyone:</strong> token and cost arithmetic, reading <code>stop_reason</code> and <code>usage</code>, the tool-use round trip, workflow vs agent, context strategies, and why prompt rules are never security controls.</li>
         <li><strong>Check the "Watch out for…" box</strong> at the end of each domain: the confusions exam questions like to test.</li>
         <li><strong>Revise from the <a href={url('summaries')}>Summaries</a> page:</strong> every section's key points on one page.</li>
@@ -220,4 +244,11 @@ const pom = `<dependency>
   .first :global(pre) { margin: 0.75rem 0; }
   .steps { display: grid; gap: 0.6rem; padding-left: 1.25rem; }
   .source { font-size: 0.85rem; }
+  .order { list-style: none; padding: 0; margin: 1rem 0; display: grid; gap: 0.75rem; }
+  .order__step { display: flex; gap: 1rem; align-items: flex-start; margin: 0; padding: 1rem 1.25rem; }
+  .order__n { flex: none; display: grid; place-items: center; width: 2.2rem; height: 2.2rem; border-radius: 50%; background: var(--pink); color: #fff; font: 700 1.1rem var(--font-head); }
+  .order__title { font: 700 1.1rem var(--font-head); text-decoration: none; color: var(--charcoal); }
+  .order__title:hover { color: var(--pink-dark); }
+  .order__step p { margin: 0.25rem 0 0; color: var(--grey); }
+  .gl-demo { text-decoration: underline dotted var(--pink); text-decoration-thickness: 2px; text-underline-offset: 3px; }
 </style>

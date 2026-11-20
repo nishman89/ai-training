@@ -15,9 +15,9 @@ const ROLES = [
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const fmt = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
 ---
-<section class="lens" data-role-lens data-active="dev" data-testid="role-lens">
+<details class="lens fold" data-role-lens data-active="dev" data-testid="role-lens">
+  <summary class="lens__sum"><span class="lens__label"><span class="eyebrow">How this applies to your role</span><span class="lens__badge" title="Useful background, not examined">Beyond the exam guide</span></span></summary>
   <div class="lens__head">
-    <span class="lens__label"><span class="eyebrow">Through your lens</span><span class="lens__badge" title="Useful background, not examined">Beyond the exam guide</span></span>
     <div class="lens__tabs no-print" role="group" aria-label="Role">
       {ROLES.map((r, i) => (
         <button type="button" data-role={r.key} aria-pressed={i === 0 ? 'true' : 'false'} data-testid={`role-tab-${r.key}`}>
@@ -29,7 +29,7 @@ const fmt = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').repla
   {ROLES.map((r) => (
     <p class="lens__body" data-role-body={r.key}><strong class="lens__who">{r.icon} {r.label}:</strong> <Fragment set:html={fmt(p[r.key])} /></p>
   ))}
-</section>
+</details>
 
 <script>
   const KEY = 'ccdvf-role';
@@ -53,7 +53,9 @@ const fmt = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').repla
 </script>
 
 <style>
-  .lens { margin: 1.25rem 0; border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); border-left: 6px solid var(--pink); padding: 0.9rem 1.2rem 1rem; }
+  .lens { margin: 1.25rem 0; border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); border-left: 6px solid var(--pink); padding: 0.8rem 1.2rem; }
+  .lens__sum { margin: 0; }
+  .lens[open] > .lens__sum { margin-bottom: 0.6rem; }
   .lens__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.6rem; }
   .lens__head .eyebrow { margin: 0; }
   .lens__label { display: inline-flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }

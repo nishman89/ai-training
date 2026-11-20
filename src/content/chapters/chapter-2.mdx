@@ -11,6 +11,7 @@ objectives:
   - "Place a Claude application in its lifecycle, choose a platform and pin what ships"
 ---
 import ExamRef from '../../components/ExamRef.astro';
+import Compare from '../../components/diagrams/Compare.astro';
 import RoleLens from '../../components/RoleLens.astro';
 import PictureIt from '../../components/PictureIt.astro';
 import Gotcha from '../../components/Gotcha.astro';
@@ -31,6 +32,8 @@ import Resource from '../../components/Resource.astro';
 
 
 
+
+
 ### In plain English
 
 This domain is how your program talks to Claude. You send one HTTP request, a package of settings plus the conversation so far, and get back a message, a note on why it stopped and an itemised bill. Everything else in the exam is a field on that request, a way to handle the reply, or a pattern for sending many requests in a row.
@@ -42,6 +45,14 @@ This domain is how your program talks to Claude. You send one HTTP request, a pa
   { title: 'POST /v1/messages', sub: 'API key + JSON' },
   { title: 'Claude', sub: 'reads, writes a reply' },
   { title: 'Response', sub: 'content · stop_reason · usage' },
+]} />
+
+{/* diagram */}
+<Flow caption="The API remembers nothing: every call resends the whole conversation (Exam guide: Claude API Mechanics)" steps={[
+  { title: 'Call 1 sends', sub: 'system prompt + question 1' },
+  { title: 'Reply 1', sub: 'you store it' },
+  { title: 'Call 2 sends', sub: 'system + Q1 + reply 1 + Q2' },
+  { title: 'Reply 2', sub: 'so input grows every turn' },
 ]} />
 
 <RoleLens dev={"One `POST /v1/messages`: model, `max_tokens`, `system`, `messages`. The response is a list of content blocks plus `stop_reason` and `usage`. It's stateless, so you resend history each call."} test={"Assert on `stop_reason` and `usage` as well as text. A REST Assured test that checks `stop_reason == end_turn` catches truncation that a text check would miss."} data={"Every response carries `usage.input_tokens` and `output_tokens`. Land them in a table per call: that's your cost data model."} ba={"The API has no memory between calls. If the user story says \"the assistant remembers what I said earlier\", that's something the team must build by resending history."} />
@@ -271,9 +282,17 @@ console.log(`in=${msg.usage.input_tokens} out=${msg.usage.output_tokens}`);
 
 
 
+
+
 ### Think of a call as a job for a contractor
 
 You pick the contractor (`model`), hand over the standing brief (`system`) and the case file so far (`messages`), and cap the billable hours (`max_tokens`). You get back the work (`content`), a note on why they stopped (`stop_reason`) and an invoice (`usage`).
+
+{/* diagram */}
+<Compare caption="max_tokens is a ceiling, not a target (Exam guide: Claude API Mechanics)" columns={[
+  { title: 'The reply fits', sub: 'stop_reason: end_turn', points: ['Claude finished naturally', 'You pay only for tokens written', 'Safe to parse'] },
+  { title: 'The reply is too long', sub: 'stop_reason: max_tokens', points: ['Cut off mid-sentence, no error', 'JSON is left incomplete', 'Check stop_reason before using it'] },
+]} />
 
 <RoleLens dev={"`max_tokens` is a hard cap on the reply, not a target. `temperature` is randomness. `stop_sequences` cut output at a marker. All go in the same request builder."} test={"Set low temperature for anything you assert on, and always test the `max_tokens` boundary: what does the app do with a half-finished reply?"} data={"For bulk extraction, set `max_tokens` to fit the largest expected output plus margin, and fail the row (not the batch) when `stop_reason` is `max_tokens`."} ba={"Response length and tone are requirements: \"answers under 80 words, formal tone\" becomes `max_tokens` and system-prompt wording. Agree them with stakeholders."} />
 
@@ -432,6 +451,8 @@ Fixes: check `stop_reason` before parsing; raise `max_tokens` or, better, **spli
 
 
 
+
+
 ### When to stream
 
 Streaming sends the reply as it's written, like watching a live broadcast instead of waiting for the recording. Use it for chat UIs and long outputs. Skip it for short backend jobs where nobody is watching: it adds code (you assemble the message yourself) without benefit.
@@ -546,6 +567,8 @@ The team spends a morning looking at the tool schema, which was never the proble
 
 
 
+
+
 ### Retriable or terminal?
 
 Ask one question of every failure: could waiting and sending the **same** request succeed?
@@ -564,6 +587,12 @@ Ask one question of every failure: could waiting and sending the **same** reques
   left={{ title: '429 rate_limit_error', meaning: 'YOU are sending too much: your organisation hit RPM, ITPM or OTPM.', example: 'Fix: honour retry-after, reduce concurrency, ask for a higher tier.' }}
   right={{ title: '529 overloaded_error', meaning: 'ANTHROPIC is busy across the board, whatever your rate.', example: 'Fix: backoff with jitter, fail over or degrade gracefully if it persists.' }}
 />
+
+{/* diagram */}
+<Compare caption="Which errors to retry: the SDK already retries the left column for you (Exam guide: Software Engineering Foundations)" columns={[
+  { title: 'Retry, with backoff', sub: 'temporary problems', points: ['429 rate limited', '529 overloaded', '500 server error', 'Network drop or timeout'] },
+  { title: 'Don\'t retry: fix the request', sub: 'it will fail every time', points: ['400 bad request', '401 bad API key', '403 not allowed', '413 request too large'] },
+]} />
 
 <RoleLens dev={"429 = rate limited, 529 = overloaded, 5xx = server: the SDK retries these with backoff. 400 = your bug, so don't retry. Catch the typed exceptions and degrade gracefully."} test={"Use WireMock (or a stub client) to return 429/529/400 and assert the app retries, backs off, and gives up cleanly. These are the resilience tests reviewers ask for."} data={"In a big backfill, rate limits are the bottleneck. Throttle concurrency, or use the Batch API, instead of hammering the endpoint and retrying."} ba={"Write the unhappy paths into the story: \"If Claude is unavailable, the user sees a polite message and the request is queued.\" That's an acceptance criterion, not a dev detail."} />
 
@@ -661,9 +690,11 @@ Python raises `anthropic.BadRequestError`, `RateLimitError`, `InternalServerErro
 
 
 
+
+
 ### Seven lifecycle phases
 
-A Claude application moves through the same lifecycle as any engineered system. Your Accelerators notes frame each phase with a gate.
+A Claude application moves through the same lifecycle as any engineered system. Each phase ends with a gate you must pass before moving on.
 
 <Flow caption="The lifecycle of a Claude application, with gates between phases (Exam guide: Systems Life Cycle)" steps={[
   { title: 'Requirements', sub: 'functional + infra' },
@@ -695,16 +726,11 @@ The customer's existing cloud, identity and compliance agreements usually decide
 
 Compare platforms on **latency** (measured from the customer's region), **compliance** (usually pass or fail) and **total cost** (tokens plus egress, fees and integration effort), not token price alone.
 
-### Pin what ships
+### Pin the exact model version you release
 
 Every full model ID is a fixed snapshot; an alias moves over time and may resolve differently per platform. Pin the full ID in configuration, keep the previous version available for rollback, and promote a new model only after it clears your eval baseline (Domain 4). A moving alias is fine for a throwaway prototype, never for production.
 
-### Where this is in your course notes
-
-- **MSO Foundations §05** - SDK vs REST, sync vs streaming vs async, Batches
-- **Production-Grade Prompting §05** - the streaming event table and the half-written tool call
-- **Production Engineering, Evals & Security §04** - retriable vs terminal, the error decision table
-- **Accelerators & IP Contribution §04–06** - requirements, lifecycle gates, platforms, pinning
+### Further reading
 
 <Resource kind="docs" href="https://platform.claude.com/docs/en/api/errors" title="API errors" text="Every status code and error type, and the request-id header." />
 <Resource kind="docs" href="https://platform.claude.com/docs/en/cli-sdks-libraries/sdks/java" title="Java SDK" text="Client setup, streaming, MessageAccumulator, exceptions and retries." />
