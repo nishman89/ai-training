@@ -2,7 +2,6 @@
 number: 1
 title: "Application and Integration"
 weight: 33
-minutes: 120
 summary: "The Messages API from request to response: every parameter, stop reasons, streaming, errors and retries, rate limits, and taking a Claude app through its lifecycle."
 objectives:
   - "Build a correct Messages API request and read every part of the response"
@@ -99,7 +98,8 @@ msg = client.messages.create(
 | `stop_sequence` | Wrote one of your stop strings | Use the text before it |
 | `tool_use` | Wants you to run a tool | Run it, send back a `tool_result` (Domain 5) |
 | `pause_turn` | A server-tool loop paused | Resend the conversation as it is |
-| `refusal` | Declined for safety reasons | Surface it, log it; don't retry blindly |
+| `refusal` | Declined for safety reasons | Read `stop_details`, log it, and surface it or retry on a fallback model; don't resend the same request with backoff |
+| `model_context_window_exceeded` | The reply filled the model's context window | Treat it as truncated, like `max_tokens` |
 
 A 200 OK does **not** mean a complete answer. Branch on `stop_reason` every time, like checking an exit code.
 
@@ -137,7 +137,7 @@ print(f"in={msg.usage.input_tokens} out={msg.usage.output_tokens}")
   "A call is one stateless `POST /v1/messages`: your app resends the whole history every time.",
   "Required: `model`, `max_tokens`, `messages` plus the API-key and `anthropic-version` headers. `system` is a top-level field, not a role.",
   "The response gives you `content` blocks, a `stop_reason` and `usage`.",
-  "A 200 OK isn't a complete answer: branch on `stop_reason` (end_turn, max_tokens, stop_sequence, tool_use, pause_turn, refusal).",
+  "A 200 OK isn't a complete answer: branch on `stop_reason` (end_turn, max_tokens, stop_sequence, tool_use, pause_turn, refusal, model_context_window_exceeded).",
 ]} />
 
 ## 1.2 Request parameters, explained
@@ -338,7 +338,7 @@ Ask one question of every failure: could waiting and sending the **same** reques
 | 429 | `rate_limit_error` | Your org hit a rate or spend limit | **Yes**, after `retry-after`. A spend-cap 429 has no `retry-after` and won't clear by waiting |
 | 500 / 504 | `api_error` / `timeout_error` | Server-side fault | **Yes**, bounded backoff |
 | 529 | `overloaded_error` | Anthropic-wide capacity, not your quota | **Yes**, backoff with jitter |
-| 200 + `refusal` | (not an error) | A content decision by the model | **No**: surface and log it |
+| 200 + `refusal` | (not an error) | A content decision by the model | **Not as-is**: read `stop_details`, log it, then surface it or fall back to another model |
 
 <VsPair
   left={{ title: '429 rate_limit_error', meaning: 'YOU are sending too much: your organisation hit RPM, ITPM or OTPM.', example: 'Fix: honour retry-after, reduce concurrency, ask for a higher tier.' }}
@@ -393,7 +393,7 @@ Python raises `anthropic.BadRequestError`, `RateLimitError`, `InternalServerErro
 <MythReality rows={[
   { myth: 'Retry every failure a few times to be safe', reality: 'Retrying a 400 just burns the retry budget: the identical request fails identically' },
   { myth: 'A tool failure can be returned as an empty result', reality: 'Return the error with is_error so the model can react; it treats an empty result as valid data' },
-  { myth: 'Refusals are transient errors', reality: 'A refusal is a content decision returned with 200 OK. Raise it to the caller and log it' },
+  { myth: 'Refusals are transient errors', reality: 'A refusal is a content decision returned with 200 OK. Read stop_details and log it; surface it, or retry on a fallback model as the docs suggest' },
 ]} />
 
 <Gotcha
@@ -408,7 +408,7 @@ Python raises `anthropic.BadRequestError`, `RateLimitError`, `InternalServerErro
   "429 is your organisation's limit (honour `retry-after`); 529 is Anthropic-wide overload.",
   "Limits are per organisation and model: RPM, ITPM, OTPM.",
   "The SDK already retries with backoff (2× by default): tune `maxRetries`, don't stack your own loop.",
-  "A refusal arrives as 200 OK: surface and log it, don't retry.",
+  "A refusal arrives as 200 OK: read `stop_details` and log it; surface it or fall back to another model, never back off and resend the same request.",
 ]} />
 
 ## 1.5 The lifecycle and deployment

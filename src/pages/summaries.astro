@@ -1,0 +1,80 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHead from '../components/PageHead.astro';
+import { getSummaries } from '../lib/summaries';
+import { url } from '../lib/site';
+
+const domains = await getSummaries();
+const total = domains.reduce((n, d) => n + d.sections.length, 0);
+const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const fmt = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
+---
+<BaseLayout title="Summaries" description="Every section summary from the eight CCDV-F domains on one page, for quick revision.">
+  <PageHead eyebrow="Quick revision" title="Summaries">
+    <p class="lead">All {total} section summaries on one page, grouped by domain. Each heading links to the full notes; a
+      <span class="mini-gotcha">⚠ Gotcha</span> tag means that section also has a real-world trap worth reading.</p>
+  </PageHead>
+
+  <div class="container">
+    <nav class="jump no-print" aria-label="Jump to a domain">
+      {domains.map((d) => <a href={`#domain-${d.number}`} data-testid={`jump-domain-${d.number}`}><span>{d.number}</span>{d.title}</a>)}
+    </nav>
+
+    {domains.map((d) => (
+      <section class="domain" id={`domain-${d.number}`} data-testid={`summary-domain-${d.number}`}>
+        <header class="domain__head">
+          <span class="domain__num">{d.number}</span>
+          <div>
+            <span class="eyebrow">Domain {d.number} · {d.weight}% of the exam</span>
+            <h2><a href={url(`chapters/${d.number}`)}>{d.title}</a></h2>
+          </div>
+          <a class="btn btn--ghost domain__quiz no-print" href={url(`quiz/${d.number}/a`)}>Domain quiz</a>
+        </header>
+        <div class="sections">
+          {d.sections.map((s) => (
+            <article class="card sec" data-testid={`summary-${s.number.replace('.', '-')}`}>
+              <h3><a href={`${url(`chapters/${d.number}`)}#${s.slug}`}><span class="sec__no">{s.number}</span> {s.title}</a></h3>
+              <div class="pts">{s.points.map((p) => <p class="pt" set:html={fmt(p)} />)}</div>
+              {s.gotchas.map((g) => <a class="gotcha-tag" href={`${url(`chapters/${d.number}`)}#${s.slug}`}>⚠ Gotcha: <span set:html={fmt(g)} /></a>)}
+            </article>
+          ))}
+        </div>
+      </section>
+    ))}
+  </div>
+</BaseLayout>
+
+<style>
+  .lead { max-width: 50rem; }
+  .mini-gotcha { display: inline-block; padding: 0 0.5rem; border-radius: 999px; background: var(--pink-tint); color: var(--pink-dark); font-weight: 700; font-size: 0.85rem; }
+  .jump { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0 0 2rem; }
+  .jump a { display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.4rem 0.9rem 0.4rem 0.4rem; border-radius: 999px; background: var(--surface); box-shadow: var(--shadow); color: var(--charcoal); text-decoration: none; font-weight: 600; font-size: 0.9rem; }
+  .jump a:hover { background: var(--pink-tint); }
+  .jump span { display: grid; place-items: center; width: 1.6rem; height: 1.6rem; border-radius: 50%; background: var(--charcoal); color: #fff; font-size: 0.8rem; font-weight: 700; }
+  .domain { margin: 0 0 3rem; scroll-margin-top: 5rem; }
+  .domain__head { display: grid; grid-template-columns: auto 1fr auto; gap: 1rem; align-items: center; padding: 1rem 1.25rem; border-radius: var(--radius); background: var(--charcoal); color: #fff; border-left: 8px solid var(--pink); }
+  .domain__head .eyebrow { color: var(--pink-soft); }
+  .domain__head h2 { margin: 0; }
+  .domain__head h2 a { color: #fff; text-decoration: none; }
+  .domain__head h2 a:hover { color: var(--pink-soft); }
+  .domain__num { font: 700 2.4rem/1 var(--font-head); color: var(--pink); }
+  .domain__quiz { color: #fff; border-color: #fff; background: none; padding: 0.45rem 1rem; }
+  .domain__quiz:hover { background: #fff; color: var(--charcoal); }
+  .sections { display: grid; gap: 1rem; margin-top: 1rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 26rem), 1fr)); }
+  .sec { display: flex; flex-direction: column; gap: 0.6rem; border-top: 5px solid var(--charcoal); }
+  .sec h3 { margin: 0; font-size: 1.15rem; }
+  .sec h3 a { color: var(--charcoal); text-decoration: none; }
+  .sec h3 a:hover { color: var(--pink-dark); }
+  .sec__no { display: inline-block; min-width: 2.4rem; padding: 0.05rem 0.45rem; margin-right: 0.25rem; border-radius: 999px; background: var(--pink); color: #fff; font: 700 0.8rem var(--font-body); text-align: center; vertical-align: middle; }
+  .pts { display: grid; gap: 0.4rem; }
+  .pt { position: relative; margin: 0; padding-left: 1.5rem; line-height: 1.5; font-size: 0.97rem; }
+  .pt::before { content: '✓'; position: absolute; left: 0; color: var(--pink); font-weight: 700; }
+  .gotcha-tag { align-self: flex-start; margin-top: auto; padding: 0.3rem 0.75rem; border-radius: 10px; background: var(--pink-tint); color: var(--pink-dark); font-weight: 700; font-size: 0.88rem; text-decoration: none; }
+  .gotcha-tag:hover { background: var(--pink); color: #fff; }
+  .gotcha-tag :global(code) { background: rgb(255 255 255 / 0.6); }
+  @media (max-width: 40rem) {
+    .domain__head { grid-template-columns: auto 1fr; }
+    .domain__quiz { grid-column: 1 / -1; justify-self: start; }
+  }
+  @media print { .sections { grid-template-columns: 1fr; } .sec { break-inside: avoid; box-shadow: none; border: 1px solid var(--line); } }
+</style>

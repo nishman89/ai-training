@@ -13,11 +13,12 @@ same engine and Sparta theme as the [ISTQB revision site](https://nishman89.gith
 
 | Page | What it does |
 |---|---|
-| **Home** | The eight exam domains as cards (weight, ≈ exam questions, study time, progress), a "continue where you left off" link and the mock exam |
+| **Home** | The eight exam domains as cards (weight, ≈ exam questions, progress), a "continue where you left off" link, Summaries and the mock exam |
 | **Start here** | Claude for engineers: what's different about an LLM, a concept map onto Java / test automation / data engineering, the exam at a glance and a first API call |
 | **Domains 1–8** | Collapsible notes for each domain: a plain-English summary first, then the detail, diagrams, exercises, "Watch out for…" traps and links back to the course notes |
-| **Domain quizzes** | 5–18 original questions per domain, every option explained |
-| **Mock exam** | 53 questions weighted like the real exam, timed (120 min), scored by domain |
+| **Summaries** | Every section summary on one page, grouped by domain, with links into the notes and to each section's Gotcha |
+| **Domain quizzes** | 5–18 original questions per domain, every option explained, each linked (📚) to the official Claude doc or Anthropic article it's based on |
+| **Mock exam** | 53 questions weighted like the real exam, timed (120 min), scored by domain, each with its 📚 source link |
 
 Every code example has a **Java / Python** switch. The choice is saved in the browser and applies across pages.
 
@@ -60,7 +61,7 @@ All internal links go through `url()` in `src/lib/site.ts` so they work under th
 | I want to… | Edit |
 |---|---|
 | Change a domain's notes | `src/content/chapters/chapter-N.mdx` |
-| Change a domain's title, weight, study time, summary or objectives | The frontmatter at the top of that file |
+| Change a domain's title, weight, summary or objectives | The frontmatter at the top of that file |
 | Add, fix or remove a quiz question | `src/data/exams/exam-a.json` (schema below) |
 | Change the "Watch out for…" traps | `src/data/traps.ts` |
 | Change the Start here page | `src/pages/introduction.astro` |
@@ -128,12 +129,13 @@ Each question in `src/data/exams/exam-a.json`:
   "blocks": [{ "t": "p", "text": "Question text" }],
   "options": [{ "key": "a", "text": "…" }, { "key": "b", "text": "…" }, { "key": "c", "text": "…" }, { "key": "d", "text": "…" }],
   "answer": ["b"],
-  "explanation": { "intro": "Why the answer is right", "options": { "a": "Why a is wrong", "b": "Correct." } }
+  "explanation": { "intro": "Why the answer is right", "options": { "a": "Why a is wrong", "b": "Correct." } },
+  "source": { "title": "Stop reasons", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
 }
 ```
 
-`npm run build` fails if a question is inconsistent (wrong number of answers, an answer that isn't an option, fewer
-than four options). The mock exam takes the **first** N questions of each domain, in file order, where N comes from
+`source` is required: the official Claude doc (platform.claude.com, code.claude.com) or Anthropic article the question is based on. It shows as a 📚 link on the question and in its review. `npm run build` fails if a question is inconsistent (wrong number of answers, an answer that isn't an option, fewer
+than four options, no source). The mock exam takes the **first** N questions of each domain, in file order, where N comes from
 `QUESTIONS_PER_CHAPTER`, so put your strongest questions first.
 
 ## Testing hooks

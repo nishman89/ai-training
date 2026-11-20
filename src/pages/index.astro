@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { getChapters } from '../lib/data';
-import { url, formatMinutes, QUESTIONS_PER_CHAPTER, MAIN_SET } from '../lib/site';
+import { url, QUESTIONS_PER_CHAPTER, MAIN_SET } from '../lib/site';
 import { quizId } from '../lib/progress';
 
 const chapters = await getChapters();
@@ -14,13 +14,14 @@ const chapters = await getChapters();
       <p class="hero__sub">for the Claude Certified Developer – Foundations (CCDV-F) exam · 53 questions · 120 minutes · 720/1,000 to pass · Java and Python examples throughout</p>
       <div class="hero__actions">
         <a class="btn" href={url('introduction')}>Start here</a>
+        <a class="btn btn--ghost btn--light" href={url('summaries')}>Read the summaries</a>
         <a class="btn btn--ghost btn--light" href={url('mock-exam')}>Sit the mock exam</a>
       </div>
     </div>
   </section>
 
   <div class="container">
-    <a class="card continue no-print" id="continue-reading" data-testid="continue-reading" data-continue data-base={url()} hidden href="#">
+    <a class="card continue no-print" id="continue-reading" data-testid="continue-reading" data-continue data-base={url()} data-file="" hidden href="#">
       <span class="eyebrow">Continue where you left off</span>
       <span class="continue__title" data-continue-title></span>
       <span class="continue__arrow" aria-hidden="true">→</span>
@@ -41,7 +42,6 @@ const chapters = await getChapters();
           <p class="muted">{data.summary}</p>
           <p class="chapter__meta">
             <span class="pill">{data.weight}% · ≈{QUESTIONS_PER_CHAPTER[data.number]} exam questions</span>
-            <span class="pill pill--dark">{formatMinutes(data.minutes)} study time</span>
           </p>
           <p class="chapter__status" data-testid={`chapter-status-${data.number}`} data-status></p>
           <div class="chapter__actions">
@@ -89,7 +89,7 @@ const chapters = await getChapters();
   const cont = document.querySelector<HTMLAnchorElement>('[data-continue]');
   if (cont && progress.lastVisit) {
     const { chapter, slug, title } = progress.lastVisit;
-    cont.href = `${cont.dataset.base}chapters/${chapter}/#${slug}`;
+    cont.href = `${cont.dataset.base}chapters/${chapter}/${cont.dataset.file ?? ''}#${slug}`; // data-file is set to index.html in the file-based preview
     cont.querySelector('[data-continue-title]')!.textContent = `Domain ${chapter} · ${title}`;
     cont.hidden = false;
   }

@@ -46,6 +46,10 @@
      "b": "The SDK never turns an error into a success; a 529 would raise an exception.",
      "c": "A rejected request returns a 4xx error, not a 200 with content."
     }
+   },
+   "source": {
+    "title": "Stop reasons",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons"
    }
   },
   {
@@ -92,6 +96,10 @@
      "b": "temperature is optional (and can't be set on the newest models).",
      "d": "stream is optional and model is missing."
     }
+   },
+   "source": {
+    "title": "Messages API reference",
+    "url": "https://platform.claude.com/docs/en/api/messages/create"
    }
   },
   {
@@ -138,6 +146,10 @@
      "c": "Position isn't the issue; system isn't a valid role.",
      "d": "System prompts work with or without streaming."
     }
+   },
+   "source": {
+    "title": "Messages API reference",
+    "url": "https://platform.claude.com/docs/en/api/messages/create"
    }
   },
   {
@@ -184,6 +196,10 @@
      "b": "Caching reduces cost for repeated prefixes; it doesn't add memory.",
      "d": "API keys have no such scope."
     }
+   },
+   "source": {
+    "title": "Messages API reference",
+    "url": "https://platform.claude.com/docs/en/api/messages/create"
    }
   },
   {
@@ -234,8 +250,12 @@
      "b": "Terminal: fix the key or permissions.",
      "c": "Retriable after the retry-after period.",
      "e": "Retriable: Anthropic-side overload usually clears.",
-     "d": "A refusal is a content decision, not a transient error: surface it, don't retry."
+     "d": "A refusal is a content decision, not a transient error: backing off and resending the same request won't help."
     }
+   },
+   "source": {
+    "title": "API errors",
+    "url": "https://platform.claude.com/docs/en/api/errors"
    }
   },
   {
@@ -282,6 +302,10 @@
      "d": "They have different causes and different fixes (e.g. a higher tier vs failover).",
      "b": "Both are usually retriable, though a spend-cap 429 without retry-after won't clear by waiting."
     }
+   },
+   "source": {
+    "title": "API errors",
+    "url": "https://platform.claude.com/docs/en/api/errors"
    }
   },
   {
@@ -328,6 +352,10 @@
      "c": "Raw HTTP means rebuilding what the SDK already does, and doesn't fix the stacking.",
      "b": "400s are terminal; retrying wastes budget."
     }
+   },
+   "source": {
+    "title": "API errors",
+    "url": "https://platform.claude.com/docs/en/api/errors"
    }
   },
   {
@@ -374,6 +402,10 @@
      "a": "Limits are per organisation, not per key, and per minute.",
      "d": "Billing and limits use tokens, not characters."
     }
+   },
+   "source": {
+    "title": "Rate limits",
+    "url": "https://platform.claude.com/docs/en/api/rate-limits"
    }
   },
   {
@@ -420,6 +452,10 @@
      "a": "Streaming works with tools.",
      "b": "Cache expiry costs money, not validity."
     }
+   },
+   "source": {
+    "title": "Streaming messages",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/streaming"
    }
   },
   {
@@ -466,6 +502,10 @@
      "c": "Correct.",
      "a": "Showing output as it arrives is the point here."
     }
+   },
+   "source": {
+    "title": "Streaming messages",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/streaming"
    }
   },
   {
@@ -512,6 +552,10 @@
      "d": "Correct.",
      "a": "Marks one content block as complete."
     }
+   },
+   "source": {
+    "title": "Streaming messages",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/streaming"
    }
   },
   {
@@ -558,6 +602,10 @@
      "d": "That's the fix for max_tokens, not tool_use.",
      "b": "That's the fix for pause_turn with server tools."
     }
+   },
+   "source": {
+    "title": "Stop reasons",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons"
    }
   },
   {
@@ -604,6 +652,10 @@
      "a": "Correct.",
      "d": "There's no error, just truncation."
     }
+   },
+   "source": {
+    "title": "Stop reasons",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons"
    }
   },
   {
@@ -650,6 +702,10 @@
      "a": "Correct.",
      "c": "This applies the output price to all tokens."
     }
+   },
+   "source": {
+    "title": "Pricing",
+    "url": "https://platform.claude.com/docs/en/about-claude/pricing"
    }
   },
   {
@@ -696,6 +752,10 @@
      "b": "Unrelated to version changes.",
      "a": "Unrelated to version changes."
     }
+   },
+   "source": {
+    "title": "Models overview",
+    "url": "https://platform.claude.com/docs/en/about-claude/models/overview"
    }
   },
   {
@@ -742,6 +802,10 @@
      "d": "Compliance is usually pass or fail and decides first; then compare total cost.",
      "c": "Wrong cloud for this customer."
     }
+   },
+   "source": {
+    "title": "Claude in Amazon Bedrock",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/claude-in-amazon-bedrock"
    }
   },
   {
@@ -794,6 +858,10 @@
      "e": "Aliases move; pin what ships.",
      "d": "Security requirements are hardest to retrofit."
     }
+   },
+   "source": {
+    "title": "Develop tests (evals)",
+    "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
    }
   },
   {
@@ -808,38 +876,42 @@
    "blocks": [
     {
      "t": "p",
-     "text": "A response returns HTTP 200 with stop_reason \"refusal\". What is the right handling?"
+     "text": "A response returns HTTP 200 with stop_reason \"refusal\". Which handling matches Anthropic's guidance?"
     }
    ],
    "options": [
     {
      "key": "a",
-     "text": "Retry immediately up to 5 times"
+     "text": "Retry the identical request with exponential backoff, as for a 529"
     },
     {
      "key": "b",
-     "text": "Treat it as a terminal content decision: surface it to the caller and log it"
+     "text": "Parse the content as a normal answer, since the status was 200"
     },
     {
      "key": "c",
-     "text": "Parse the content as a normal answer"
+     "text": "Treat it as a content decision, not a transient fault: read stop_details, log it, and either surface it or retry on a fallback model"
     },
     {
      "key": "d",
-     "text": "Switch to a smaller model and resend"
+     "text": "Raise max_tokens and resend the same request"
     }
    ],
    "answer": [
-    "b"
+    "c"
    ],
    "explanation": {
-    "intro": "A refusal is the model's decision, not a transient fault.",
+    "intro": "A refusal is the model declining, not a server error. The stop-reasons docs say to read stop_details and retry on a fallback model where appropriate.",
     "options": {
-     "a": "Blind retries waste budget and won't change the decision.",
-     "b": "Correct.",
-     "c": "It isn't a valid answer to the original request.",
-     "d": "Routing around a safety decision isn't appropriate handling."
+     "a": "Backoff is for transient faults; resending the identical request won't change a content decision.",
+     "b": "It isn't a valid answer to the original request.",
+     "c": "Correct.",
+     "d": "That's the fix for max_tokens, not refusal."
     }
+   },
+   "source": {
+    "title": "Stop reasons",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons"
    }
   },
   {
@@ -886,6 +958,10 @@
      "a": "Anecdotes aren't an eval.",
      "b": "Newest doesn't mean right-sized."
     }
+   },
+   "source": {
+    "title": "Choosing a model",
+    "url": "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model"
    }
   },
   {
@@ -932,6 +1008,10 @@
      "a": "Correct.",
      "c": "Users are waiting; Batch can take hours."
     }
+   },
+   "source": {
+    "title": "Choosing a model",
+    "url": "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model"
    }
   },
   {
@@ -978,6 +1058,10 @@
      "c": "Correct.",
      "a": "That's the 1-hour TTL write price."
     }
+   },
+   "source": {
+    "title": "Prompt caching",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
    }
   },
   {
@@ -1024,6 +1108,10 @@
      "b": "Caching works with or without streaming.",
      "c": "No such rule."
     }
+   },
+   "source": {
+    "title": "Prompt caching",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
    }
   },
   {
@@ -1070,6 +1158,10 @@
      "c": "Correct.",
      "d": "The order is fixed."
     }
+   },
+   "source": {
+    "title": "Prompt caching",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
    }
   },
   {
@@ -1116,6 +1208,10 @@
      "b": "Correct.",
      "a": "New content after the breakpoint is expected and doesn't invalidate the prefix."
     }
+   },
+   "source": {
+    "title": "Prompt caching",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
    }
   },
   {
@@ -1162,6 +1258,10 @@
      "b": "Needs sub-second responses.",
      "a": "Each step depends on the last, so it needs synchronous calls."
     }
+   },
+   "source": {
+    "title": "Batch processing",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
    }
   },
   {
@@ -1208,6 +1308,10 @@
      "b": "Limits still apply.",
      "a": "No such access."
     }
+   },
+   "source": {
+    "title": "Batch processing",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
    }
   },
   {
@@ -1260,6 +1364,10 @@
      "c": "Correct.",
      "d": "Simple and short."
     }
+   },
+   "source": {
+    "title": "Effort",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/effort"
    }
   },
   {
@@ -1306,6 +1414,10 @@
      "c": "Ten times too high.",
      "d": "Images are billed as input tokens."
     }
+   },
+   "source": {
+    "title": "Vision",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/vision"
    }
   },
   {
@@ -1352,6 +1464,10 @@
      "d": "Overkill: the subtasks are fixed and sequential.",
      "c": "Loses the step-level checks and logs."
     }
+   },
+   "source": {
+    "title": "Building effective agents",
+    "url": "https://www.anthropic.com/engineering/building-effective-agents"
    }
   },
   {
@@ -1398,6 +1514,10 @@
      "a": "That pattern loops generate and critique.",
      "b": "That pattern decides subtasks at run time and merges several results."
     }
+   },
+   "source": {
+    "title": "Building effective agents",
+    "url": "https://www.anthropic.com/engineering/building-effective-agents"
    }
   },
   {
@@ -1444,6 +1564,10 @@
      "a": "Sectioning is plain code.",
      "c": "The dynamic decomposition is the difference."
     }
+   },
+   "source": {
+    "title": "Building effective agents",
+    "url": "https://www.anthropic.com/engineering/building-effective-agents"
    }
   },
   {
@@ -1490,6 +1614,10 @@
      "c": "Batch doesn't fit interactive refactoring.",
      "d": "Doesn't fix the coupling."
     }
+   },
+   "source": {
+    "title": "How we built our multi-agent research system",
+    "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
    }
   },
   {
@@ -1536,6 +1664,10 @@
      "c": "A fixed count ignores whether the task is done.",
      "b": "max_tokens means truncation; handle it separately."
     }
+   },
+   "source": {
+    "title": "How tool use works",
+    "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/how-tool-use-works"
    }
   },
   {
@@ -1582,6 +1714,10 @@
      "c": "Gate fatigue makes people approve blindly.",
      "b": "Too late to prevent harm."
     }
+   },
+   "source": {
+    "title": "Building effective agents",
+    "url": "https://www.anthropic.com/engineering/building-effective-agents"
    }
   },
   {
@@ -1628,6 +1764,10 @@
      "a": "No such restriction.",
      "d": "You still define the model, prompt, tools, MCP servers and skills."
     }
+   },
+   "source": {
+    "title": "Managed Agents overview",
+    "url": "https://platform.claude.com/docs/en/managed-agents/overview"
    }
   },
   {
@@ -1674,6 +1814,10 @@
      "c": "Unrelated to loading.",
      "d": "Unrelated."
     }
+   },
+   "source": {
+    "title": "Agent SDK overview",
+    "url": "https://code.claude.com/docs/en/agent-sdk/overview"
    }
   },
   {
@@ -1720,6 +1864,10 @@
      "b": "Stores nothing.",
      "a": "Static, and doesn't persist per customer."
     }
+   },
+   "source": {
+    "title": "Memory tool",
+    "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool"
    }
   },
   {
@@ -1772,6 +1920,10 @@
      "b": "Intermediate steps are discarded.",
      "d": "Fan-out can increase total tokens."
     }
+   },
+   "source": {
+    "title": "Claude Code: subagents",
+    "url": "https://code.claude.com/docs/en/sub-agents"
    }
   },
   {
@@ -1818,6 +1970,10 @@
      "b": "Costly, and doesn't address the missing piece.",
      "a": "Length isn't the issue."
     }
+   },
+   "source": {
+    "title": "Prompting best practices",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
    }
   },
   {
@@ -1864,6 +2020,10 @@
      "d": "Fixes format, not scope.",
      "b": "Would make it worse, and can't be set on newest models."
     }
+   },
+   "source": {
+    "title": "Prompting best practices",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
    }
   },
   {
@@ -1916,6 +2076,10 @@
      "e": "Not a limitation.",
      "c": "System prompts are fine."
     }
+   },
+   "source": {
+    "title": "Structured outputs",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
    }
   },
   {
@@ -1962,6 +2126,10 @@
      "a": "They add a few tokens.",
      "b": "Unrelated feature."
     }
+   },
+   "source": {
+    "title": "Prompting best practices",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
    }
   },
   {
@@ -2008,6 +2176,10 @@
      "d": "Throws away the useful work.",
      "b": "max_tokens limits output, not context."
     }
+   },
+   "source": {
+    "title": "Compaction",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/compaction"
    }
   },
   {
@@ -2054,6 +2226,10 @@
      "b": "Must be unchanged.",
      "c": "Not where they belong."
     }
+   },
+   "source": {
+    "title": "Thinking",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/thinking"
    }
   },
   {
@@ -2100,6 +2276,10 @@
      "c": "The model would answer from memory.",
      "a": "Unrelated."
     }
+   },
+   "source": {
+    "title": "Embeddings",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/embeddings"
    }
   },
   {
@@ -2146,6 +2326,10 @@
      "c": "Re-processes it every time.",
      "d": "Claude can't fetch a private URL."
     }
+   },
+   "source": {
+    "title": "Files API",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/files"
    }
   },
   {
@@ -2192,6 +2376,10 @@
      "b": "Not for client tools.",
      "a": "Tools do real work, in your code."
     }
+   },
+   "source": {
+    "title": "Tool use overview",
+    "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview"
    }
   },
   {
@@ -2238,6 +2426,10 @@
      "d": "Unnecessary.",
      "a": "Unrelated."
     }
+   },
+   "source": {
+    "title": "How tool use works",
+    "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/how-tool-use-works"
    }
   },
   {
@@ -2284,6 +2476,10 @@
      "b": "Loses the chance to retry or tell the user.",
      "d": "Fabricated data."
     }
+   },
+   "source": {
+    "title": "How tool use works",
+    "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/how-tool-use-works"
    }
   },
   {
@@ -2330,6 +2526,10 @@
      "d": "Names alone don't carry the distinction.",
      "c": "Unrelated."
     }
+   },
+   "source": {
+    "title": "Define tools",
+    "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
    }
   },
   {
@@ -2376,6 +2576,10 @@
      "c": "It isn't an error.",
      "b": "Not needed."
     }
+   },
+   "source": {
+    "title": "How tool use works",
+    "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/how-tool-use-works"
    }
   },
   {
@@ -2422,6 +2626,10 @@
      "c": "Those are Claude Code mechanisms.",
      "a": "Not MCP primitives."
     }
+   },
+   "source": {
+    "title": "Model Context Protocol",
+    "url": "https://modelcontextprotocol.io"
    }
   },
   {
@@ -2468,6 +2676,10 @@
      "d": "Unrelated.",
      "b": "stdio is language-agnostic."
     }
+   },
+   "source": {
+    "title": "Claude Code: MCP",
+    "url": "https://code.claude.com/docs/en/mcp"
    }
   },
   {
@@ -2514,6 +2726,10 @@
      "c": "Guidance only; not enforced.",
      "b": "Unrelated."
     }
+   },
+   "source": {
+    "title": "Claude Code: permissions",
+    "url": "https://code.claude.com/docs/en/permissions"
    }
   },
   {
@@ -2560,6 +2776,10 @@
      "a": "No model is immune.",
      "c": "Unrelated."
     }
+   },
+   "source": {
+    "title": "Mitigate jailbreaks and prompt injections",
+    "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks"
    }
   },
   {
@@ -2606,6 +2826,10 @@
      "a": "Not true.",
      "c": "Any agent that reads untrusted content is exposed."
     }
+   },
+   "source": {
+    "title": "Mitigate jailbreaks and prompt injections",
+    "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks"
    }
   },
   {
@@ -2652,6 +2876,10 @@
      "b": "Exposure has already happened.",
      "c": "Too late for this key."
     }
+   },
+   "source": {
+    "title": "Authentication",
+    "url": "https://platform.claude.com/docs/en/manage-claude/authentication"
    }
   },
   {
@@ -2704,6 +2932,10 @@
      "a": "Correct.",
      "b": "Guidance."
     }
+   },
+   "source": {
+    "title": "Claude Code: hooks",
+    "url": "https://code.claude.com/docs/en/hooks"
    }
   },
   {
@@ -2750,6 +2982,10 @@
      "b": "Grants unneeded writes.",
      "c": "Unsafe."
     }
+   },
+   "source": {
+    "title": "Claude Code: security",
+    "url": "https://code.claude.com/docs/en/security"
    }
   },
   {
@@ -2796,6 +3032,10 @@
      "b": "Not compliance questions.",
      "a": "Project management, not compliance."
     }
+   },
+   "source": {
+    "title": "CMEK, data retention and ZDR",
+    "url": "https://platform.claude.com/docs/en/manage-claude/cmek-data-retention"
    }
   },
   {
@@ -2842,6 +3082,10 @@
      "d": "That's how injection succeeds.",
      "a": "Every seam is a boundary."
     }
+   },
+   "source": {
+    "title": "Mitigate jailbreaks and prompt injections",
+    "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks"
    }
   },
   {
@@ -2888,6 +3132,10 @@
      "a": "Unrelated.",
      "c": "Currently not eligible."
     }
+   },
+   "source": {
+    "title": "CMEK, data retention and ZDR",
+    "url": "https://platform.claude.com/docs/en/manage-claude/cmek-data-retention"
    }
   },
   {
@@ -2934,6 +3182,10 @@
      "a": "Correct.",
      "b": "Not a quality measure."
     }
+   },
+   "source": {
+    "title": "Develop tests (evals)",
+    "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
    }
   },
   {
@@ -2980,6 +3232,10 @@
      "c": "They're the reference.",
      "a": "Can't grade open-ended output."
     }
+   },
+   "source": {
+    "title": "Develop tests (evals)",
+    "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
    }
   },
   {
@@ -3026,6 +3282,10 @@
      "a": "That's exactly when to run them.",
      "b": "The drop is useful information."
     }
+   },
+   "source": {
+    "title": "Develop tests (evals)",
+    "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
    }
   },
   {
@@ -3072,6 +3332,10 @@
      "c": "Correct.",
      "d": "Not one of the levels discussed."
     }
+   },
+   "source": {
+    "title": "Develop tests (evals)",
+    "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
    }
   },
   {
@@ -3118,6 +3382,10 @@
      "b": "Not the first check.",
      "a": "Rarely the cause."
     }
+   },
+   "source": {
+    "title": "Stop reasons",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons"
    }
   },
   {
@@ -3164,6 +3432,10 @@
      "a": "Correct.",
      "d": "Built for locked-down CI."
     }
+   },
+   "source": {
+    "title": "Claude Code: permission modes",
+    "url": "https://code.claude.com/docs/en/permission-modes"
    }
   },
   {
@@ -3210,6 +3482,10 @@
      "d": "No.",
      "c": "No."
     }
+   },
+   "source": {
+    "title": "Claude Code: settings",
+    "url": "https://code.claude.com/docs/en/settings"
    }
   },
   {
@@ -3256,6 +3532,10 @@
      "d": "Skills load on demand: not a guarantee.",
      "c": "Not enforced."
     }
+   },
+   "source": {
+    "title": "Claude Code: hooks",
+    "url": "https://code.claude.com/docs/en/hooks"
    }
   },
   {
@@ -3308,6 +3588,10 @@
      "d": "A reference doc read on demand.",
      "b": "A path-scoped rule."
     }
+   },
+   "source": {
+    "title": "Claude Code: memory (CLAUDE.md)",
+    "url": "https://code.claude.com/docs/en/memory"
    }
   },
   {
@@ -3354,6 +3638,10 @@
      "a": "Loses the guardrail.",
      "d": "Unrelated and unsafe."
     }
+   },
+   "source": {
+    "title": "Claude Code: plugins",
+    "url": "https://code.claude.com/docs/en/plugins/overview"
    }
   }
  ]

@@ -11,7 +11,7 @@ const questions = await getMockExam(QUESTIONS_PER_CHAPTER);
   <PageHead eyebrow="Exam practice" title="Mock exam">
     <p class="lead">The real CCDV-F exam is {EXAM_QUESTIONS} multiple-choice and multiple-response questions in {EXAM_MINUTES} minutes,
       scored 100–1,000 with 720 to pass. This mock uses the same domain weighting ({questions.length} questions), a timer and a score by domain.
-      Questions are original practice items, not real exam questions.</p>
+      Questions are original practice items, not real exam questions. Each one links (📚) to the official Claude documentation or Anthropic article it's based on, so you can check the answer at source.</p>
     <p class="back no-print"><a href={url()}>← All domains</a></p>
   </PageHead>
   <div class="container">

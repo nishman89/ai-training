@@ -22,7 +22,7 @@ const questions = await getQuestions(set, chapter.number);
 
   <div class="container">
     <p class="explain card card--tint">This is the <strong>Domain {chapter.number} quiz</strong>: {questions.length} practice questions
-      written for this site in the style of the CCDV-F exam. They are not official Anthropic questions.</p>
+      written for this site in the style of the CCDV-F exam. They are not official Anthropic questions; each one links (📚) to the Claude documentation it's based on.</p>
     <Quiz questions={questions} quizId={quizId(chapter.number, set)} />
 
     <nav class="more card no-print" aria-label="More practice">

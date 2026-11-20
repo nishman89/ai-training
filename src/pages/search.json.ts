@@ -49,6 +49,7 @@ export const GET: APIRoute = async () => {
   }
   const pages: [string, string, string][] = [
     ['Start here', 'introduction', 'Claude for a Java, test-automation and data engineer: what is different, concept map, first call'],
+    ['Summaries', 'summaries', 'Every section summary on one page, grouped by domain, with links to the gotchas'],
     ['Mock exam', 'mock-exam', '53 questions in 120 minutes, weighted like the real CCDV-F exam'],
   ];
   for (const [title, path, text] of pages) entries.push({ title, where: 'Page', path, text });

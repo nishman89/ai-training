@@ -81,6 +81,7 @@ const minutes = Math.ceil(questions.reduce((m, q) => m + MINUTES_PER_K[q.k], 0))
               {examMode && <span class="pill">Domain {q.chapter}</span>}
               <span class="pill" data-testid={`question-${i + 1}-section`}>{q.ref}</span>
               <span class="pill pill--dark" title="Question type" data-testid={`question-${i + 1}-k-level`}>{q.k}</span>
+              <a class="pill pill--source" href={q.source.url} target="_blank" rel="noopener" title={`Based on the official Claude resource: ${q.source.title} (opens in a new tab)`} data-testid={`question-${i + 1}-source`}>📚 {q.source.title} ↗</a>
             </span>
           </header>
           <QuestionBody blocks={q.blocks} label={`question ${i + 1}`} />
@@ -103,7 +104,7 @@ const minutes = Math.ceil(questions.reduce((m, q) => m + MINUTES_PER_K[q.k], 0))
                 <li data-testid={`question-${i + 1}-explanation-${o.key}`} data-explain={o.key}><strong>{o.key})</strong> {q.explanation.options[o.key]}</li>
               ))}
             </ul>
-            <p class="review__source muted">Practice question {q.n} · {q.lo}</p>
+            <p class="review__source muted">Practice question {q.n} · {q.lo} · Based on <a href={q.source.url} target="_blank" rel="noopener">{q.source.title} ↗</a></p>
           </div>
         </li>
       ))}
@@ -417,4 +418,6 @@ const minutes = Math.ceil(questions.reduce((m, q) => m + MINUTES_PER_K[q.k], 0))
     .start { flex-direction: column; align-items: stretch; }
     .start select { width: 100%; }
   }
+.pill--source { background: var(--surface); border: 1px solid var(--line); color: var(--pink-dark); text-decoration: none; }
+  .pill--source:hover { background: var(--pink-tint); }
 </style>

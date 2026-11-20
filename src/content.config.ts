@@ -9,7 +9,6 @@ const chapters = defineCollection({
     /** Share of the exam, as a percentage of questions (CCDV-F exam guide). */
     weight: z.number(),
     title: z.string(),
-    minutes: z.number().int(),
     summary: z.string(),
     objectives: z.array(z.string()),
   }),
@@ -39,6 +38,8 @@ const question = z
     options: z.array(z.object({ key: z.string(), text: z.string() })).min(4),
     answer: z.array(z.string()).min(1),
     explanation: z.object({ intro: z.string(), options: z.record(z.string()) }),
+    /** The official Claude resource the question is based on. */
+    source: z.object({ title: z.string(), url: z.string().url() }),
   })
   // Fail the build if the data is inconsistent, rather than showing a broken question.
   .refine((q) => q.answer.length === q.select, { message: 'answer count must match "select"' })
