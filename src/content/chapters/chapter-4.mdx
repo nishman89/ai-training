@@ -1,0 +1,274 @@
+---
+number: 4
+title: "Prompt and Context Engineering"
+weight: 11
+minutes: 60
+summary: "Diagnosing and fixing prompts, structured outputs, extended thinking, keeping long sessions inside the context window, RAG, and images and PDFs."
+objectives:
+  - "Diagnose a failed output and add the one missing structural piece"
+  - "Use system prompts, XML tags, few-shot examples and output constraints"
+  - "Move format control into the API with structured outputs and strict tools"
+  - "Keep long sessions in budget with pruning, compaction, clearing and subagents"
+  - "Explain where a RAG pipeline breaks, and send images and PDFs efficiently"
+---
+import Gotcha from '../../components/Gotcha.astro';
+import SectionSummary from '../../components/SectionSummary.astro';
+import CodeSwitch from '../../components/CodeSwitch.astro';
+import Tiles from '../../components/diagrams/Tiles.astro';
+import Flow from '../../components/diagrams/Flow.astro';
+import MythReality from '../../components/MythReality.astro';
+import Exercise from '../../components/Exercise.astro';
+import Resource from '../../components/Resource.astro';
+
+## 4.1 Diagnosing a weak prompt
+
+### In plain English
+
+This domain is about writing good instructions and managing what Claude can "see". Clear instructions, an example of the answer you want and a stated format beat long rambling prompts. Claude only knows what's in the current request, and there's a size limit, so long conversations have to be trimmed or summarised.
+
+**Real-life example:** a chatbot that drifts off-topic after 20 messages needs a firmer system prompt. One that forgets early details needs a summary of the conversation so far.
+
+### Find the missing piece, don't add words
+
+A prompt that works once in testing often breaks on untested production inputs. The fix is to identify which **structural** piece is missing and add that one piece. A prompt that grows longer with every revision, without getting better, is the classic warning sign.
+
+| You see… | What's missing | Fix |
+|---|---|---|
+| Wrong format or shape | An output constraint | Name fields, types, length, preamble or not, what to do with missing data |
+| Scope or tone drifts over turns | A specific system prompt | A role plus rules that hold for every response |
+| Right task, invented structure | Few-shot examples | Show 1–3 examples in consistent tags |
+| Breaks on an edge-case input | A constraint for that variant | Add the case to the prompt **and** to the eval set |
+
+Diagnose, change one thing, re-run the eval (Domain 7), and repeat.
+
+<Gotcha
+  title={"The prompt that grew longer, not better"}
+  scenario={"After six revisions, a summariser prompt has tripled in length, and it still fails on long email threads."}
+  gotcha={"Each fix added words instead of the missing piece, which was a constraint for the long-thread variant. The extra text diluted the rules that mattered."}
+  fix={"Diagnose the failure type, add the ONE structural fix, add the failing case to the eval, and delete instructions that don't move the score."}
+/>
+
+<SectionSummary points={[
+  "When a prompt fails, find the ONE missing structural piece instead of adding words.",
+  "Wrong format → output constraint; drift over turns → specific system prompt; invented structure → examples; edge-case break → a constraint for that variant.",
+  "Change one thing, re-run the eval, repeat.",
+]} />
+
+## 4.2 The techniques
+
+### System prompts
+
+The persistent instruction layer for the whole session: Claude's role, the output format and rules that must not change between turns. Write it once and treat it like a spec.
+
+### XML tags
+
+When a prompt mixes instructions with data, wrap each part in descriptive tags so the boundaries are unambiguous, for example a `<contract>` block, a `<code>` block and an `<instructions>` block. Tags also help with security: they mark untrusted text as data (Domain 6), though that boundary is soft.
+
+### Few-shot examples
+
+Examples **show** the pattern instead of describing it. They sit in the prompt, so they aren't training data, and they cost tokens on every call. Wrap them in consistent tags such as `<sample_input>` and `<ideal_output>`, and take them from your highest-scoring eval outputs.
+
+- **Zero-shot** - instructions only · fine for simple tasks with an obvious output shape
+- **One-shot / few-shot** - one or several examples · for specific structure, formatting or edge cases the description misses
+- **Model trade-off** - a bigger model may succeed zero-shot where a smaller one needs a few examples; examples can let a cheaper model do the job
+
+### Output constraints
+
+Say exactly what you need: field names and types, length limits, whether to include a preamble, and what to do when data is absent. When software reads the output, move the constraint into the API (next section).
+
+<SectionSummary points={[
+  "The system prompt is the persistent spec: role, format and rules for every turn.",
+  "XML tags separate instructions from data and make boundaries unambiguous.",
+  "Few-shot examples show the shape; they're not training data and cost tokens every call.",
+  "Output constraints name fields, types, length, preamble and how to handle missing data.",
+]} />
+
+## 4.3 Structured outputs
+
+### Format control in the API
+
+Instead of describing the format in the prompt, give the API a schema and the response is constrained to it (constrained decoding).
+
+- **JSON outputs** - set output_config.format with a JSON schema · constrains the final response
+- **Strict tool use** - set strict: true on a tool definition · validates the arguments Claude passes to your tool
+
+<MythReality rows={[
+  { myth: 'A guaranteed schema means a guaranteed answer', reality: 'You can still get stop_reason refusal, or max_tokens truncation. Check stop_reason before parsing' },
+  { myth: 'Schemas are free', reality: 'The first request on a new schema is slower (it compiles to a grammar, cached ~24 h), and the added instructions count as input tokens' },
+  { myth: 'Combine JSON outputs with prefilling the reply', reality: 'Structured outputs and assistant-message prefilling are not compatible' },
+]} />
+
+<CodeSwitch title="Structured output via a forced, strict tool">
+
+```java
+Tool recordInvoice = Tool.builder()
+    .name("record_invoice")
+    .description("Record the fields extracted from an invoice. Call exactly once.")
+    .inputSchema(Tool.InputSchema.builder()
+        .properties(JsonValue.from(Map.of(
+            "vendor",   Map.of("type", "string"),
+            "total",    Map.of("type", "number"),
+            "due_date", Map.of("type", "string", "description", "ISO-8601 date"))))
+        .required(List.of("vendor", "total"))
+        .build())
+    .strict(true)                                       // validate args against the schema
+    .build();
+
+Message msg = client.messages().create(MessageCreateParams.builder()
+    .model(Model.CLAUDE_HAIKU_5_5).maxTokens(512L)
+    .addTool(recordInvoice)
+    .toolChoice(ToolChoiceTool.builder().name("record_invoice").build())   // force this tool
+    .addUserMessage("<invoice>\n" + invoiceText + "\n</invoice>")
+    .build());
+```
+
+```python
+record_invoice = {
+    "name": "record_invoice",
+    "description": "Record the fields extracted from an invoice. Call exactly once.",
+    "strict": True,                                     # validate args against the schema
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "vendor": {"type": "string"},
+            "total": {"type": "number"},
+            "due_date": {"type": "string", "description": "ISO-8601 date"},
+        },
+        "required": ["vendor", "total"],
+    },
+}
+
+msg = client.messages.create(
+    model="claude-haiku-5-5", max_tokens=512,
+    tools=[record_invoice],
+    tool_choice={"type": "tool", "name": "record_invoice"},   # force this tool
+    messages=[{"role": "user", "content": f"<invoice>\n{invoice_text}\n</invoice>"}],
+)
+fields = next(b.input for b in msg.content if b.type == "tool_use")
+```
+
+</CodeSwitch>
+
+<Gotcha
+  title={"Guaranteed JSON, unparseable answer"}
+  scenario={"An extraction service uses structured outputs, so the team removed every check: \"the schema is guaranteed\"."}
+  gotcha={"A sensitive document gets `stop_reason: refusal`, and a huge one hits `max_tokens`. The code parses anyway and crashes."}
+  fix={"Branch on `stop_reason` first; the schema guarantees shape, not success."}
+/>
+
+<SectionSummary points={[
+  "Move machine-readable format control into the API: JSON outputs (`output_config.format`) or strict tools (`strict: true`).",
+  "A guaranteed schema isn't a guaranteed answer: still check for refusal and max_tokens.",
+  "Costs: slower first request per schema, extra input tokens. Not compatible with prefilling.",
+]} />
+
+## 4.4 Extended thinking
+
+### When it's worth it
+
+Thinking makes the model reason step by step before answering. It helps hard multi-step problems and wastes money on simple lookups or deterministic tasks. On current models it's adaptive: tune depth with `effort` (Domain 2).
+
+- **Return blocks unchanged** - every thinking block the API returns must go back unchanged in the next request
+- **Display** - thinking text is omitted by default on the newest models · request a summarised display if you need to show it
+- **Cost** - thinking tokens are output tokens
+
+<SectionSummary points={[
+  "Thinking helps hard multi-step problems and wastes money on simple ones.",
+  "Send thinking blocks back unchanged in the next request.",
+  "Thinking text is omitted by default on newest models; thinking tokens bill as output.",
+]} />
+
+## 4.5 Managing the context window
+
+### The window is a budget
+
+Everything the model sees in one request (system prompt, history, documents, tool results and its own output) shares one budget. Your application decides what goes in, what comes back as a summary, and what never enters.
+
+<Tiles cols={4} caption="Four ways to keep a long session inside the window" tiles={[
+  { label: '1', title: 'Pruning', sub: 'Roll back to an earlier point after a dead end' },
+  { label: '2', title: 'Compaction', sub: 'Summarise history; say what to keep' },
+  { label: '3', title: 'Clearing', sub: 'Fresh context for an unrelated task' },
+  { label: '4', title: 'Subagent', sub: 'Delegate; get back only a summary' },
+]} />
+
+| Strategy | Use when | You lose |
+|---|---|---|
+| Pruning | After an unproductive path or back-and-forth | Everything after the pruning point |
+| Compaction | The window is filling but the built-up knowledge matters | Any detail the summary didn't keep |
+| Clearing | The next task is completely different | Everything, unless saved somewhere durable (e.g. CLAUDE.md) |
+| Subagent handoff | A self-contained subtask, especially exploration | Visibility of the subagent's intermediate steps |
+
+### Write the summariser prompt deliberately
+
+"Summarise the conversation so far" produces a general summary that drops task-critical state. "Summarise the conversation, preserving every file path modified, every decision made, and every error encountered with its resolution" produces one the agent can actually continue from.
+
+Also: cache stable prefixes (Domain 2), and **count tokens before sending** so oversized requests are trimmed instead of failing. A session that ran fine in development often hits the ceiling in production because real inputs are longer.
+
+### Retrieval-augmented generation (RAG)
+
+RAG keeps documents outside the window, finds the parts relevant to this request, and supplies only those.
+
+<Flow caption="Where a RAG pipeline can break" steps={[
+  { title: 'Chunking', sub: 'too small = no context; too big = hard to match' },
+  { title: 'Embedding match', sub: 'semantic, may miss exact terms: add lexical' },
+  { title: 'Assembly', sub: 'wrong structure = answers from memory' },
+]} />
+
+A sensible default is sentence- or section-sized chunks with a little overlap. **Agentic search** skips the index: the model issues its own queries and refines across rounds. It costs more tokens per query but never goes stale; a maintained index is cheaper per query but must be kept in sync.
+
+<Gotcha
+  title={"The summary that forgot what it had done"}
+  scenario={"A long coding session is compacted with the prompt \"summarise the conversation so far\"."}
+  gotcha={"The summary is readable but drops which files were edited and which approach was already rejected, so the agent redoes failed work."}
+  fix={"Tell the summariser exactly what to keep: file paths changed, decisions made, errors hit and how they were fixed."}
+/>
+
+<SectionSummary points={[
+  "The context window is one shared budget: decide what goes in, what's summarised, and what never enters.",
+  "Four strategies: pruning, compaction, clearing, subagent handoff. Each loses something different.",
+  "Tell a summariser what to keep: file paths, decisions, errors and fixes.",
+  "RAG breaks at chunking, embedding match (add lexical search for exact terms) or assembly.",
+]} />
+
+## 4.6 Images and PDFs
+
+### Sending images
+
+Images are processed in roughly 28 × 28 pixel tiles, about (width × height) / 784 tokens, so a 1,000 × 1,000 px image costs about 1,296 tokens. Resize before sending if detail isn't needed.
+
+| Method | How | Use when |
+|---|---|---|
+| Inline base64 | Bytes encoded in the message | One-off images |
+| URL | Claude fetches a public URL at request time | Already hosted, stable and public |
+| Files API | Upload once, reference a `file_id` | The same image or PDF across many requests |
+
+PDFs use a `document` block (base64, URL or `file_id`). Apply the same prompting techniques, and say how to handle visual ambiguity: "if objects overlap, describe each separately and note the overlap".
+
+<Exercise title="Which technique?" id="exercise-technique">
+
+1. Output is correct but sometimes includes "Sure! Here's the JSON:" before it, breaking your parser.
+2. Two weeks into a long chat, the assistant forgets which files it already edited.
+3. Summaries are fine on short tickets but miss the customer's request on long email threads.
+
+<div slot="answer">
+
+1. **Move format control into the API**: structured outputs or a forced strict tool, not more "no preamble" wording.
+2. **Compaction with a summariser told to keep file paths, decisions and errors**, or external memory.
+3. **An output constraint for that variant**, e.g. "always state the customer's latest request first", plus long threads added to the eval set.
+
+</div>
+</Exercise>
+
+### Where this is in your course notes
+
+- **Production-Grade Prompting §02** - the diagnosis table, structured outputs, the prompt that grew longer
+- **Production-Grade Prompting §03, §06, §10** - thinking, context strategies and RAG, images and batch
+- **MSO Foundations §04** - zero, one and few-shot prompting
+
+<Resource kind="docs" href="https://platform.claude.com/docs/en/build-with-claude/structured-outputs" title="Structured outputs" text="JSON outputs and strict tool use, with limits." />
+
+<SectionSummary points={[
+  "Images cost tokens (≈ width × height / 784): resize when detail isn't needed.",
+  "Base64 for one-offs, URL for public hosted images, the Files API (`file_id`) for assets reused across requests.",
+  "PDFs use a `document` block; say how to handle visual ambiguity.",
+]} />

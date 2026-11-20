@@ -1,0 +1,180 @@
+---
+number: 7
+title: "Evaluation, Testing and Debugging"
+weight: 3
+minutes: 30
+summary: "Turning 'looks right' into a tracked score: eval sets, choosing a grader, calibrating an LLM judge, test levels, tracing and a debugging checklist."
+objectives:
+  - "Build an eval from a design document's success criteria"
+  - "Match the grader to the output: exact match, code check or LLM judge"
+  - "Calibrate an LLM judge against human labels"
+  - "Use test levels and traces to find where a failure happened"
+---
+import Gotcha from '../../components/Gotcha.astro';
+import SectionSummary from '../../components/SectionSummary.astro';
+import CodeSwitch from '../../components/CodeSwitch.astro';
+import Flow from '../../components/diagrams/Flow.astro';
+import Compare from '../../components/diagrams/Compare.astro';
+import Exercise from '../../components/Exercise.astro';
+
+## 7.1 Evals
+
+### In plain English
+
+This domain is about proving your Claude feature works, and noticing when it breaks. Collect example inputs with the correct answers, run your feature on all of them, and score it. Re-run the score after every change.
+
+**Real-life example:** you have 200 sample emails with known categories, and your classifier scores 94%. After a prompt tweak it drops to 81%, so you undo the tweak before customers notice. If you've written a regression suite, you already know this; the twist is that outputs vary, so you grade meaning, not exact strings.
+
+### Define "done" first
+
+Write a one-page design document **before** building: success criteria specific enough to test (these become eval cases), the failures to survive (retriable or terminal), the cost and latency budget, and the trust boundary. Writing it first stops you rationalising whatever the model happens to produce.
+
+<Flow caption="The eval loop: change one thing at a time" steps={[
+  { title: 'Collect cases', sub: 'inputs + expected behaviour' },
+  { title: 'Run the feature', sub: 'on every case' },
+  { title: 'Grade', sub: 'per case' },
+  { title: 'Average', sub: 'one score to track' },
+  { title: 'Change ONE thing', sub: 'prompt, tool or model' },
+]} />
+
+Cover the unhappy paths too: ask Claude to brainstorm edge cases that could break the current implementation. Coverage matters more than a perfect rubric; the point is to catch regressions.
+
+<SectionSummary points={[
+  "Write the design doc first: success criteria, failures to survive, cost and latency budget, trust boundary.",
+  "An eval = cases + expected behaviour + grader, averaged into one score.",
+  "Change one thing at a time and cover the unhappy paths.",
+]} />
+
+## 7.2 Choosing a grader
+
+### Match the grader to the output
+
+<Compare caption="Three ways to grade, from cheapest to most flexible" columns={[
+  { title: 'Exact match', sub: 'one correct form', points: ['Cheapest', 'Most brittle', 'Fails on equivalent wording or order'] },
+  { title: 'Code check', sub: 'valid format', points: ['Valid JSON, field present, number in range', 'Fast: run on every commit', 'Says nothing about correctness'] },
+  { title: 'LLM-as-judge', sub: 'open-ended quality', points: ['"Is this summary faithful?"', 'Costly and noisy', 'Meaningless until calibrated'] },
+]} />
+
+A common split: code checks on every commit, the slower judge on a scheduled quality run. For a single fixed-format output, a code check alone is enough.
+
+<SectionSummary points={[
+  "Exact match for one correct form; code checks for format; an LLM judge for open-ended quality.",
+  "Run cheap code checks on every commit and the judge on a schedule.",
+]} />
+
+## 7.3 Calibrating an LLM judge
+
+### A judge is a second model call with a rubric
+
+Ask it for strengths, weaknesses and short reasoning **before** the score, so the score is grounded.
+
+1. Start with cases already labelled by a human.
+2. Run the judge on the same cases and measure how often they agree.
+3. If agreement is low, tighten what each score means, add an example of a good and a bad answer, and re-measure.
+
+<CodeSwitch title="A minimal eval as a regression test">
+
+```java
+record Case(String input, String expectedLabel) {}
+
+double runEval(List<Case> cases) {
+    int pass = 0;
+    for (Case c : cases) {
+        String out = classifier.classify(c.input());      // the feature under test
+        if (out.equals(c.expectedLabel())) pass++;        // code-graded check
+    }
+    return (double) pass / cases.size();
+}
+
+@Test void classifierDoesNotRegress() {
+    double score = runEval(loadCases("eval/tickets.jsonl"));
+    assertTrue(score >= BASELINE_SCORE, "Score " + score + " fell below baseline");
+}
+```
+
+```python
+from dataclasses import dataclass
+
+@dataclass
+class Case:
+    input: str
+    expected_label: str
+
+def run_eval(cases: list[Case]) -> float:
+    passed = sum(classifier.classify(c.input) == c.expected_label   # code-graded check
+                 for c in cases)
+    return passed / len(cases)
+
+def test_classifier_does_not_regress():                 # pytest
+    score = run_eval(load_cases("eval/tickets.jsonl"))
+    assert score >= BASELINE_SCORE, f"Score {score} fell below baseline"
+```
+
+</CodeSwitch>
+
+The same eval gates deployments: run a new model version against a **pinned baseline** before it goes live (Domain 1).
+
+<Gotcha
+  title={"The judge everyone trusted"}
+  scenario={"An LLM judge scores summaries 8.7/10 on average, so the team ships a new prompt that raises it to 9.1."}
+  gotcha={"Nobody checked the judge against humans. Reviewers later find it rewards longer summaries, and the new prompt is worse for users."}
+  fix={"Calibrate on human-labelled cases first, measure agreement, tighten the rubric with good and bad examples, then trust the number."}
+/>
+
+<SectionSummary points={[
+  "A judge is a second model call with a rubric: ask for strengths, weaknesses and reasoning before the score.",
+  "Calibrate against human-labelled cases; if agreement is low, tighten the rubric and re-measure.",
+  "The same eval gates releases against a pinned baseline.",
+]} />
+
+## 7.4 Tests, traces and debugging
+
+### Test levels
+
+| Level | For a Claude feature | Catches |
+|---|---|---|
+| Unit | Your parsing, prompt building, tool code | Ordinary code bugs |
+| Functional | A Claude call gives acceptable output for an input | Prompt or model regressions |
+| Integration | The handoff between components, e.g. retrieval → model | **Most silent production failures** live here |
+| End-to-end | The whole flow from the user's view | Broken journeys |
+
+### Tracing
+
+Record each step of a run: the prompt, tool calls, intermediate outputs and timing. When an eval case fails, the trace shows which step produced the bad result, and later confirms the fix.
+
+### Debugging checklist
+
+1. **stop_reason** - truncated (max_tokens)? refusal? a tool_use you didn't handle?
+2. **usage** - did the cache hit? Is the context much bigger than you thought?
+3. **The previous turn** - was it assembled from an interrupted stream?
+4. **The request-id** - log it for support.
+
+<Exercise title="Pick the grader" id="exercise-grader">
+
+1. Check that an extraction returns valid JSON with a `total` field.
+2. Check that a support reply is polite and answers the actual question.
+3. Check that a ticket classifier returns one of five labels.
+
+<div slot="answer">
+
+1. **Code check.** 2. **Calibrated LLM judge.** 3. **Exact match**, since there's one correct label, possibly with a code check that the label is in the allowed set.
+
+</div>
+</Exercise>
+
+### Where this is in your course notes
+
+- **Production Engineering, Evals & Security §02–03** - the design document, graders, calibration, test levels and tracing
+
+<Gotcha
+  title={"Every test green, production wrong"}
+  scenario={"Retrieval passes its unit tests; the model call passes its functional tests."}
+  gotcha={"Retrieval returns chunks in a format the prompt doesn't expect, so the model answers from memory. Nothing tested the handoff between them."}
+  fix={"Add integration tests at each seam and trace every step so a failing case points at the step that broke."}
+/>
+
+<SectionSummary points={[
+  "Unit, functional, integration and end-to-end tests each catch different breaks; most silent failures hide at integration seams.",
+  "Traces (prompts, tool calls, outputs, timing) show which step failed.",
+  "Debug in order: `stop_reason`, then `usage`, then the previous turn, then log the request-id.",
+]} />

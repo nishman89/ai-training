@@ -1,0 +1,420 @@
+---
+import type { Question } from '../content.config';
+import QuestionBody from './QuestionBody.astro';
+import { PASS_MARK, MINUTES_PER_K, EXAM_MINUTES } from '../lib/site';
+
+/**
+ * Udemy-style quiz: answer everything, submit, then see a score and a full review
+ * explaining why each option is right or wrong. Explanations are rendered at build
+ * time and revealed by the client script after submission.
+ */
+interface Props {
+  questions: Question[];
+  quizId: string;
+  /** Full mock exam: adds a start screen, an optional countdown and a per-domain breakdown. */
+  examMode?: boolean;
+}
+const { questions, quizId, examMode = false } = Astro.props;
+const chapterTotals = Object.entries(
+  questions.reduce<Record<number, number>>((acc, q) => ({ ...acc, [q.chapter]: (acc[q.chapter] ?? 0) + 1 }), {}),
+);
+const total = questions.length;
+const passScore = Math.ceil(total * PASS_MARK);
+const minutes = Math.ceil(questions.reduce((m, q) => m + MINUTES_PER_K[q.k], 0));
+---
+<section id="quiz" data-testid="quiz" class:list={['quiz', { 'is-exam': examMode }]} data-quiz-id={quizId} data-pass-mark={PASS_MARK} data-exam={examMode ? '' : undefined}>
+  <div class="card quiz-intro no-print">
+    <dl>
+      <div><dt>Questions</dt><dd id="question-count" data-testid="question-count">{total}</dd></div>
+      <div><dt>To pass</dt><dd id="pass-mark" data-testid="pass-mark">{passScore} / {total} (≈72%)</dd></div>
+      {examMode
+        ? <div><dt>Time allowed</dt><dd>{EXAM_MINUTES} min</dd></div>
+        : <div><dt>Suggested time</dt><dd>~{minutes} min</dd></div>}
+    </dl>
+    <label class="paged-toggle no-print"><input type="checkbox" id="one-at-a-time" name="one-at-a-time" data-testid="one-at-a-time-toggle" data-paged-toggle checked={total > 20} /> Show one question at a time</label>
+    <p class="last-attempt" id="last-attempt" data-testid="last-attempt" hidden data-last-attempt></p>
+    {examMode && (
+      <div class="start" id="exam-start" data-testid="exam-start" data-start>
+        <label for="time-limit">Time limit
+          <select id="time-limit" name="time-limit" data-testid="time-limit" data-time-limit>
+            <option value="120">120 minutes — same as the real exam</option>
+            <option value="90">90 minutes — challenge mode</option>
+            <option value="0">No time limit</option>
+          </select>
+        </label>
+        <button class="btn" type="button" id="start-exam" data-testid="start-exam" data-start-btn>Start exam</button>
+      </div>
+    )}
+  </div>
+
+  <div class="results card card--dark" id="results" data-testid="results" hidden data-results tabindex="-1">
+    <div class="score">
+      <span class="eyebrow" id="verdict" data-testid="verdict" data-verdict-label></span>
+      <p class="score__big"><span id="score" data-testid="score" data-score></span><span class="score__of" data-testid="score-total"> / {total}</span></p>
+      <p class="score__pct" id="score-percent" data-testid="score-percent" data-percent></p>
+      <p class="score__time" id="time-taken" data-testid="time-taken" data-time-taken hidden></p>
+    </div>
+    {examMode && (
+      <table class="breakdown" id="chapter-breakdown" data-testid="chapter-breakdown" data-breakdown>
+        <caption class="visually-hidden">Score by domain</caption>
+        <thead><tr><th scope="col">Domain</th><th scope="col">Score</th><th scope="col"><span class="visually-hidden">Bar</span></th></tr></thead>
+        <tbody>
+          {chapterTotals.map(([ch, n]) => (
+            <tr data-testid={`breakdown-chapter-${ch}`} data-chapter-row={ch}><th scope="row">Domain {ch}</th><td data-testid={`breakdown-chapter-${ch}-score`} data-chapter-score>0 / {n}</td><td><span class="mini"><span data-chapter-bar></span></span></td></tr>
+          ))}
+        </tbody>
+      </table>
+    )}
+    <div class="results__actions no-print">
+      <label class="toggle"><input type="checkbox" id="only-wrong" name="only-wrong" data-testid="only-wrong-toggle" data-only-wrong /> Show only questions I got wrong</label>
+      <button class="btn" type="button" id="retake" data-testid="retake" data-retake>Retake quiz</button>
+    </div>
+  </div>
+
+  <form class="questions" id="quiz-form" name="quiz" data-testid="quiz-form" data-form novalidate hidden={examMode}>
+    <ol>
+      {questions.map((q, i) => (
+        <li class="q card" id={`question-${q.id}`} data-testid={`question-${i + 1}`} data-question={q.id} data-answer={q.answer.join(',')} data-select={q.select} data-chapter={q.chapter}>
+          <header class="q__head">
+            <span class="q__num" data-testid={`question-${i + 1}-number`}>Question {i + 1}<span class="muted"> of {total}</span></span>
+            <span class="q__tags">
+              {examMode && <span class="pill">Domain {q.chapter}</span>}
+              <span class="pill" data-testid={`question-${i + 1}-section`}>{q.ref}</span>
+              <span class="pill pill--dark" title="Question type" data-testid={`question-${i + 1}-k-level`}>{q.k}</span>
+            </span>
+          </header>
+          <QuestionBody blocks={q.blocks} label={`question ${i + 1}`} />
+          <fieldset>
+            <legend class="q__instruction" data-testid={`question-${i + 1}-instruction`}>Select {q.select === 2 ? 'TWO options' : 'ONE option'}</legend>
+            {q.options.map((o) => (
+              <label class="opt" for={`question-${q.id}-option-${o.key}`} data-testid={`question-${i + 1}-option-${o.key}`} data-option={o.key}>
+                <input type={q.select === 2 ? 'checkbox' : 'radio'} id={`question-${q.id}-option-${o.key}`} name={`question-${q.id}`} value={o.key} data-testid={`question-${i + 1}-option-${o.key}-input`} />
+                <span class="opt__key">{o.key}</span>
+                <span class="opt__text">{o.text}</span>
+                <span class="opt__flag" aria-hidden="true"></span>
+              </label>
+            ))}
+          </fieldset>
+          <div class="review" hidden data-testid={`question-${i + 1}-review`} data-review>
+            <p class="review__verdict" data-testid={`question-${i + 1}-verdict`} data-verdict></p>
+            {q.explanation.intro && <p class="review__intro">{q.explanation.intro}</p>}
+            <ul class="review__options">
+              {q.options.map((o) => q.explanation.options[o.key] && (
+                <li data-testid={`question-${i + 1}-explanation-${o.key}`} data-explain={o.key}><strong>{o.key})</strong> {q.explanation.options[o.key]}</li>
+              ))}
+            </ul>
+            <p class="review__source muted">Practice question {q.n} · {q.lo}</p>
+          </div>
+        </li>
+      ))}
+    </ol>
+
+    <div class="submit-bar no-print" id="submit-bar" data-testid="submit-bar" data-submit-bar>
+      <span><strong id="answered-count" data-testid="answered-count" data-answered>0</strong> of {total} answered</span>
+      <span class="pager-controls" data-pager>
+        <button type="button" class="pager-btn" id="previous-question" data-testid="previous-question" data-prev aria-label="Previous question">←</button>
+        <span id="question-position" data-testid="question-position" data-position></span>
+        <button type="button" class="pager-btn" id="next-question" data-testid="next-question" data-next aria-label="Next question">→</button>
+      </span>
+      <button type="button" class="link-btn" id="jump-to-unanswered" data-testid="jump-to-unanswered" data-jump>Jump to unanswered</button>
+      {examMode && <span class="timer" id="timer" data-testid="timer" data-timer hidden aria-live="off"></span>}
+      <button class="btn" type="submit" id="submit-answers" data-testid="submit-answers">Submit answers</button>
+    </div>
+  </form>
+</section>
+
+<script>
+  import { getQuiz, saveQuizAttempt, type QuizAttempt } from '../lib/progress';
+
+  for (const quiz of document.querySelectorAll<HTMLElement>('[data-quiz-id]')) {
+    const id = quiz.dataset.quizId!;
+    const passMark = Number(quiz.dataset.passMark);
+    const form = quiz.querySelector<HTMLFormElement>('[data-form]')!;
+    const items = [...quiz.querySelectorAll<HTMLElement>('[data-question]')];
+    const results = quiz.querySelector<HTMLElement>('[data-results]')!;
+    const answeredEl = quiz.querySelector<HTMLElement>('[data-answered]')!;
+    const onlyWrong = quiz.querySelector<HTMLInputElement>('[data-only-wrong]')!;
+
+    const chosen = (item: HTMLElement) =>
+      [...item.querySelectorAll<HTMLInputElement>('input:checked')].map((i) => i.value).sort();
+    const isAnswered = (item: HTMLElement) => chosen(item).length === Number(item.dataset.select);
+
+    const updateCount = () => {
+      answeredEl.textContent = String(items.filter(isAnswered).length);
+      quiz.querySelector<HTMLElement>('[data-jump]')!.hidden = items.every(isAnswered);
+    };
+
+    // ---- One question at a time
+    const pagedToggle = quiz.querySelector<HTMLInputElement>('[data-paged-toggle]')!;
+    const position = quiz.querySelector<HTMLElement>('[data-position]')!;
+    let current = 0;
+    function show(i: number, scroll = true) {
+      current = Math.max(0, Math.min(items.length - 1, i));
+      items.forEach((it, k) => it.classList.toggle('is-current', k === current));
+      position.textContent = `${current + 1} / ${items.length}`;
+      if (scroll && quiz.classList.contains('is-paged')) items[current].scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    function setPaged(on: boolean) {
+      quiz.classList.toggle('is-paged', on);
+      show(current, false);
+    }
+    pagedToggle.addEventListener('change', () => setPaged(pagedToggle.checked));
+    quiz.querySelector('[data-prev]')!.addEventListener('click', () => show(current - 1));
+    quiz.querySelector('[data-next]')!.addEventListener('click', () => show(current + 1));
+    setPaged(pagedToggle.checked);
+
+    // ---- Jump to the first unanswered question
+    quiz.querySelector('[data-jump]')!.addEventListener('click', () => {
+      const i = items.findIndex((it) => !isAnswered(it));
+      if (i < 0) return;
+      if (quiz.classList.contains('is-paged')) show(i);
+      else items[i].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+
+    // "Select TWO" questions: stop a third box being ticked.
+    form.addEventListener('change', (e) => {
+      const input = e.target as HTMLInputElement;
+      const item = input.closest<HTMLElement>('[data-question]')!;
+      if (input.type === 'checkbox' && chosen(item).length > Number(item.dataset.select)) input.checked = false;
+      updateCount();
+    });
+
+    function mark(answers: Record<string, string[]>) {
+      let score = 0;
+      for (const item of items) {
+        const correct = item.dataset.answer!.split(',');
+        const picked = answers[item.dataset.question!] ?? [];
+        const right = picked.length === correct.length && picked.every((k) => correct.includes(k));
+        if (right) score++;
+        item.classList.add(right ? 'is-right' : 'is-wrong');
+        item.querySelectorAll<HTMLInputElement>('input').forEach((input) => {
+          input.checked = picked.includes(input.value);
+          input.disabled = true;
+          const label = input.closest<HTMLElement>('.opt')!;
+          label.classList.toggle('is-correct', correct.includes(input.value));
+          label.classList.toggle('is-picked-wrong', input.checked && !correct.includes(input.value));
+        });
+        item.querySelectorAll<HTMLElement>('[data-explain]').forEach((li) => {
+          li.classList.toggle('is-correct', correct.includes(li.dataset.explain!));
+          li.classList.toggle('is-picked', picked.includes(li.dataset.explain!));
+        });
+        const verdict = item.querySelector<HTMLElement>('[data-verdict]')!;
+        verdict.textContent = right
+          ? 'Correct!'
+          : picked.length
+            ? `Not quite. You chose ${picked.join(' and ')}; the answer is ${correct.join(' and ')}.`
+            : `Not answered. The answer is ${correct.join(' and ')}.`;
+        item.querySelector<HTMLElement>('[data-review]')!.hidden = false;
+      }
+      return score;
+    }
+
+    const isExam = quiz.hasAttribute('data-exam');
+    const timerEl = quiz.querySelector<HTMLElement>('[data-timer]');
+    let startedAt = Date.now();
+    let tick: number | undefined;
+    const fmt = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+
+    function startExam() {
+      const limit = Number(quiz.querySelector<HTMLSelectElement>('[data-time-limit]')!.value) * 60;
+      quiz.querySelector<HTMLElement>('[data-start]')!.hidden = true;
+      form.hidden = false;
+      startedAt = Date.now();
+      if (limit && timerEl) {
+        timerEl.hidden = false;
+        const update = () => {
+          const left = limit - Math.floor((Date.now() - startedAt) / 1000);
+          timerEl.textContent = `⏱ ${fmt(Math.max(left, 0))} left`;
+          timerEl.classList.toggle('is-low', left <= 300);
+          if (left <= 0) { window.clearInterval(tick); submit(true); }
+        };
+        update();
+        tick = window.setInterval(update, 1000);
+      }
+      items[0]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    quiz.querySelector('[data-start-btn]')?.addEventListener('click', startExam);
+
+    function fillBreakdown(attempt: QuizAttempt) {
+      for (const row of quiz.querySelectorAll<HTMLElement>('[data-chapter-row]')) {
+        const ch = row.dataset.chapterRow!;
+        const qs = items.filter((i) => i.dataset.chapter === ch);
+        const right = qs.filter((i) => {
+          const correct = i.dataset.answer!.split(',');
+          const picked = attempt.answers[i.dataset.question!] ?? [];
+          return picked.length === correct.length && picked.every((k) => correct.includes(k));
+        }).length;
+        row.querySelector('[data-chapter-score]')!.textContent = `${right} / ${qs.length}`;
+        row.querySelector<HTMLElement>('[data-chapter-bar]')!.style.width = `${(right / qs.length) * 100}%`;
+      }
+    }
+
+    function showResults(attempt: QuizAttempt) {
+      form.hidden = false;
+      const startEl = quiz.querySelector<HTMLElement>('[data-start]');
+      if (startEl) startEl.hidden = true;
+      if (timerEl) timerEl.hidden = true;
+      fillBreakdown(attempt);
+      const timeEl = quiz.querySelector<HTMLElement>('[data-time-taken]')!;
+      timeEl.hidden = !attempt.seconds;
+      if (attempt.seconds) timeEl.textContent = `Time taken: ${fmt(attempt.seconds)}`;
+      quiz.classList.add('is-marked');
+      quiz.querySelector('[data-submit-bar]')!.setAttribute('hidden', '');
+      results.hidden = false;
+      results.classList.toggle('is-pass', attempt.passed);
+      quiz.querySelector('[data-score]')!.textContent = String(attempt.score);
+      quiz.querySelector('[data-percent]')!.textContent = `${attempt.percent}% · practice pass mark ≈72%`;
+      quiz.querySelector('[data-verdict-label]')!.textContent = attempt.passed ? 'Pass - well done' : 'Not a pass yet - review below';
+      results.focus();
+      results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function submit(timeUp = false) {
+      const unanswered = items.filter((i) => !isAnswered(i)).length;
+      if (!timeUp && unanswered && !confirm(`You have ${unanswered} unanswered question(s). Submit anyway?`)) return;
+      window.clearInterval(tick);
+      const answers = Object.fromEntries(items.map((i) => [i.dataset.question!, chosen(i)]));
+      const score = mark(answers);
+      const percent = Math.round((score / items.length) * 100);
+      const attempt: QuizAttempt = {
+        score, total: items.length, percent, passed: score / items.length >= passMark,
+        date: new Date().toISOString(), answers,
+        seconds: isExam ? Math.round((Date.now() - startedAt) / 1000) : undefined,
+      };
+      saveQuizAttempt(id, attempt);
+      showResults(attempt);
+      if (timeUp) alert("Time's up - your exam has been marked.");
+    }
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      submit();
+    });
+
+    quiz.querySelector('[data-retake]')!.addEventListener('click', () => {
+      quiz.classList.remove('is-marked', 'only-wrong');
+      onlyWrong.checked = false;
+      results.hidden = true;
+      quiz.querySelector('[data-submit-bar]')!.removeAttribute('hidden');
+      for (const item of items) {
+        item.classList.remove('is-right', 'is-wrong');
+        item.querySelector<HTMLElement>('[data-review]')!.hidden = true;
+        item.querySelectorAll<HTMLInputElement>('input').forEach((input) => {
+          input.checked = false;
+          input.disabled = false;
+          input.closest('.opt')!.classList.remove('is-correct', 'is-picked-wrong');
+        });
+      }
+      updateCount();
+      if (isExam) {
+        form.hidden = true;
+        quiz.querySelector<HTMLElement>('[data-start]')!.hidden = false;
+      }
+      quiz.scrollIntoView({ behavior: 'smooth' });
+    });
+
+    onlyWrong.addEventListener('change', () => quiz.classList.toggle('only-wrong', onlyWrong.checked));
+
+    // Offer the previous attempt, if there is one.
+    const record = getQuiz(id);
+    const lastEl = quiz.querySelector<HTMLElement>('[data-last-attempt]')!;
+    if (record) {
+      const { last, best } = record;
+      const when = new Date(last.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+      lastEl.hidden = false;
+      lastEl.innerHTML = `Last attempt: <strong>${last.percent}%</strong> on ${when} · Best: <strong>${best.percent}%</strong> · ${record.attempts} attempt(s) <button type="button" class="link-btn" id="review-last-attempt" data-testid="review-last-attempt">Review last attempt</button>`;
+      lastEl.querySelector('button')!.addEventListener('click', () => {
+        mark(last.answers);
+        showResults(last);
+      });
+    }
+    updateCount();
+  }
+</script>
+
+<style>
+  .quiz { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.25rem; }
+  .quiz-intro dl { display: flex; flex-wrap: wrap; gap: 1rem 2rem; margin: 0; }
+  .quiz-intro dt { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pink); }
+  .quiz-intro dd { margin: 0; font: 700 1.4rem var(--font-head); }
+  .quiz-intro dd small { font: 600 0.85rem var(--font-body); color: var(--grey); }
+  .last-attempt { margin: 1rem 0 0; padding-top: 1rem; border-top: 1px solid var(--line); }
+  .last-attempt :global(.link-btn) { background: none; border: 0; color: var(--pink-dark); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; margin-left: 0.5rem; }
+
+  .results { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1.5rem; scroll-margin-top: 6rem; border-left: 8px solid var(--pink); }
+  .results.is-pass { border-left-color: #3ccf8e; }
+  .score__big { font: 700 3.5rem/1 var(--font-head); margin: 0.25rem 0; }
+  .score__of { font-size: 1.5rem; color: #bbb; }
+  .score__pct { margin: 0; color: var(--pink-soft); font-weight: 700; }
+  .results__actions { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; }
+  .toggle { display: flex; gap: 0.5rem; align-items: center; cursor: pointer; }
+
+  .start { display: flex; flex-wrap: wrap; gap: 1rem; align-items: end; margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid var(--line); }
+  .start label { display: grid; gap: 0.3rem; font-weight: 700; font-size: 0.9rem; }
+  .start select { font: inherit; padding: 0.55rem 0.75rem; border-radius: 10px; border: 2px solid var(--line); }
+  .score__time { margin: 0.25rem 0 0; color: #ccc; }
+  .breakdown { width: auto; min-width: 18rem; flex: 1; max-width: 26rem; font-size: 0.9rem; }
+  .breakdown th, .breakdown td { border-color: #555; padding: 0.3rem 0.5rem; background: none; color: #fff; }
+  .breakdown thead th { color: var(--pink-soft); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; }
+  .mini { display: block; width: 8rem; height: 0.6rem; background: #555; border-radius: 99px; overflow: hidden; }
+  .mini span { display: block; height: 100%; background: var(--pink); width: 0; }
+  .timer { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .timer.is-low { color: var(--pink-soft); }
+  .questions ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.25rem; }
+  .q { border-left: 6px solid transparent; }
+  .q.is-right { border-left-color: var(--success); }
+  .q.is-wrong { border-left-color: var(--pink); }
+  .only-wrong .q.is-right { display: none; }
+  .q__head { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+  .q__num { font: 700 1.1rem var(--font-head); }
+  .q__tags { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
+  fieldset { border: 0; padding: 0; margin: 0.5rem 0 0; display: grid; gap: 0.5rem; }
+  .q__instruction { font-size: 0.85rem; font-weight: 700; color: var(--grey); margin-bottom: 0.5rem; }
+  .opt { display: grid; grid-template-columns: auto 2rem 1fr auto; gap: 0.75rem; align-items: center; padding: 0.7rem 1rem; border: 2px solid var(--line); border-radius: 12px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+  .opt:hover { border-color: var(--pink-soft); }
+  .opt:has(input:checked) { border-color: var(--pink); background: var(--pink-tint); }
+  .opt input { accent-color: var(--pink); width: 1.1rem; height: 1.1rem; }
+  .opt__key { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%; background: var(--charcoal); color: #fff; font-weight: 700; }
+  .opt__text { white-space: pre-line; }
+  .is-marked .opt { cursor: default; }
+  .is-marked .opt.is-correct { border-color: var(--success); background: var(--success-tint); }
+  .opt.is-correct .opt__flag::after { content: '✓ Correct answer'; color: var(--success); font-weight: 700; font-size: 0.85rem; }
+  .is-marked .opt.is-picked-wrong { border-color: var(--pink); background: var(--pink-tint); }
+  .opt.is-picked-wrong .opt__flag::after { content: '✗ Your answer'; color: var(--pink-dark); font-weight: 700; font-size: 0.85rem; }
+
+  .review { margin-top: 1rem; padding: 1rem 1.25rem; background: var(--bg); border-radius: 12px; }
+  .review__verdict { font: 700 1.1rem var(--font-head); margin: 0 0 0.5rem; }
+  .is-right .review__verdict { color: var(--success); }
+  .is-wrong .review__verdict { color: var(--pink-dark); }
+  .review__intro { white-space: pre-line; }
+  .review__options { padding-left: 0; list-style: none; display: grid; gap: 0.5rem; }
+  .review__options li { padding: 0.5rem 0.75rem; border-radius: 8px; border-left: 4px solid var(--line); background: var(--surface); }
+  .review__options li.is-correct { border-left-color: var(--success); }
+  .review__options li.is-picked:not(.is-correct) { border-left-color: var(--pink); }
+  .review__source { font-size: 0.8rem; margin: 0.75rem 0 0; }
+
+  .paged-toggle { display: flex; gap: 0.5rem; align-items: center; margin-top: 1rem; font-weight: 700; font-size: 0.95rem; cursor: pointer; }
+  .paged-toggle input { accent-color: var(--pink); width: 1.1rem; height: 1.1rem; }
+  .is-paged:not(.is-marked) .q:not(.is-current) { display: none; }
+  .pager-controls { display: none; align-items: center; gap: 0.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .is-paged:not(.is-marked) .pager-controls { display: inline-flex; }
+  .pager-btn { width: 2.2rem; height: 2.2rem; border-radius: 50%; border: 2px solid #777; background: none; color: #fff; font-size: 1rem; cursor: pointer; }
+  .pager-btn:hover { border-color: var(--pink); background: var(--pink); }
+  .submit-bar .link-btn { background: none; border: 0; color: var(--pink-soft); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
+  .submit-bar { position: sticky; bottom: 1rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; background: var(--charcoal); color: #fff; padding: 0.75rem 0.75rem 0.75rem 1.5rem; border-radius: 999px; box-shadow: var(--shadow); margin-top: 1.25rem; }
+  @media (max-width: 40rem) {
+    .q { padding: 1.1rem; }
+    .opt { grid-template-columns: auto 2rem 1fr; padding: 0.7rem 0.8rem; gap: 0.6rem; }
+    .opt__flag { grid-column: 1 / -1; }
+    .results { flex-direction: column; align-items: stretch; }
+    .breakdown { max-width: none; }
+    .mini { width: 5rem; }
+    .score__big { font-size: 2.75rem; }
+    .submit-bar { bottom: 0.5rem; padding: 0.5rem 0.5rem 0.5rem 1rem; font-size: 0.9rem; flex-wrap: wrap; border-radius: 18px; row-gap: 0.4rem; }
+    .submit-bar .link-btn { order: 3; }
+    .submit-bar .btn { padding: 0.55rem 1rem; }
+    .start { flex-direction: column; align-items: stretch; }
+    .start select { width: 100%; }
+  }
+</style>

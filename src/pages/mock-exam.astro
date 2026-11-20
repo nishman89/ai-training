@@ -1,0 +1,25 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHead from '../components/PageHead.astro';
+import Quiz from '../components/Quiz.astro';
+import { getMockExam } from '../lib/data';
+import { url, QUESTIONS_PER_CHAPTER, EXAM_QUESTIONS, EXAM_MINUTES } from '../lib/site';
+
+const questions = await getMockExam(QUESTIONS_PER_CHAPTER);
+---
+<BaseLayout title="Mock exam" description="A timed CCDV-F style mock exam: questions weighted by domain, with a score per domain and every answer explained.">
+  <PageHead eyebrow="Exam practice" title="Mock exam">
+    <p class="lead">The real CCDV-F exam is {EXAM_QUESTIONS} multiple-choice and multiple-response questions in {EXAM_MINUTES} minutes,
+      scored 100–1,000 with 720 to pass. This mock uses the same domain weighting ({questions.length} questions), a timer and a score by domain.
+      Questions are original practice items, not real exam questions.</p>
+    <p class="back no-print"><a href={url()}>← All domains</a></p>
+  </PageHead>
+  <div class="container">
+    <Quiz questions={questions} quizId="mock-a" examMode />
+  </div>
+</BaseLayout>
+
+<style>
+  .lead { max-width: 52rem; }
+  .back { margin: 1rem 0 0; font-weight: 700; }
+</style>

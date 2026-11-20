@@ -1,0 +1,273 @@
+---
+number: 3
+title: "Agents and Workflows"
+weight: 14
+minutes: 70
+summary: "When to use a fixed workflow and when an agent, the five workflow patterns, the agent loop in code, wiring options, human gates and memory."
+objectives:
+  - "Decide between a single call, a workflow and an agent"
+  - "Recognise the five workflow patterns and when each fits"
+  - "Implement the agent loop with exit conditions and human-in-the-loop gates"
+  - "Compare the three ways to wire an agent: raw API, Agent SDK and Managed Agents"
+  - "Choose a memory scope for state that survives sessions"
+---
+import Gotcha from '../../components/Gotcha.astro';
+import SectionSummary from '../../components/SectionSummary.astro';
+import CodeSwitch from '../../components/CodeSwitch.astro';
+import Flow from '../../components/diagrams/Flow.astro';
+import Cycle from '../../components/diagrams/Cycle.astro';
+import SideBySide from '../../components/SideBySide.astro';
+import WhenThen from '../../components/WhenThen.astro';
+import Exercise from '../../components/Exercise.astro';
+import Resource from '../../components/Resource.astro';
+
+## 3.1 Workflow or agent?
+
+### In plain English
+
+This domain is about getting Claude to finish jobs that take several steps. A **workflow** is a fixed recipe you write: step 1 summarise, step 2 translate. An **agent** chooses its own steps: it asks for a tool, looks at the result, decides what to do next, and repeats until the job is done.
+
+**Real-life example:** "Find out why order 1234 is late and email the customer." The agent looks up the order, checks the courier, drafts an email and asks a human to approve sending it. The rule is to use the simplest option that works: agents are powerful, but slower, pricier and less predictable.
+
+### Start simple, climb only when needed
+
+<Flow caption="Move up only when the simpler pattern can't handle the variation" steps={[
+  { title: 'Single call', sub: 'one prompt, one answer' },
+  { title: 'Workflow', sub: 'steps you define in code' },
+  { title: 'Agent', sub: 'the model picks the steps' },
+  { title: 'Multi-agent', sub: 'only for parallel, broad work' },
+]} />
+
+<SideBySide joiner="or"
+  left={{ title: 'Workflow', question: 'Can you write the exact steps down?', points: ['Every run follows the same sequence', 'Errors are costly: you need step-level guardrails', 'Inputs come from a known set', 'Standard observability is required'], tip: 'Predictable, cheap, testable' }}
+  right={{ title: 'Agent', question: 'Do you know the goal and tools, but not the path?', points: ['The path can\'t be described in advance', 'Inputs vary unpredictably', 'Non-determinism is acceptable', 'The registered tools bound what it can do'], tip: 'Flexible, but costlier and less predictable' }}
+/>
+
+<SectionSummary points={[
+  "Climb only as far as needed: single call → workflow → agent → multi-agent.",
+  "If you can write the steps down, build a workflow: predictable, cheap and testable.",
+  "Use an agent when you know the goal and tools but not the path, and non-determinism is acceptable.",
+]} />
+
+## 3.2 The five workflow patterns
+
+### Prompt chaining
+
+A fixed sequence of calls, each using the previous output, with optional code checks ("gates") between steps. Example: write marketing copy, check it meets length and tone rules, then translate it. Use it when a task splits cleanly into steps and accuracy matters more than latency.
+
+### Routing
+
+Classify the input, then send it to a specialised prompt, tool set or model. Example: route refund requests, technical questions and general queries to different handlers, or send easy questions to Haiku and hard ones to a bigger model.
+
+### Parallelisation
+
+Run calls at the same time and combine the results.
+
+- **Sectioning** - independent subtasks at once · e.g. one call answers the user while another screens for policy issues
+- **Voting** - the same task several times, then aggregate · e.g. three reviewers flag vulnerabilities, flag if any two agree
+
+### Orchestrator-workers
+
+A lead model decides the subtasks **at run time**, hands them to workers, and merges the results. It looks like parallelisation, but the subtasks aren't predefined. Anthropic reports multi-agent research runs using roughly **15× the tokens** of a single chat, so use it only for broad work that genuinely splits into independent parts. For tightly coupled work like coding, a single agent with good context wins.
+
+### Evaluator-optimizer
+
+One call generates, another critiques against clear criteria, and the loop repeats until the critique passes. Use it when you can state what "good" looks like and iteration measurably improves the result, such as literary translation or a search that needs several rounds.
+
+<Gotcha
+  title={"Five agents, one module, fifteen times the bill"}
+  scenario={"A team uses an orchestrator with five sub-agents to refactor one tightly coupled payments module."}
+  gotcha={"Each sub-agent sees only part of the code, so their edits conflict, and token use is many times that of one agent. Slower and worse."}
+  fix={"Use a single agent with good context for coupled work. Save orchestrator-workers for broad tasks that split into independent parts."}
+/>
+
+<SectionSummary points={[
+  "Prompt chaining: fixed steps, each using the last, with code gates between.",
+  "Routing: classify, then send down ONE specialised path or model.",
+  "Parallelisation: sectioning (independent parts) or voting (same task, aggregated).",
+  "Orchestrator-workers: subtasks decided at run time, about 15× the tokens, for broad parallel work only.",
+  "Evaluator-optimizer: generate, critique against clear criteria, repeat.",
+]} />
+
+## 3.3 The agent loop
+
+### The loop
+
+An agent is a multi-step tool-use loop with managed context and a defined goal.
+
+<Cycle center="Agent loop" caption="Loop while stop_reason is tool_use; stop on any other stop reason or an exit condition" steps={[
+  { title: 'Call Claude', sub: 'history + tools', tone: 'dark' },
+  { title: 'stop_reason = tool_use?', sub: 'else: finished', tone: 'pink' },
+  { title: 'Run the tools', sub: 'your code', tone: 'dark' },
+  { title: 'Append tool_result', sub: 'matching IDs', tone: 'pink' },
+]} />
+
+### In code
+
+This is the raw loop. In **Python** (or TypeScript) the Claude Agent SDK can run this loop for you; it isn't available for **Java**, where you write the loop yourself or use the Java SDK's beta tool runner.
+
+<CodeSwitch>
+
+```java
+List<MessageParam> history = new ArrayList<>();
+history.add(MessageParam.builder().role(MessageParam.Role.USER)
+    .content("Find order 1234 and tell me its status").build());
+
+for (int turn = 0; turn < MAX_TURNS; turn++) {             // exit condition: iteration cap
+    Message reply = client.messages().create(MessageCreateParams.builder()
+        .model(Model.CLAUDE_SONNET_5_5).maxTokens(2048L)
+        .system("You are an order-status agent. Use only the tools given.")
+        .addTool(LOOKUP_ORDER_TOOL)
+        .messages(history).build());
+
+    history.add(reply.toParam());                          // keep the tool_use blocks intact
+    if (!reply.stopReason().map(StopReason.TOOL_USE::equals).orElse(false)) break;
+
+    List<ContentBlockParam> results = new ArrayList<>();
+    for (ContentBlock block : reply.content()) {
+        block.toolUse().ifPresent(use -> {
+            ToolOutcome r = runToolSafely(use);            // YOUR code runs the tool
+            results.add(ContentBlockParam.ofToolResult(ToolResultBlockParam.builder()
+                .toolUseId(use.id())                       // must match the tool_use id
+                .content(r.text())
+                .isError(r.failed())                       // never hide errors as empty data
+                .build()));
+        });
+    }
+    history.add(MessageParam.builder().role(MessageParam.Role.USER)
+        .contentOfBlockParams(results).build());
+}
+```
+
+```python
+history = [{"role": "user", "content": "Find order 1234 and tell me its status"}]
+
+for turn in range(MAX_TURNS):                       # exit condition: iteration cap
+    reply = client.messages.create(
+        model="claude-sonnet-5-5", max_tokens=2048,
+        system="You are an order-status agent. Use only the tools given.",
+        tools=[LOOKUP_ORDER_TOOL],
+        messages=history,
+    )
+    history.append({"role": "assistant", "content": reply.content})   # keep tool_use blocks intact
+    if reply.stop_reason != "tool_use":
+        break
+
+    results = []
+    for block in reply.content:
+        if block.type == "tool_use":
+            outcome = run_tool_safely(block.name, block.input)   # YOUR code runs the tool
+            results.append({
+                "type": "tool_result",
+                "tool_use_id": block.id,                      # must match the tool_use id
+                "content": outcome.text,
+                "is_error": outcome.failed,                   # never hide errors as empty data
+            })
+    history.append({"role": "user", "content": results})
+```
+
+</CodeSwitch>
+
+Builder method names can differ slightly between SDK versions. What the exam tests is the shape: loop on `tool_use`, append the assistant turn unchanged, return each `tool_result` with the matching ID.
+
+### Exit conditions and human gates
+
+Every agent needs a clear stopping rule: a goal check, a maximum number of turns and a token or cost budget. Place human approval where the worst case is expensive.
+
+<WhenThen whenLabel="Insert a human check…" thenLabel="…because" rows={[
+  { when: 'Before a destructive tool call (write, delete, send, pay)', then: 'High risk: the action can\'t be undone' },
+  { when: 'After a planning step, before execution', then: 'Medium risk: a wrong plan gives a wrong outcome even if executed perfectly' },
+  { when: 'On unexpected output (error flag, empty result, out-of-range value)', then: 'Catches failures that retry logic alone won\'t fix' },
+]} />
+
+### Tool orchestration
+
+Routing depends on how tools are described and how many are registered. Too many overlapping tools make choices erratic; too few and the agent invents a path or returns an incomplete result. Start with the minimum set and add a tool only for a specific gap.
+
+<Gotcha
+  title={"The agent that never stopped"}
+  scenario={"An agent loop runs `while stop_reason == tool_use`, with no other exit condition. A tool starts returning an empty list instead of an error."}
+  gotcha={"Claude keeps re-querying in slightly different ways, and the loop runs for hundreds of turns overnight."}
+  fix={"Add an iteration cap and a token or cost budget, return tool failures with `is_error`, and gate unexpected outputs to a human."}
+/>
+
+<SectionSummary points={[
+  "The loop: call → if `stop_reason` is tool_use, run the tools → append tool_results with matching IDs → call again.",
+  "Append the assistant turn unchanged so the tool_use blocks stay intact.",
+  "You define the exit: a goal check, an iteration cap and a budget.",
+  "Put human approval before destructive actions, after planning, and on unexpected output. Register only the tools the task needs.",
+]} />
+
+## 3.4 Three ways to wire an agent
+
+### Who runs the loop?
+
+| | Raw Messages API loop | Agent SDK | Claude Managed Agents |
+|---|---|---|---|
+| **Who runs the loop** | You | The SDK, inside your process | Anthropic, in its sandbox |
+| **What you own** | Everything | Tool execution and the app around it | The app layer and the agent definition |
+| **Choose when** | You need full control, or have constraints a library can't meet | You want a ready loop, context handling and tools in your own environment (Python or TypeScript; no Java version) | You want long-running execution and a managed sandbox |
+| **Watch out** | You maintain all of it | Set `settingSources` explicitly, or CLAUDE.md and skills won't load | Public beta; sessions stored server-side, so **not** eligible for Zero Data Retention or HIPAA |
+
+Whichever path you take, the four steps are the same: register tools, scope the system prompt, run the tool loop, define exit conditions.
+
+<Gotcha
+  title={"The skill that silently did nothing"}
+  scenario={"A code-review skill works in Claude Code. The same agent, run headless through the Agent SDK in CI, ignores it."}
+  gotcha={"`settingSources` was never set, so the SDK didn't load filesystem settings: no CLAUDE.md, no skills, and no error."}
+  fix={"Set `settingSources` (`setting_sources` in Python) explicitly, and confirm in a test that the skill fires."}
+/>
+
+<SectionSummary points={[
+  "Raw API loop: you own everything. Agent SDK: the loop runs in your process (Python/TypeScript, not Java). Managed Agents: Anthropic runs the loop and sandbox.",
+  "With the Agent SDK, set `settingSources` explicitly or CLAUDE.md and skills won't load.",
+  "Managed Agents store sessions server-side, so they aren't currently ZDR or HIPAA eligible.",
+]} />
+
+## 3.5 Memory and long-horizon work
+
+### Memory scopes
+
+Choose at design time what the agent should know when a new session starts.
+
+| Scope | What persists | Cost | Use when | You lose |
+|---|---|---|---|---|
+| In-context | The conversation, within one session | Grows with every turn | Short sessions that fit the window | Everything at session end |
+| External storage | State in a database, read at start or on demand | Retrieval latency + code | State must survive sessions or be shared | Nothing (beyond latency) |
+| Summarised | A condensed summary injected next session | Cheaper than replaying history | Long-running conversational agents | Any detail the summary dropped |
+| Stateless | Nothing | None | Independent task runs and pipelines | All prior context |
+
+### Subagents for long tasks
+
+A subagent gets a scoped task, the minimum context it needs, the tools for that task and clear exit conditions. It works in its own context window and returns only a summary, which keeps the parent's context small. You lose visibility of how it reached its answer.
+
+<Exercise title="Workflow, agent or neither?" id="exercise-pattern">
+
+Pick the simplest pattern for each:
+
+1. Translate 50,000 product descriptions into French overnight.
+2. A support bot answers FAQs, but billing disputes need a specialist prompt with account tools.
+3. "Investigate why last night's data pipeline produced 3% fewer rows, and propose a fix."
+
+<div slot="answer">
+
+1. **A single call per item, run through the Batch API.** There are no steps to decide.
+2. **Routing workflow.** Classify, then send billing to the specialist prompt and tools.
+3. **Agent.** The path depends on what each query reveals. Add a human gate before any fix is applied.
+
+</div>
+</Exercise>
+
+### Where this is in your course notes
+
+- **Production-Grade Prompting §07** - workflow vs agent, the three wiring paths, loop checklist, human-in-the-loop points
+- **Production-Grade Prompting §08** - memory scopes and skills
+- **Production Engineering, Evals & Security §05** - orchestrator-worker cost (about 15×)
+
+<Resource kind="article" href="https://www.anthropic.com/engineering/building-effective-agents" title="Building effective agents" text="Anthropic's guide to workflows vs agents and the five workflow patterns." />
+
+<SectionSummary points={[
+  "Pick a memory scope at design time: in-context, external storage, summarised or stateless.",
+  "State that must survive sessions or be shared across instances belongs in external storage.",
+  "Subagents get a scoped task and a fresh context, and return only a summary: cheaper context, less visibility.",
+]} />

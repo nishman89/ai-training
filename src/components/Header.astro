@@ -1,0 +1,169 @@
+---
+import { url } from '../lib/site';
+import Search from './Search.astro';
+
+const chapters = [
+  [1, 'Application and Integration'],
+  [2, 'Model Selection and Optimization'],
+  [3, 'Agents and Workflows'],
+  [4, 'Prompt and Context Engineering'],
+  [5, 'Tools and MCP'],
+  [6, 'Security and Safety'],
+  [7, 'Evaluation, Testing and Debugging'],
+  [8, 'Claude Code'],
+] as const;
+const links = [
+  ['', 'Home'],
+  ['introduction', 'Start here'],
+  ['mock-exam', 'Mock exam'],
+] as const;
+/** External links, opened in a new tab. */
+const external = [
+  ['https://platform.claude.com/docs', 'Claude Platform docs', 'Official Claude API and platform documentation (opens in a new tab)'],
+  ['https://platform.claude.com/docs/en/cli-sdks-libraries/sdks/java', 'Java SDK docs', 'The official Anthropic Java SDK documentation (opens in a new tab)'],
+  ['https://code.claude.com/docs', 'Claude Code docs', 'Official Claude Code documentation (opens in a new tab)'],
+] as const;
+const path = Astro.url.pathname;
+const isActive = (href: string) => (href === url() ? path === href : path.startsWith(href));
+---
+<header class="site-header" id="site-header" data-testid="site-header">
+  <div class="container bar">
+    <a class="brand" href={url()} aria-label="Sparta Global Claude Developer revision home" id="home-logo" data-testid="home-logo">
+      <img src={url('sparta-logo.png')} alt="Sparta Global" width="120" height="47" />
+      <span class="brand__label">Claude CCDV-F</span>
+    </a>
+
+    <details class="search-desktop" id="search-toggle" data-testid="search-toggle">
+      <summary aria-label="Search the notes" title="Search the notes ( / )"><span aria-hidden="true">🔍</span></summary>
+      <div class="search-panel"><Search id="site-search" /></div>
+    </details>
+
+    <!-- Desktop navigation -->
+    <nav class="nav-desktop" id="main-nav" data-testid="main-nav" aria-label="Main">
+      <ul>
+        {links.map(([href, label]) => (
+          <li><a href={url(href)} data-testid={`nav-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} aria-current={isActive(url(href)) ? 'page' : undefined}>{label}</a></li>
+        ))}
+        <li class="has-menu">
+          <details>
+            <summary data-testid="nav-resources" class:list={{ 'is-active': false }}>Resources</summary>
+            <ul class="menu">
+              {external.map(([href, label, title]) => (
+                <li><a href={href} target="_blank" rel="noopener" title={title} data-testid={`nav-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '')}`}>{label}<span class="ext" aria-hidden="true">↗</span></a></li>
+              ))}
+            </ul>
+          </details>
+        </li>
+        <li class="has-menu">
+          <details>
+            <summary data-testid="nav-chapters">Domains</summary>
+            <ul class="menu">
+              {chapters.map(([n, title]) => <li><a href={url(`chapters/${n}`)} data-testid={`nav-chapter-${n}`}><span>{n}</span>{title}</a></li>)}
+            </ul>
+          </details>
+        </li>
+      </ul>
+    </nav>
+
+    <!-- Phones: a search button next to Menu -->
+    <button type="button" class="search-mobile-btn" id="mobile-search-button" data-testid="mobile-search-button" data-mobile-search aria-label="Search the notes">🔍</button>
+
+    <!-- Mobile navigation: one "Menu" button that opens a full-width panel -->
+    <details class="nav-mobile" id="mobile-menu" data-testid="mobile-menu">
+      <summary aria-label="Open menu"><span class="burger" aria-hidden="true"></span>Menu</summary>
+      <nav aria-label="Main (mobile)">
+        <div class="search-mobile"><Search id="site-search-mobile" /></div>
+        <ul>
+          {links.map(([href, label]) => (
+            <li><a href={url(href)} data-testid={`mobile-nav-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} aria-current={isActive(url(href)) ? 'page' : undefined}>{label}</a></li>
+          ))}
+          {external.map(([href, label, title]) => (
+            <li><a href={href} target="_blank" rel="noopener" title={title} data-testid={`mobile-nav-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '')}`}>{label}<span class="ext" aria-hidden="true">↗</span></a></li>
+          ))}
+        </ul>
+        <span class="eyebrow">Domains</span>
+        <ul class="chapters">
+          {chapters.map(([n, title]) => <li><a href={url(`chapters/${n}`)} data-testid={`mobile-nav-chapter-${n}`}><span>{n}</span>{title}</a></li>)}
+        </ul>
+      </nav>
+    </details>
+  </div>
+</header>
+
+<script>
+  // Close any open menu when clicking elsewhere, or when a link inside it is followed.
+  document.querySelector('[data-mobile-search]')?.addEventListener('click', () => {
+    const menu = document.querySelector<HTMLDetailsElement>('.nav-mobile');
+    if (!menu) return;
+    menu.open = true;
+    menu.querySelector('input')?.focus();
+  });
+  const searchToggle = document.querySelector<HTMLDetailsElement>('.search-desktop');
+  searchToggle?.addEventListener('toggle', () => {
+    if (searchToggle.open) searchToggle.querySelector('input')?.focus();
+  });
+  document.addEventListener('click', (e) => {
+    for (const menu of document.querySelectorAll<HTMLDetailsElement>('.site-header details[open]')) {
+      if ((e.target as Element).closest('[data-mobile-search]')) continue; // the phone search button opens the menu on purpose
+      if (!menu.contains(e.target as Node) || (e.target as Element).closest('a')) menu.open = false;
+    }
+  });
+</script>
+
+<style>
+  .site-header { background: var(--surface); border-bottom: 4px solid var(--pink); position: sticky; top: 0; z-index: 10; }
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-block: 0.6rem; }
+  .brand { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; }
+  .brand img { width: 110px; height: auto; display: block; }
+  .brand__label { font: 700 0.85rem var(--font-body); letter-spacing: 0.08em; color: var(--charcoal); border-left: 2px solid var(--line); padding-left: 0.75rem; }
+
+  nav ul { list-style: none; margin: 0; padding: 0; }
+  nav a, summary { display: block; padding: 0.5rem 0.7rem; border-radius: 999px; color: var(--charcoal); font-weight: 700; text-decoration: none; cursor: pointer; white-space: nowrap; }
+  .brand__label { white-space: nowrap; }
+  nav a:hover, summary:hover { background: var(--pink-tint); color: var(--pink-dark); }
+  nav a[aria-current='page'] { background: var(--charcoal); color: #fff; }
+  summary { list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+
+  .nav-desktop > ul { display: flex; gap: 0.1rem; align-items: center; }
+  .nav-desktop summary::after { content: ' ▾'; color: var(--pink); }
+  .has-menu { position: relative; }
+  .menu { position: absolute; right: 0; top: calc(100% + 0.5rem); background: var(--surface); padding: 0.5rem; border-radius: 12px; box-shadow: var(--shadow); min-width: 19rem; }
+  .menu a, .chapters a { display: flex; gap: 0.75rem; border-radius: 8px; font-weight: 600; }
+  .menu span, .chapters span { color: var(--pink); font-weight: 700; }
+  .menu small { margin-left: auto; color: var(--grey); font-weight: 700; }
+  summary.is-active { background: var(--charcoal); color: #fff; }
+  .search-mobile-btn { display: none; width: 2.6rem; height: 2.6rem; border-radius: 50%; border: 2px solid var(--line); background: var(--surface); font-size: 1rem; cursor: pointer; margin-left: auto; }
+  .ext { margin-left: 0.25rem; font-size: 0.8em; color: var(--pink-dark); }
+
+  .search-desktop { margin-left: auto; position: relative; }
+  .search-desktop > summary { border: 2px solid var(--line); width: 2.6rem; height: 2.6rem; padding: 0; display: grid; place-items: center; }
+  .search-desktop[open] > summary { border-color: var(--pink); background: var(--pink-tint); }
+  .search-panel { position: absolute; left: 0; top: calc(100% + 0.5rem); width: min(32rem, 90vw); background: var(--surface); padding: 0.6rem; border-radius: 14px; box-shadow: 0 12px 32px rgb(0 0 0 / 0.16); }
+  .search-mobile { margin-bottom: 0.75rem; }
+  .nav-mobile { display: none; }
+  .nav-mobile summary { display: flex; align-items: center; gap: 0.5rem; border: 2px solid var(--charcoal); padding: 0.4rem 0.9rem; }
+  .burger, .burger::before, .burger::after { display: block; width: 18px; height: 2px; background: var(--charcoal); position: relative; }
+  .burger::before, .burger::after { content: ''; position: absolute; }
+  .burger::before { top: -6px; }
+  .burger::after { top: 6px; }
+  .nav-mobile[open] summary { background: var(--charcoal); color: #fff; }
+  .nav-mobile[open] .burger, .nav-mobile[open] .burger::before, .nav-mobile[open] .burger::after { background: #fff; }
+  .nav-mobile nav {
+    position: absolute; left: 0; right: 0; top: 100%; background: var(--surface);
+    border-bottom: 4px solid var(--pink); box-shadow: 0 12px 24px rgb(0 0 0 / 0.12);
+    padding: 0.75rem 1rem 1rem; max-height: calc(100vh - 5rem); overflow-y: auto;
+  }
+  .nav-mobile nav > ul { display: grid; gap: 0.25rem; margin-bottom: 0.75rem; }
+  .nav-mobile nav a { border-radius: 10px; padding: 0.7rem 0.85rem; }
+  .nav-mobile .eyebrow { padding: 0 0.85rem; }
+  .nav-mobile .chapters { display: grid; gap: 0.1rem; margin-top: 0.25rem; }
+
+  @media (max-width: 74rem) {
+    .search-desktop { display: none; }
+    .search-mobile-btn { display: grid; place-items: center; }
+    .nav-desktop { display: none; }
+    .nav-mobile { display: block; }
+    .brand__label { display: none; }
+  }
+</style>

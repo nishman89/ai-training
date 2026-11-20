@@ -1,0 +1,40 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import PageHead from '../../../components/PageHead.astro';
+import Quiz from '../../../components/Quiz.astro';
+import { getChapters, getQuestions } from '../../../lib/data';
+import { url, MAIN_SET } from '../../../lib/site';
+import { quizId } from '../../../lib/progress';
+
+export async function getStaticPaths() {
+  const chapters = await getChapters();
+  // One quiz per domain, from the practice question bank.
+  return chapters.map(({ data }) => ({ params: { chapter: String(data.number), set: MAIN_SET.toLowerCase() }, props: { chapter: data, set: MAIN_SET } }));
+}
+
+const { chapter, set } = Astro.props;
+const questions = await getQuestions(set, chapter.number);
+---
+<BaseLayout title={`Domain ${chapter.number} quiz`}>
+  <PageHead eyebrow={`Domain ${chapter.number} · Domain quiz`} title={chapter.title}>
+    <p class="back no-print"><a href={url(`chapters/${chapter.number}`)}>← Back to the Domain {chapter.number} notes</a></p>
+  </PageHead>
+
+  <div class="container">
+    <p class="explain card card--tint">This is the <strong>Domain {chapter.number} quiz</strong>: {questions.length} practice questions
+      written for this site in the style of the CCDV-F exam. They are not official Anthropic questions.</p>
+    <Quiz questions={questions} quizId={quizId(chapter.number, set)} />
+
+    <nav class="more card no-print" aria-label="More practice">
+      <span class="eyebrow">Ready for more?</span>
+      <p><a class="btn btn--dark" href={url('mock-exam')}>Sit the 53-question mock exam</a></p>
+    </nav>
+  </div>
+</BaseLayout>
+
+<style>
+  .back { margin: 1rem 0 0; font-weight: 700; }
+  .explain { margin: 0 0 1.25rem; }
+  .more { margin-top: 2rem; }
+  .more p { margin: 0.5rem 0 0; }
+</style>

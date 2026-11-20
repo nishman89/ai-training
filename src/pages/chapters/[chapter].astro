@@ -1,0 +1,411 @@
+---
+import { render } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PageHead from '../../components/PageHead.astro';
+import WatchOut from '../../components/WatchOut.astro';
+import { SECTION_TITLES as TITLES } from '../../data/syllabus-sections.mjs';
+const SECTION_TITLES: Record<string, string> = TITLES;
+import { getChapters, getQuestions } from '../../lib/data';
+import { url, MAIN_SET, QUESTIONS_PER_CHAPTER } from '../../lib/site';
+
+export async function getStaticPaths() {
+  const chapters = await getChapters();
+  return chapters.map((entry, i) => ({
+    params: { chapter: String(entry.data.number) },
+    props: { entry, prev: chapters[i - 1]?.data, next: chapters[i + 1]?.data },
+  }));
+}
+
+const { entry, prev, next } = Astro.props;
+const { data } = entry;
+const { Content, headings } = await render(entry);
+// Group topics (h3) under their section (h2) for the collapsible contents menu, labelling sub-sections (e.g. 4.2.1).
+type Topic = { text: string; slug: string; sub?: string };
+type Group = { text: string; slug: string; topics: Topic[] };
+const refByTitle = new Map([...(entry.body ?? '').matchAll(/^### (.+)\n\n<SyllabusRef ref="([\d.]+)"/gm)].map((m) => [m[1].trim(), m[2]]));
+const groups = headings.reduce<Group[]>((acc, h) => {
+  if (h.depth === 2) acc.push({ text: h.text, slug: h.slug, topics: [] });
+  else if (h.depth === 3) {
+    if (!acc.length) acc.push({ text: 'Introduction', slug: h.slug, topics: [] });
+    const group = acc[acc.length - 1];
+    const norm = (t: string) => t.toLowerCase().replace(/&/g, 'and').replace(/^[\d.]+\s*/, '').replace(/[^a-z0-9]/g, '');
+    // a first topic named like its section is the section's introduction (see rehype-collapsible-sections.mjs)
+    if (!(group.topics.length === 0 && norm(h.text) === norm(group.text))) group.topics.push({ text: h.text, slug: h.slug });
+  }
+  return acc;
+}, []);
+// Mark where a new sub-section starts (only in sections that span two or more sub-sections, mirroring the notes).
+for (const g of groups) {
+  const sectionNo = g.text.split(' ')[0];
+  let key = sectionNo;
+  const keys = g.topics.map((t) => {
+    const ref = refByTitle.get(t.text);
+    if (ref && ref.split('.').length === 3 && ref.startsWith(sectionNo + '.')) key = ref;
+    return key;
+  });
+  if (new Set(keys.filter((k) => k !== sectionNo)).size < 2) continue;
+  let last = '';
+  g.topics.forEach((t, i) => { if (keys[i] !== last && keys[i] !== sectionNo && SECTION_TITLES[keys[i]]) t.sub = keys[i]; last = keys[i]; });
+}
+const mainCount = (await getQuestions(MAIN_SET, data.number)).length;
+---
+<BaseLayout title={`Domain ${data.number}: ${data.title}`} description={data.summary}>
+  <PageHead eyebrow={`Domain ${data.number} · ${data.weight}% of the exam · ≈${QUESTIONS_PER_CHAPTER[data.number]} of 53 questions`} title={data.title}>
+    <p class="summary">{data.summary}</p>
+  </PageHead>
+
+  <div class="container layout">
+    <aside class="toc no-print" aria-label="In this domain">
+      <details class="card toc__panel" id="chapter-contents" data-testid="chapter-contents" open data-toc>
+        <summary class="eyebrow">In this domain</summary>
+        <ul class="toc__groups">
+          {groups.map((g) => (
+            <li>
+              <details>
+                <summary><span class="chev" aria-hidden="true"></span><span>{g.text}</span></summary>
+                <ul>{g.topics.map((t) => (
+                  <>
+                    {t.sub && <li class="toc__sub" aria-hidden="true"><span>{t.sub}</span> {SECTION_TITLES[t.sub]}</li>}
+                    <li><a href={`#${t.slug}`} class:list={{ 'toc__exercise': /^(exercise|worked example)\b/i.test(t.text) }}>{t.text}</a></li>
+                  </>
+                ))}</ul>
+              </details>
+            </li>
+          ))}
+        </ul>
+        <a class="btn quiz-btn" href={url(`quiz/${data.number}/${MAIN_SET.toLowerCase()}`)} data-testid="contents-chapter-quiz">Domain quiz →</a>
+      </details>
+    </aside>
+
+    <article class="notes">
+      <section class="card objectives">
+        <h2>You will learn</h2>
+        <ul>{data.objectives.map((o) => <li>{o}</li>)}</ul>
+      </section>
+
+      <div class="chapter-progress no-print" id="chapter-progress" data-testid="chapter-progress" data-chapter-progress data-chapter={data.number} data-total={headings.filter((h) => h.depth === 2).length}>
+        <p class="chapter-progress__label"><strong data-progress-count>0</strong> of {headings.filter((h) => h.depth === 2).length} sections done</p>
+        <div class="bar" aria-hidden="true"><span data-progress-bar></span></div>
+      </div>
+      <div class="section-controls no-print">
+        <button type="button" class="link" id="expand-all" data-testid="expand-all" data-expand="open">Expand all sections</button>
+        <button type="button" class="link" id="collapse-all" data-testid="collapse-all" data-expand="close">Collapse all</button>
+      </div>
+      <div class="prose" id="chapter-notes" data-testid="chapter-notes"><Content /></div>
+
+      <WatchOut chapter={data.number} />
+
+      <section class="card card--dark finish no-print" id="finish" data-testid="finish">
+        <h2>Finished the notes? Test yourself.</h2>
+        <p class="finish__status" id="finish-status" data-testid="finish-status" data-finish-status></p>
+        <p>The <strong>domain quiz</strong> has {mainCount} practice question{mainCount === 1 ? '' : 's'} on Domain {data.number},
+          written in the style of the real exam: scenarios, "select TWO" items and plausible distractors. Every answer is explained when you submit.</p>
+        <div class="finish__actions">
+          <a class="btn" href={url(`quiz/${data.number}/${MAIN_SET.toLowerCase()}`)} data-testid="take-chapter-quiz">Take the domain quiz</a>
+          <a class="btn btn--ghost btn--light" href={url('mock-exam')} data-testid="take-mock-exam">Sit the mock exam</a>
+        </div>
+      </section>
+
+      <nav class="pager no-print" aria-label="Domains">
+        {prev ? <a href={url(`chapters/${prev.number}`)}>← Domain {prev.number}: {prev.title}</a> : <span></span>}
+        {next && <a href={url(`chapters/${next.number}`)}>Domain {next.number}: {next.title} →</a>}
+      </nav>
+    </article>
+  </div>
+</BaseLayout>
+
+<script>
+  import { isChapterRead, markChapterRead, unmarkChapterRead, getSectionsDone, setSectionDone, saveLastVisit } from '../../lib/progress';
+
+  // ---- Highlight the topic being read in the contents menu, and remember it for "Continue where you left off"
+  const chapterNo = Number(document.querySelector<HTMLElement>('[data-chapter-progress]')?.dataset.chapter);
+  const tocLinks = new Map([...document.querySelectorAll<HTMLAnchorElement>('.toc__groups a')].map((a) => [a.hash.slice(1), a]));
+  const spy = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      const h = entry.target as HTMLElement;
+      tocLinks.forEach((a) => a.removeAttribute('aria-current'));
+      const link = tocLinks.get(h.id);
+      if (link) {
+        link.setAttribute('aria-current', 'true');
+        const group = link.closest('details');
+        if (group && !group.open) group.open = true;
+      }
+      saveLastVisit({ chapter: chapterNo, slug: h.id, title: h.textContent ?? '' });
+    }
+  }, { rootMargin: '0px 0px -70% 0px' });
+  document.querySelectorAll('.prose h3[id]').forEach((h) => spy.observe(h));
+
+
+  // The contents panel starts open on desktop (sticky sidebar) and closed on phones (it sits above the notes).
+  const toc = document.querySelector<HTMLDetailsElement>('[data-toc]');
+  const narrow = window.matchMedia('(max-width: 56rem)');
+  const syncToc = () => { if (toc) toc.open = !narrow.matches; }; // open on desktop, closed on phones - either way the reader can toggle it
+  syncToc();
+  narrow.addEventListener('change', syncToc);
+
+  // Open the collapsed section that holds a linked topic, then jump to it.
+  function reveal(id: string) {
+    const target = document.getElementById(decodeURIComponent(id));
+    if (!target) return;
+    for (let d = target.closest('details'); d; d = d.parentElement?.closest('details') ?? null) d.open = true;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  document.addEventListener('click', (e) => {
+    const link = (e.target as Element).closest<HTMLAnchorElement>('a[href^="#"]');
+    if (!link) return;
+    e.preventDefault();
+    const id = link.hash.slice(1);
+    history.pushState(null, '', `#${id}`);
+    reveal(id);
+  });
+  if (location.hash) reveal(location.hash.slice(1));
+  window.addEventListener('hashchange', () => reveal(location.hash.slice(1)));
+
+  document.querySelectorAll<HTMLButtonElement>('[data-expand]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      const open = btn.dataset.expand === 'open';
+      document.querySelectorAll<HTMLDetailsElement>('details.chapter-section, details.chapter-topic').forEach((d) => (d.open = open));
+    }),
+  );
+
+  // ---- Sections the learner marks as done: buttons, header ticks, contents ticks, progress bar, finish status
+  const progressEl = document.querySelector<HTMLElement>('[data-chapter-progress]');
+  if (progressEl) {
+    const chapter = Number(progressEl.dataset.chapter);
+    const total = Number(progressEl.dataset.total);
+    const sections = [...document.querySelectorAll<HTMLDetailsElement>('details.chapter-section')];
+    const numberOf = (d: Element) => d.querySelector('summary h2')?.textContent?.trim().split(/\s+/)[0] ?? '';
+
+    // Keep progress from before this feature: a chapter already marked as read counts as all sections done.
+    if (isChapterRead(chapter) && getSectionsDone(chapter).length === 0) sections.forEach((d) => setSectionDone(chapter, numberOf(d), true));
+
+    const tocGroups = new Map([...document.querySelectorAll<HTMLElement>('.toc__groups > li')].map((li) => [li.querySelector('summary')?.textContent?.trim().split(/\s+/)[0] ?? '', li]));
+    const status = document.querySelector<HTMLElement>('[data-finish-status]');
+
+    const render = () => {
+      const done = new Set(getSectionsDone(chapter));
+      sections.forEach((d) => {
+        const no = numberOf(d), isDone = done.has(no);
+        d.classList.toggle('is-done', isDone);
+        tocGroups.get(no)?.classList.toggle('is-done', isDone);
+        const btn = d.querySelector<HTMLButtonElement>('[data-section-done]');
+        if (btn) {
+          btn.textContent = isDone ? '✓ Done · Undo' : '✓ Mark section as done';
+          btn.setAttribute('aria-pressed', String(isDone));
+          btn.classList.toggle('is-done', isDone);
+        }
+      });
+      const count = sections.filter((d) => done.has(numberOf(d))).length;
+      progressEl.querySelector('[data-progress-count]')!.textContent = String(count);
+      progressEl.querySelector<HTMLElement>('[data-progress-bar]')!.style.width = `${(count / total) * 100}%`;
+      progressEl.classList.toggle('is-complete', count === total);
+      if (status) {
+        const next = sections.find((d) => !done.has(numberOf(d)));
+        status.innerHTML = next
+          ? `${count} of ${total} sections done. <a href="#${next.querySelector('h2')?.id}" data-testid="next-unfinished-section">Continue with ${next.querySelector('h2')?.textContent?.trim()} →</a>`
+          : '✓ All sections done. The notes for this domain are complete.';
+      }
+    };
+
+    sections.forEach((d) => d.querySelector<HTMLButtonElement>('[data-section-done]')?.addEventListener('click', () => {
+      const no = numberOf(d);
+      const nowDone = !getSectionsDone(chapter).includes(no);
+      const all = setSectionDone(chapter, no, nowDone);
+      const complete = sections.every((s) => all.includes(numberOf(s)));
+      if (complete) markChapterRead(chapter); else unmarkChapterRead(chapter);
+      render();
+    }));
+    render();
+  }
+</script>
+
+<style>
+  .summary { max-width: 46rem; font-size: 1.1rem; color: var(--grey); margin: 1rem 0 0; }
+  .downloads { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0 0; }
+  .downloads .btn { padding: 0.55rem 1.1rem; font-size: 0.95rem; }
+  .layout { display: grid; grid-template-columns: 17rem 1fr; gap: 2rem; align-items: start; }
+  .toc { position: sticky; top: 5.5rem; }
+  .toc__panel { max-height: calc(100vh - 7rem); overflow-y: auto; }
+  .toc__panel > summary.eyebrow { list-style: none; cursor: pointer; margin-bottom: 0.25rem; display: flex; justify-content: space-between; align-items: center; }
+  .toc__panel > summary.eyebrow::after { content: '−'; font: 700 1.2rem/1 var(--font-head); color: var(--pink-dark); }
+  .toc__panel:not([open]) > summary.eyebrow { margin-bottom: 0; }
+  .toc__panel:not([open]) > summary.eyebrow::after { content: '+'; }
+  .toc__panel > summary::-webkit-details-marker { display: none; }
+  .toc__groups { list-style: none; padding: 0; margin: 0.5rem 0 1rem; display: grid; gap: 0.25rem; }
+  .toc__groups summary { cursor: pointer; font-weight: 700; font-size: 0.95rem; padding: 0.35rem 0.25rem; border-radius: 6px; list-style: none; display: grid; grid-template-columns: 0.9rem 1fr; gap: 0.35rem; align-items: start; }
+  .toc__groups .chev { width: 0; height: 0; margin-top: 0.42em; border-left: 6px solid var(--pink); border-top: 5px solid transparent; border-bottom: 5px solid transparent; transition: transform 0.15s; transform-origin: 30% 50%; }
+  .toc__groups details[open] > summary .chev { transform: rotate(90deg); }
+  .toc__groups summary::-webkit-details-marker { display: none; }
+  .toc__groups summary:hover { background: var(--pink-tint); }
+  .toc details ul { list-style: none; margin: 0 0 0.5rem; padding: 0 0 0 1.1rem; border-left: 2px solid var(--pink-tint); display: grid; gap: 0.2rem; font-size: 0.875rem; }
+  .toc__groups details a { color: var(--grey); text-decoration: none; display: block; padding: 0.15rem 0.4rem; border-radius: 6px; }
+  .toc__sub { margin: 0.5rem 0 0.1rem; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--grey); }
+  .toc__sub span { color: var(--pink-dark); }
+  .toc__groups details a:hover { color: var(--pink-dark); background: var(--bg); }
+  .toc__exercise::before { content: '?'; display: inline-grid; place-items: center; width: 1.1rem; height: 1.1rem; margin-right: 0.35rem; border-radius: 50%; background: var(--pink); color: #fff; font-size: 0.7rem; font-weight: 700; }
+  .toc__groups details a[aria-current] { color: var(--pink-dark); background: var(--pink-tint); font-weight: 700; }
+
+  .quiz-btn { width: 100%; }
+  .notes { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.5rem; min-width: 0; }
+  .objectives { border-left: 8px solid var(--pink); }
+  .objectives ul { margin: 0; padding-left: 1.25rem; }
+
+  /* Notes generated from the slides */
+  .chapter-progress { margin: 0 0 0.75rem; }
+  .chapter-progress__label { margin: 0 0 0.35rem; font-size: 0.95rem; color: var(--grey); }
+  .chapter-progress__label strong { color: var(--charcoal); }
+  .chapter-progress .bar, .overall .bar { height: 0.55rem; border-radius: 999px; background: var(--line); overflow: hidden; }
+  .chapter-progress .bar span { display: block; height: 100%; width: 0; background: var(--pink); border-radius: 999px; transition: width 0.3s ease; }
+  .chapter-progress.is-complete .bar span { background: var(--success); }
+
+  /* "Mark section as done" button at the end of each section, and the ticks it adds */
+  .prose :global(.section-done) { display: flex; justify-content: flex-end; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px dashed var(--line); }
+  .prose :global(.section-done__btn) { font: inherit; font-weight: 700; padding: 0.55rem 1.1rem; border-radius: 999px; border: 2px solid var(--success); background: var(--surface); color: #17663f; cursor: pointer; }
+  .prose :global(.section-done__btn:hover) { background: var(--success-tint); }
+  .prose :global(.section-done__btn.is-done) { background: var(--success-tint); border-color: transparent; }
+  .prose :global(details.chapter-section.is-done > summary h2::after) { content: '✓ Done'; margin-left: 0.75rem; padding: 0.1rem 0.55rem; border-radius: 999px; background: var(--success); color: #fff; font: 700 0.75rem var(--font-body); vertical-align: middle; }
+  .toc__groups > li.is-done > details > summary > span:last-child::after { content: '\00a0✓'; color: #17663f; font-weight: 700; }
+  .finish__status { margin: 0 0 0.75rem; color: #ddd; }
+  .finish__status :global(a) { color: var(--pink-soft); font-weight: 700; }
+
+  .section-controls { display: flex; gap: 1rem; justify-content: flex-end; font-size: 0.9rem; }
+  .link { background: none; border: 0; color: var(--pink-dark); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; padding: 0; }
+  .prose :global(details.chapter-section) { margin: 0 0 1rem; }
+  .prose :global(details.chapter-section > summary) { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 1rem; padding: 0.9rem 1.25rem; background: var(--charcoal); color: #fff; border-radius: 12px; border-left: 8px solid var(--pink); }
+  .prose :global(details.chapter-section > summary::-webkit-details-marker) { display: none; }
+  .prose :global(details.chapter-section > summary::after) { content: '+'; margin-left: auto; font: 700 1.6rem/1 var(--font-head); color: var(--pink-soft); }
+  .prose :global(details.chapter-section[open] > summary::after) { content: '−'; }
+  .prose :global(details.chapter-section > summary h2) { margin: 0; font-size: 1.4rem; color: #fff; }
+  .prose :global(details.chapter-section > summary:hover) { background: #3a3637; }
+  .prose :global(.section-intro) { margin: 0.25rem 0 1.25rem; padding-bottom: 1rem; border-bottom: 1px dashed var(--line); }
+  .prose :global(.chapter-section__body) { padding: 0.5rem 0.25rem 1rem; }
+
+  /* Topics inside a section */
+  .prose :global(details.chapter-topic) { margin: 0.5rem 0 0.25rem; }
+  .prose :global(details.chapter-topic > summary) {
+    list-style: none; cursor: pointer; display: flex; align-items: center; gap: 0.75rem;
+    padding: 0.4rem 0.6rem; margin: 1.25rem -0.6rem 0.5rem; border-radius: 10px;
+  }
+  .prose :global(details.chapter-topic > summary::-webkit-details-marker) { display: none; }
+  .prose :global(details.chapter-topic > summary:hover),
+  .prose :global(details.chapter-topic[open] > summary) { background: var(--pink-tint); }
+  .prose :global(details.chapter-topic > summary h3) { margin: 0; }
+  .prose :global(details.chapter-topic > summary::after) {
+    content: '−'; margin-left: auto; flex: none; display: grid; place-items: center; width: 1.8rem; height: 1.8rem;
+    border-radius: 50%; border: 2px solid var(--line); font: 700 1.1rem/1 var(--font-body); color: var(--pink-dark);
+  }
+  .prose :global(details.chapter-topic:not([open]) > summary::after) { content: '+'; }
+  .prose :global(details.chapter-topic:not([open]) > summary) { background: var(--surface); box-shadow: var(--shadow); margin: 0.5rem 0; padding: 0.7rem 1rem; }
+  .prose :global(details.chapter-topic:not([open]) > summary h3) { font-size: 1.15rem; }
+  .prose :global(.chapter-topic__body) { padding-bottom: 0.5rem; }
+
+  /* Wayfinding inside a section */
+  .prose :global(.topic-group) { margin: 1.5rem 0 0.25rem; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--grey); display: flex; gap: 0.5rem; align-items: center; }
+  .prose :global(.topic-group span) { background: var(--charcoal); color: #fff; border-radius: 999px; padding: 0.1rem 0.55rem; letter-spacing: 0.02em; }
+  .prose :global(.topic-group::after) { content: ''; flex: 1; height: 1px; background: var(--line); }
+  .prose :global(.topic-ref) { flex: none; font-size: 0.75rem; font-weight: 700; color: var(--grey); background: var(--bg); border-radius: 999px; padding: 0.1rem 0.55rem; }
+  .prose :global(.chapter-topic--exercise > summary h3::before) { content: '?'; display: inline-grid; place-items: center; width: 1.4rem; height: 1.4rem; margin-right: 0.5rem; border-radius: 50%; background: var(--pink); color: #fff; font: 700 0.85rem/1 var(--font-body); vertical-align: 0.15em; }
+  .prose :global(h3) { margin: 0; }
+  .prose :global(h4) { font: 700 0.8rem var(--font-body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--pink-dark); margin: 1rem 0 0.25rem; }
+  .prose :global(ul) { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 1rem 1.25rem 1rem 2.25rem; margin: 0.5rem 0; }
+  .prose :global(li) { margin: 0.3rem 0; }
+
+  /* Coverage formula: <div class="formula"> label / expression / note </div> */
+  .prose :global(.formula) { display: grid; gap: 0.2rem; margin: 0.75rem 0; padding: 0.8rem 1.1rem; background: var(--charcoal); color: #fff; border-radius: 12px; border-left: 6px solid var(--pink); }
+  .prose :global(.formula__label) { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pink-soft); }
+  .prose :global(.formula__expr) { font: 700 1.1rem var(--font-head); }
+  .prose :global(.formula__note) { font-size: 0.9rem; color: #ddd; }
+  .prose :global(.label-syntax) { margin: 0.5rem 0 1rem; }
+  .prose :global(.label-syntax code) { font-size: 1.05rem; padding: 0.35rem 0.75rem; border-radius: 8px; background: var(--surface); box-shadow: var(--shadow); color: var(--pink-dark); }
+
+  /* "Examined at K3" link to the exam method */
+  .prose :global(.k3-link) { display: inline-block; margin: 0 0 0.75rem; padding: 0.35rem 0.85rem; border-radius: 999px; background: #e8f0fb; color: #174a7a; font-size: 0.9rem; }
+  .prose :global(.k3-link a) { color: #174a7a; font-weight: 700; }
+
+  /* Warning callout: <div class="callout callout--warn"> … </div> */
+  .prose :global(.callout) { margin: 1rem 0; padding: 0.9rem 1.25rem; border-radius: 0 12px 12px 0; }
+  .prose :global(.callout p) { margin: 0; }
+  .prose :global(.callout--remember) { background: var(--pink-tint); border-left: 6px solid var(--pink); }
+  .prose :global(.callout--exam) { background: #e8f0fb; border-left: 6px solid #185fa5; }
+  .prose :global(.callout--warn) { background: #fff4d6; border-left: 6px solid #b58a00; }
+
+  /* Callouts written as Markdown blockquotes ("> **The response:** …") */
+  .prose :global(blockquote) { margin: 1rem 0; padding: 0.9rem 1.25rem; background: var(--success-tint); border-left: 6px solid var(--success); border-radius: 0 12px 12px 0; }
+  .prose :global(blockquote p) { margin: 0; }
+  .prose :global(blockquote p + p) { margin-top: 0.4rem; }
+
+
+  /* Component lists keep their own styling (not the generic white list box) */
+  .prose :global(ul.icon-cards), .prose :global(.icon-card ul) { background: none; box-shadow: none; border-radius: 0; }
+  .prose :global(ul.icon-cards) { padding: 0; }
+  .prose :global(.icon-card ul) { padding: 0 0 0 1.1rem; margin: 0.1rem 0 0; }
+
+  /* Lists reshaped by rehype-tidy-lists.mjs: lead-in paragraphs, tag rows and key-point cards */
+  .prose :global(p.lead-in) { margin: 0.5rem 0 0.75rem; font-size: 1.05rem; }
+  .prose :global(ul.tags) {
+    list-style: none; background: none; box-shadow: none; padding: 0; margin: 0.5rem 0 1rem;
+    display: flex; flex-wrap: wrap; gap: 0.5rem;
+  }
+  .prose :global(ul.tags li) {
+    margin: 0; padding: 0.4rem 0.9rem; border-radius: 999px; background: var(--surface);
+    border: 2px solid var(--pink-tint); font-weight: 600; font-size: 0.95rem; box-shadow: var(--shadow);
+  }
+  .prose :global(ul.tags li)::marker { content: none; }
+
+  /* Key-point lists rendered as cards */
+  .prose :global(ul.cards) {
+    list-style: none; background: none; box-shadow: none; padding: 0; margin: 0.75rem 0;
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 0.75rem;
+  }
+  .prose :global(ul.cards > .card-item) { flex: 0 1 calc((100% - (var(--cols, 3) - 1) * 0.75rem) / var(--cols, 3)); }
+
+  /* Pros / cons side by side */
+  .prose :global(ul.versus > .card-item:first-child) { border-top-color: var(--success); background: var(--success-tint); }
+  .prose :global(ul.versus > .card-item:last-child) { border-top-color: var(--pink); background: var(--pink-tint); }
+  .prose :global(ul.versus .card-item__title) { font-size: 1.15rem; }
+
+  /* Long lists: a compact two-column definition list */
+  .prose :global(ul.deflist) { list-style: none; padding: 0.5rem 1.25rem; display: grid; gap: 0; }
+  .prose :global(ul.deflist > .card-item) {
+    display: grid; grid-template-columns: minmax(9rem, 14rem) 1fr; gap: 1rem; margin: 0; padding: 0.65rem 0;
+    background: none; box-shadow: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 0;
+  }
+  .prose :global(ul.deflist > .card-item:last-child) { border-bottom: 0; }
+  .prose :global(ul.deflist .card-item__title) { color: var(--pink-dark); }
+  .prose :global(.card-item) {
+    margin: 0; display: flex; flex-direction: column; gap: 0.35rem;
+    background: var(--surface); border-radius: 12px; box-shadow: var(--shadow);
+    padding: 0.9rem 1rem 1rem; border-top: 4px solid var(--pink);
+  }
+  .prose :global(.card-item:nth-child(even)) { border-top-color: var(--charcoal); }
+  .prose :global(.card-item__title) { font: 700 1.05rem/1.3 var(--font-head); color: var(--charcoal); }
+  .prose :global(.card-item__body) { font-size: 0.95rem; color: var(--grey); line-height: 1.5; }
+  .prose :global(li)::marker { color: var(--pink); }
+
+  .finish p { color: #ddd; }
+  .finish__actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0; }
+  .btn--light { color: #fff; border-color: #fff; }
+  .btn--light:hover { background: #fff; color: var(--charcoal); }
+  .practice { border-top: 1px solid #555; padding-top: 1rem; }
+  .practice p { margin: 0 0 0.5rem; }
+  .practice__link { display: inline-block; padding: 0.5rem 1rem; border: 2px solid #666; border-radius: 999px; color: #fff; font-weight: 700; text-decoration: none; }
+  .practice__link:hover { border-color: var(--pink); background: var(--pink); }
+  .practice a { display: inline-flex; gap: 0.5rem; align-items: center; padding: 0.45rem 0.9rem; border: 2px solid #666; border-radius: 999px; color: #fff; font-weight: 700; text-decoration: none; }
+  .practice a:hover { border-color: var(--pink); background: var(--pink); }
+  .practice a span { font-weight: 600; color: var(--pink-soft); font-size: 0.85rem; }
+  .practice a:hover span { color: #fff; }
+  .pager { display: flex; justify-content: space-between; gap: 1rem; font-weight: 700; }
+  @media (max-width: 56rem) {
+    .layout { grid-template-columns: minmax(0, 1fr); gap: 1.25rem; }
+    .toc { position: static; }
+    .toc__panel { max-height: none; }
+    .toc__panel > summary.eyebrow { font-size: 0.9rem; }
+    .section-controls { justify-content: flex-start; }
+    .prose :global(details.chapter-section > summary) { padding: 0.75rem 1rem; }
+    .prose :global(details.chapter-section > summary h2) { font-size: 1.15rem; }
+    .pager { flex-direction: column; }
+    .prose :global(ul.cards > .card-item) { flex-basis: 100%; }
+    .prose :global(ul.deflist > .card-item) { grid-template-columns: 1fr; gap: 0.15rem; }
+  }
+</style>

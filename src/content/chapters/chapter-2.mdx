@@ -1,0 +1,269 @@
+---
+number: 2
+title: "Model Selection and Optimization"
+weight: 16
+minutes: 75
+summary: "Picking the right Claude for each job and keeping it affordable: the model lineup, effort and reasoning, prompt caching, the Batch API and token budgets."
+objectives:
+  - "Choose a model tier from cost, latency and capability, and justify moving up or down with an eval"
+  - "Route traffic between models by task signal"
+  - "Explain prompt caching: what it caches, what it costs, what breaks it, and how to prove it works"
+  - "Decide when the Batch API fits, and when it doesn't"
+  - "Estimate and control token usage, including images and long contexts"
+---
+import Gotcha from '../../components/Gotcha.astro';
+import SectionSummary from '../../components/SectionSummary.astro';
+import CodeSwitch from '../../components/CodeSwitch.astro';
+import Compare from '../../components/diagrams/Compare.astro';
+import Flow from '../../components/diagrams/Flow.astro';
+import WhenThen from '../../components/WhenThen.astro';
+import MythReality from '../../components/MythReality.astro';
+import Exercise from '../../components/Exercise.astro';
+import Resource from '../../components/Resource.astro';
+
+## 2.1 Choosing a model
+
+### In plain English
+
+Picking which Claude to use, and not wasting money. Bigger models are smarter but cost more and respond more slowly. Sorting emails into "billing" or "tech" is easy, so use Haiku; reviewing a tricky contract is hard, so use a bigger model. The two big money-savers are **caching** (re-sending the same long document is far cheaper the second time) and **batching** (send a pile of jobs to run overnight at half price).
+
+### The current lineup
+
+All four current models have a 1M-token context window, 128K max output and adaptive thinking.
+
+| Model | API ID | Input / output per 1M tokens | Default effort | Speed | Best for |
+|---|---|---|---|---|---|
+| Fable 5.2 | `claude-fable-5-2` | $8 / $40 | high | Moderate | Hardest reasoning, long-horizon agents |
+| Opus 5.5 | `claude-opus-5-5` | $4 / $20 | medium | Moderate | Long-running agentic coding and knowledge work |
+| Sonnet 5.5 | `claude-sonnet-5-5` | $2 / $10 | high | Fast | The balanced default |
+| Haiku 5.5 | `claude-haiku-5-5` | from $0.10 / $0.50 | medium | Fastest | Classification, extraction, routing, high volume |
+
+Prices and IDs change: check the [models overview](https://platform.claude.com/docs/en/models-overview) when you build. Use the Models API (`GET /v1/models`) to read limits and capabilities in code, and read its `line` field rather than parsing the ID.
+
+### The course rule: let the eval decide
+
+<Flow caption="Model choice is an eval-gated decision, in both directions" steps={[
+  { title: 'Start on Sonnet', sub: 'balanced default' },
+  { title: 'Run the eval', sub: 'on your real cases' },
+  { title: 'Misses the bar?', sub: 'step UP a tier' },
+  { title: 'Cheaper tier holds?', sub: 'step DOWN to Haiku' },
+]} />
+
+The current docs page recommends Opus 5.5 for most workloads, while your course says start with Sonnet. **For the exam, use the course rule:** start on Sonnet and move only on a measured score.
+
+### Routing: a default plus an override
+
+You don't have to use one model for everything. The common production pattern sends most traffic to a balanced default and routes specific requests up or down by task type, input length or a difficulty classification.
+
+- **Handles well** - matching each workload to the cheapest model that meets its quality bar
+- **Costs** - a classification step and a second model path to maintain
+- **Skip it when** - traffic is uniform at one quality bar: pin one model
+
+<Gotcha
+  title={"The classifier that cost more than the product"}
+  scenario={"A prototype used the most capable model for everything, including tagging 2 million support tickets a month."}
+  gotcha={"The bill scales with volume. Haiku would have held the quality bar on this simple task at a small fraction of the cost."}
+  fix={"Start on the default, run the eval on real tickets, and route bulk classification to the smallest model that passes."}
+/>
+
+<SectionSummary points={[
+  "Four tiers trade capability for cost and speed: Fable, Opus, Sonnet, Haiku.",
+  "Course rule: start on Sonnet, step up when an eval shows a miss, step down to Haiku when an eval shows the drop is acceptable.",
+  "Route mixed traffic: a default model plus an override by task type, length or difficulty.",
+  "Check IDs and prices in the docs (or the Models API) at build time: they change.",
+]} />
+
+## 2.2 Reasoning and effort
+
+### Two separate decisions
+
+Choosing the model and choosing how much it reasons are set separately. Current models use **adaptive thinking**: they decide when to think and how much. You tune depth with `effort` (low → max) rather than a fixed token budget. Thinking content is omitted by default on the newest models; ask for a summarised display when you need to show it.
+
+<Compare middle="vs" caption="Where reasoning earns its cost" columns={[
+  { title: 'Worth it', sub: 'raise effort', points: ['Multi-step debugging', 'Planning an agent task', 'Complex analysis or maths', 'Ambiguous requirements'] },
+  { title: 'Wasted', sub: 'lower effort', points: ['Lookups', 'Classification and routing', 'Simple extraction', 'Reformatting'] },
+]} />
+
+More thinking means more output tokens, so more cost and latency. In a multi-turn conversation, pass thinking blocks back unchanged (Domain 4).
+
+<SectionSummary points={[
+  "Choosing a model and choosing how much it reasons are separate decisions.",
+  "Current models think adaptively; tune depth with `effort`, not a token budget.",
+  "Spend reasoning on multi-step problems, not lookups, classification or reformatting: thinking tokens are output tokens.",
+]} />
+
+## 2.3 Prompt caching
+
+### How it works
+
+Prompt caching stores the processing of a stable **prefix** of your request so the next request with the same prefix reads it back instead of recomputing it. The prefix is built in a fixed order: **tools → system → messages**, up to and including the block marked with `cache_control`.
+
+Think of a barista who remembers your usual order: the first visit takes longer to set up, and every repeat is quick and cheap.
+
+- **Automatic** - one top-level cache_control; the breakpoint moves forward as the conversation grows · best for multi-turn chat
+- **Explicit** - cache_control on specific blocks, up to 4 breakpoints · best when sections change at different rates (tools rarely, RAG context daily)
+
+### What it costs
+
+| Operation | Price vs base input |
+|---|---|
+| Cache write, 5-minute TTL (default) | 1.25× |
+| Cache write, 1-hour TTL | 2× |
+| Cache read | 0.1× on most models; **0.05× on Opus and Sonnet 5.5**; **0.025× on Fable** |
+
+Writes cost **more** than normal input, so caching pays only when reads outnumber writes. The 5-minute lifetime refreshes free on every hit. These multipliers stack with the Batch API discount. The minimum cacheable prefix is 512 tokens on the 5.x models; shorter prompts silently don't cache.
+
+### What breaks the cache
+
+The prefix must be **byte-identical**. A change at one level invalidates that level and everything after it.
+
+<WhenThen whenLabel="If you change…" thenLabel="…this is invalidated" rows={[
+  { when: 'tool definitions', then: 'Everything: tools, system and messages' },
+  { when: 'web search or citations on/off', then: 'System and messages' },
+  { when: 'tool_choice, or add/remove images', then: 'Messages only' },
+  { when: 'a timestamp or user name near the top', then: 'Everything after it, on every call (move it below the last breakpoint)' },
+]} />
+
+### Proving it works
+
+Read the usage fields: `total input = cache_read_input_tokens + cache_creation_input_tokens + input_tokens`. Note that `input_tokens` counts only the uncached tokens **after** the last breakpoint. If both cache fields are 0, the prefix was too short or not identical.
+
+<CodeSwitch>
+
+```java
+MessageCreateParams params = MessageCreateParams.builder()
+    .model(Model.CLAUDE_SONNET_5_5)
+    .maxTokens(1024L)
+    .systemOfTextBlockParams(List.of(
+        TextBlockParam.builder()
+            .text(LONG_POLICY_DOCUMENT)                               // stable, reused prefix
+            .cacheControl(CacheControlEphemeral.builder().build())    // 5-minute TTL
+            .build()))
+    .addUserMessage(userQuestion)                                     // changes every call
+    .build();
+
+Usage u = client.messages().create(params).usage();
+long read  = u.cacheReadInputTokens().orElse(0L);
+long write = u.cacheCreationInputTokens().orElse(0L);
+// first call: write > 0. Repeat within 5 minutes: read > 0. Both 0: not cached.
+```
+
+```python
+msg = client.messages.create(
+    model="claude-sonnet-5-5",
+    max_tokens=1024,
+    system=[{
+        "type": "text",
+        "text": LONG_POLICY_DOCUMENT,                    # stable, reused prefix
+        "cache_control": {"type": "ephemeral"},         # 5-minute TTL
+    }],
+    messages=[{"role": "user", "content": user_question}],   # changes every call
+)
+
+read = msg.usage.cache_read_input_tokens or 0
+write = msg.usage.cache_creation_input_tokens or 0
+# first call: write > 0. Repeat within 5 minutes: read > 0. Both 0: not cached.
+```
+
+</CodeSwitch>
+
+<Exercise title="Why is caching not working?" id="exercise-cache-miss">
+
+Your system prompt is 6,000 tokens of policy text, marked with `cache_control`. It starts with the line `Today is 2026-11-20 14:03:22. The user is Priya.` Every call shows `cache_read_input_tokens: 0`. Why, and how do you fix it?
+
+<div slot="answer">
+
+The first line changes on every call, so the prefix is never identical and every call writes a new cache entry (paying 1.25× instead of 0.1×). Move the stable policy text first, put the breakpoint after it, and put the date and user name in a later block or in the user message.
+
+</div>
+</Exercise>
+
+<Gotcha
+  title={"The cache that never hit"}
+  scenario={"A 6,000-token policy prompt is marked with `cache_control`. Its first line is `Today is <timestamp>. User: <name>`."}
+  gotcha={"The prefix changes on every call, so every request pays the 1.25× WRITE price and `cache_read_input_tokens` stays 0. Caching made it MORE expensive."}
+  fix={"Put stable content first and variable content after the last breakpoint, then check the usage fields to prove hits."}
+/>
+
+<SectionSummary points={[
+  "Caching reuses the processed prefix tools → system → messages, up to a `cache_control` breakpoint (automatic, or up to 4 explicit).",
+  "Writes cost 1.25× (5 min) or 2× (1 h); reads cost a fraction (0.1×, 0.05× on Opus/Sonnet 5.5). It pays only when reads outnumber writes.",
+  "The prefix must be byte-identical: changing tools invalidates everything; put variable content after the last breakpoint.",
+  "Prove it with `cache_read_input_tokens` and `cache_creation_input_tokens`; both 0 means no caching happened.",
+]} />
+
+## 2.4 Batch processing
+
+### The Message Batches API
+
+For work that doesn't need an answer now (overnight classification, dataset backfills, eval runs, scheduled reports), the Message Batches API processes requests asynchronously at **50% off** input and output.
+
+<Flow caption="A batch job: submit, poll, collect" steps={[
+  { title: 'Submit', sub: 'up to 100,000 requests or 256 MB' },
+  { title: 'Get a batch ID', sub: 'returned immediately' },
+  { title: 'Poll for status', sub: 'often < 1 h, up to 24 h' },
+  { title: 'Download results', sub: 'one per request' },
+]} />
+
+<MythReality rows={[
+  { myth: 'Batch gives faster answers for big jobs', reality: 'It trades latency for cost: timing is non-deterministic, up to 24 hours. Never use it when a user is waiting' },
+  { myth: 'Batch results are lower quality', reality: 'Same models and quality; only the scheduling and price differ' },
+  { myth: 'A loop of synchronous calls is a batch job', reality: '"Serialisation with extra steps": you pay full price and still block. Use the Batches API, or the async client for concurrency' },
+]} />
+
+For high volume that **does** need prompt answers, use the async client (`client.async()`, returning `CompletableFuture<Message>`) for concurrency without blocking threads.
+
+<Gotcha
+  title={"The batch job a user was waiting for"}
+  scenario={"To save 50%, a team moves its \"summarise this document\" button onto the Batch API."}
+  gotcha={"Results arrive anywhere from minutes to hours later. Users click the button, see nothing, and file bugs."}
+  fix={"Batch is for work nobody is waiting on. For interactive volume use the async client for concurrency, and cache shared prefixes to cut cost."}
+/>
+
+<SectionSummary points={[
+  "The Batch API halves token prices in exchange for up to 24 hours' turnaround (up to 100,000 requests or 256 MB).",
+  "Same models and quality: only scheduling and price differ. It stacks with caching.",
+  "Never use it when a user is waiting; for prompt high-volume work use the async client instead.",
+]} />
+
+## 2.5 Token budgets
+
+### Everything is tokens
+
+The context window holds the system prompt, the whole conversation, injected documents, tool definitions, every tool result and the model's output. Two edge behaviours: an input larger than the window is **rejected** with a validation error; a reply that runs out of room **stops early** with a stop reason telling you so.
+
+In development the window rarely fills because test inputs are short. In production, longer inputs and more turns fill it fast, so measure real traffic.
+
+- **Count before sending** - the token counting endpoint measures a request before you send it, so you can gate or trim instead of failing
+- **Images cost tokens** - roughly (width × height) / 784: a 1,000 × 1,000 px image ≈ 1,296 tokens
+- **Tool definitions cost tokens** - on every call, so register only the tools the task needs
+
+### Cost levers, in the order to reach for them
+
+1. **Right-size the model**, with routing for mixed traffic.
+2. **Cache** stable prefixes: long system prompts, tool sets, reference documents.
+3. **Batch** anything that can wait.
+4. **Tune effort** down for simple work.
+5. **Shrink the context**: fewer tools, trimmed history, compaction (Domain 4).
+
+### Where this is in your course notes
+
+- **MSO Foundations §02–04** - tokens, context window, sampling, model tiers, reasoning modes, prompting modes
+- **Production Engineering, Evals & Security §05** - model selection in production, routing, caching economics, Batches
+
+<Resource kind="docs" href="https://platform.claude.com/docs/en/models-overview" title="Models overview" text="Current models, IDs, prices, context windows and default effort." />
+<Resource kind="docs" href="https://platform.claude.com/docs/en/build-with-claude/prompt-caching" title="Prompt caching" text="Breakpoints, TTLs, multipliers, minimum lengths and what invalidates the cache." />
+
+<Gotcha
+  title={"Fine in dev, over the limit in prod"}
+  scenario={"An agent was tested with short tickets and three-turn chats. In production, customers paste whole email threads and conversations run to 60 turns."}
+  gotcha={"Requests start failing, or replies stop early, when the context fills. Nobody had measured token usage on production-sized inputs."}
+  fix={"Count tokens before sending, trim or compact history, and load-test with real input sizes."}
+/>
+
+<SectionSummary points={[
+  "Everything in a request is tokens: history, documents, tool definitions, tool results, images (≈ width × height / 784).",
+  "Oversized input is rejected; a reply that runs out of room stops early.",
+  "Count tokens before sending, and measure with production-sized inputs.",
+  "Levers in order: right-size the model, cache, batch, lower effort, shrink the context.",
+]} />

@@ -1,0 +1,63 @@
+---
+/**
+ * A code example in Java and Python, with a tab to switch between them.
+ * Put one ```java fence and one ```python fence inside. The choice is remembered across pages.
+ *
+ *   <CodeSwitch>
+ *   ```java
+ *   ...
+ *   ```
+ *   ```python
+ *   ...
+ *   ```
+ *   </CodeSwitch>
+ */
+interface Props { title?: string; }
+const { title } = Astro.props;
+---
+<div class="code-switch" data-code-switch data-active="java">
+  <div class="code-switch__bar no-print">
+    {title && <span class="code-switch__title">{title}</span>}
+    <div class="code-switch__tabs" role="group" aria-label="Code language">
+      <button type="button" data-lang="java" aria-pressed="true" data-testid="code-tab-java">Java</button>
+      <button type="button" data-lang="python" aria-pressed="false" data-testid="code-tab-python">Python</button>
+    </div>
+  </div>
+  <slot />
+</div>
+
+<script>
+  const KEY = 'ccdvf-code-lang';
+  const read = () => { try { return localStorage.getItem(KEY) ?? 'java'; } catch { return 'java'; } };
+  const apply = (lang: string) => {
+    document.querySelectorAll<HTMLElement>('[data-code-switch]').forEach((box) => {
+      box.dataset.active = lang;
+      box.querySelectorAll<HTMLButtonElement>('[data-lang]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.lang === lang)));
+    });
+  };
+  apply(read());
+  document.addEventListener('click', (e) => {
+    const btn = (e.target as Element).closest<HTMLButtonElement>('[data-code-switch] [data-lang]');
+    if (!btn) return;
+    const lang = btn.dataset.lang!;
+    const box = btn.closest<HTMLElement>('[data-code-switch]')!;
+    const before = box.getBoundingClientRect().top;
+    try { localStorage.setItem(KEY, lang); } catch { /* storage blocked: still switch this page */ }
+    apply(lang);
+    window.scrollBy(0, box.getBoundingClientRect().top - before); // keep the clicked block where it was
+  });
+</script>
+
+<style>
+  .code-switch { margin: 1rem 0; }
+  .code-switch__bar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; margin-bottom: -0.35rem; }
+  .code-switch__title { font-weight: 700; font-size: 0.9rem; color: var(--grey); }
+  .code-switch__tabs { display: inline-flex; margin-left: auto; background: var(--charcoal); border-radius: 10px 10px 0 0; padding: 0.25rem 0.25rem 0; gap: 0.2rem; }
+  .code-switch__tabs button { border: 0; background: none; color: #bbb; font: 700 0.85rem var(--font-body); padding: 0.35rem 0.9rem; border-radius: 8px 8px 0 0; cursor: pointer; }
+  .code-switch__tabs button[aria-pressed='true'] { background: var(--pink); color: #fff; }
+  .code-switch__tabs button:hover:not([aria-pressed='true']) { color: #fff; }
+  .code-switch :global(pre.astro-code) { margin-top: 0; border-top-right-radius: 0; }
+  .code-switch[data-active='java'] :global(pre[data-language='python']),
+  .code-switch[data-active='python'] :global(pre[data-language='java']),
+  .code-switch[data-active='python'] :global(pre[data-language='xml']) { display: none; }
+</style>

@@ -1,0 +1,203 @@
+---
+import { Code } from 'astro:components';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHead from '../components/PageHead.astro';
+import CodeSwitch from '../components/CodeSwitch.astro';
+import { getChapters } from '../lib/data';
+import { url, QUESTIONS_PER_CHAPTER } from '../lib/site';
+
+const chapters = await getChapters();
+
+const different = [
+  ['🎲', 'Non-deterministic', 'Same input, different (but equivalent) answers. Exact-match assertions break, so you test properties and meaning, as you would a flaky UI with fuzzy assertions.'],
+  ['🔁', 'Stateless', 'Like plain HTTP: no session on the server. Your app owns the conversation history and resends it on every call.'],
+  ['🧮', 'Metered by tokens', 'You pay for input (everything you send, history and tool definitions included) and output (what it writes, about 5× pricier). Cost and latency grow with payload size.'],
+  ['📏', 'Hard size limit', 'The context window caps input plus output for one request: 1M tokens on current models.'],
+  ['💉', 'Data can act as code', 'Text the model reads can steer it, like unparameterised SQL. That is prompt injection, and the fix is structural, never a polite instruction.'],
+  ['🛑', 'It never executes', 'It returns requests for actions. Your code decides whether to run them, and holds the real controls.'],
+];
+
+const map = [
+  ['Messages API (POST /v1/messages)', 'Stateless JSON REST endpoint with an API-key header', 1],
+  ['Java SDK (com.anthropic:anthropic-java)', 'Typed OkHttp client with builders and built-in retries', 1],
+  ['stop_reason', 'An exit code you must branch on: 200 OK does not mean a complete answer', 1],
+  ['429 / 529 + retry-after', 'Throttling vs upstream overload: backoff with jitter', 1],
+  ['Streaming (SSE events)', 'A reactive stream: assemble chunks, commit only on completion', 1],
+  ['Model tiers (Haiku → Fable)', 'Instance sizing: right-size per workload, route by job type', 2],
+  ['max_tokens', 'A LIMIT on reply size: hitting it truncates silently, it does not throw', 2],
+  ['Prompt caching', 'Memoising an identical request prefix: any byte change is a miss', 2],
+  ['Batch API (50% off, ≤ 24 h)', 'A nightly batch job instead of a real-time call', 2],
+  ['Workflows (chain, route, parallel)', 'A pipeline DAG you define, as in Airflow', 3],
+  ['Agent loop', 'A while loop / state machine until a terminal state, with an iteration cap', 3],
+  ['System prompt + few-shot examples', 'The spec, plus fixtures showing the expected output shape', 4],
+  ['Structured outputs / strict tools', 'Schema validation at the boundary (JSON Schema)', 4],
+  ['Context management', 'Managing a bounded buffer: trim, summarise, offload', 4],
+  ['RAG', 'An indexing pipeline: chunk → embed → store → query → assemble', 4],
+  ['Tool use', 'Command pattern: the model returns a command, your code executes it', 5],
+  ['MCP', 'A driver standard like JDBC: one server, any compatible client', 5],
+  ['Prompt injection', 'SQL injection / XSS: untrusted input treated as instructions', 6],
+  ['Least privilege, secrets in a vault', 'Exactly what you do for any service account', 6],
+  ['Evals + LLM-as-judge', 'A regression suite on a golden dataset; the judge is a fuzzy assertion you calibrate', 7],
+  ['CLAUDE.md / hooks', 'A CONTRIBUTING.md for the agent / git hooks and CI gates', 8],
+];
+
+const firstCall = `AnthropicClient client = AnthropicOkHttpClient.fromEnv();   // reads ANTHROPIC_API_KEY
+
+Message reply = client.messages().create(MessageCreateParams.builder()
+    .model(Model.CLAUDE_HAIKU_5_5)       // which Claude: cheap and fast
+    .maxTokens(200L)                     // cap on the reply length
+    .system("You are a terse tutor.")    // standing instructions
+    .addUserMessage("Explain idempotency in one sentence.")
+    .build());
+
+reply.content().forEach(b -> b.text().ifPresent(t -> System.out.println(t.text())));
+System.out.println(reply.stopReason() + " | in=" + reply.usage().inputTokens()
+                   + " out=" + reply.usage().outputTokens());`;
+
+const firstCallPy = `import anthropic
+
+client = anthropic.Anthropic()            # reads ANTHROPIC_API_KEY
+
+reply = client.messages.create(
+    model="claude-haiku-5-5",             # which Claude: cheap and fast
+    max_tokens=200,                       # cap on the reply length
+    system="You are a terse tutor.",      # standing instructions
+    messages=[{"role": "user", "content": "Explain idempotency in one sentence."}],
+)
+
+print("".join(b.text for b in reply.content if b.type == "text"))
+print(reply.stop_reason, "| in =", reply.usage.input_tokens, "out =", reply.usage.output_tokens)`;
+
+const pom = `<dependency>
+  <groupId>com.anthropic</groupId>
+  <artifactId>anthropic-java</artifactId>
+  <version>3.11.0</version>
+</dependency>`;
+---
+<BaseLayout title="Start here" description="Claude for a Java, test-automation and data engineer: what's different about an LLM, a concept map, the exam at a glance and your first call.">
+  <PageHead eyebrow="Start here" title="Claude for engineers" />
+
+  <div class="container intro">
+    <section class="lead card">
+      <h2>You already know the engineering</h2>
+      <p>What's new is the component in the middle: a model whose output is <strong>probabilistic, metered and steerable by text</strong>.
+        Almost every exam topic is a familiar engineering idea applied to that component, so learn it as a mapping onto what you
+        already do in Java, test automation, data engineering and business analysis.</p>
+    </section>
+
+    <section>
+      <h2 class="dot">The exam at a glance</h2>
+      <div class="facts">
+        <div class="fact card card--dark"><span class="fact__big">53</span><span>multiple-choice and multiple-response questions (each says how many to pick)</span></div>
+        <div class="fact card card--dark"><span class="fact__big">120</span><span>minutes, about 2 min 15 s per question</span></div>
+        <div class="fact card fact--pink"><span class="fact__big">720</span><span>out of 1,000 to pass (scaled score)</span></div>
+        <div class="fact card card--dark"><span class="fact__big">8</span><span>domains, weighted very unevenly (below)</span></div>
+      </div>
+      <div class="table-wrap weights">
+        <table>
+          <thead><tr><th>Domain</th><th>Weight</th><th>≈ Questions</th><th></th></tr></thead>
+          <tbody>
+            {chapters.map(({ data }) => (
+              <tr>
+                <td><a href={url(`chapters/${data.number}`)}><strong>{data.number}.</strong> {data.title}</a></td>
+                <td>{data.weight}%</td>
+                <td>{QUESTIONS_PER_CHAPTER[data.number]}</td>
+                <td class="weights__bar"><span style={`width:${(data.weight / 33) * 100}%`}></span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p class="muted small">Domains 1–3 are about two-thirds of the exam: spend about two-thirds of your time there.</p>
+    </section>
+
+    <section>
+      <h2 class="dot">What's genuinely different about an LLM dependency</h2>
+      <div class="diff">
+        {different.map(([icon, title, text]) => (
+          <div class="card diff__card"><span class="diff__icon" aria-hidden="true">{icon}</span><h3>{title}</h3><p>{text}</p></div>
+        ))}
+      </div>
+    </section>
+
+    <section>
+      <h2 class="dot">Map it onto what you know</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Claude concept</th><th>What you already know</th><th>Domain</th></tr></thead>
+          <tbody>
+            {map.map(([concept, known, d]) => (
+              <tr><td><strong>{concept}</strong></td><td>{known}</td><td><a href={url(`chapters/${d}`)}>{d}</a></td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="dot">Where your background gives you a head start</h2>
+      <div class="grid">
+        <div class="card"><span class="eyebrow">Business analysis</span><h3>Requirements → evals</h3><p>Acceptance criteria become eval cases. Functional vs infrastructure requirements (residency, latency, identity) and lifecycle gates are Domain 1.</p></div>
+        <div class="card"><span class="eyebrow">Test automation</span><h3>Almost all of Domain 7</h3><p>Same discipline: golden dataset, baseline, one change at a time, release gate. The twist is non-determinism: property checks and a calibrated model judge instead of assertEquals on text.</p></div>
+        <div class="card"><span class="eyebrow">Data engineering</span><h3>Batch, RAG, budgets</h3><p>The Batch API, chunk-and-embed pipelines, cost per run, idempotent retries, and token budgets as capacity planning.</p></div>
+        <div class="card"><span class="eyebrow">Java (or Python)</span><h3>Every API concept</h3><p>The Java SDK is builder-pattern code with CompletableFuture async and a typed exception per HTTP status. The Python SDK is the same API with keyword arguments.</p></div>
+      </div>
+    </section>
+
+    <section class="card first">
+      <h2>Your first call</h2>
+      <p>Add the official SDK (Maven for Java, <code>pip install anthropic</code> for Python), set <code>ANTHROPIC_API_KEY</code> from the Claude Console, then run.
+        Every code example on this site has a <strong>Java / Python</strong> switch, and your choice is remembered.</p>
+      <CodeSwitch>
+        <Code code={pom} lang="xml" />
+        <Code code={firstCall} lang="java" />
+        <Code code={'pip install anthropic'} lang="python" />
+        <Code code={firstCallPy} lang="python" />
+      </CodeSwitch>
+      <p><strong>Then experiment, one variable at a time:</strong> drop <code>maxTokens</code> to 10 and watch <code>stop_reason</code> become
+        <code>max_tokens</code>; ask the same question five times and diff the answers; send a long system prompt twice with caching on and read
+        <code>usage</code>. Ten minutes of that teaches more than an hour of reading.</p>
+    </section>
+
+    <section class="card card--tint">
+      <h2>How to use this site</h2>
+      <ol class="steps">
+        <li><strong>Read the domain notes in order.</strong> Each section is collapsible; tick sections off as you go. Every domain opens with a plain-English summary, then the detail, Java and Python examples and a link back to your course notes.</li>
+        <li><strong>Spend most time on what's new to everyone:</strong> token and cost arithmetic, reading <code>stop_reason</code> and <code>usage</code>, the tool-use round trip, workflow vs agent, context strategies, and why prompt rules are never security controls.</li>
+        <li><strong>Check the "Watch out for…" box</strong> at the end of each domain: the confusions exam questions like to test.</li>
+        <li><strong>Take the domain quiz.</strong> Original practice questions in the exam's style, every option explained.</li>
+        <li><strong>Sit the <a href={url('mock-exam')}>mock exam</a></strong> when you've covered all eight domains.</li>
+      </ol>
+    </section>
+
+    <p class="source muted">Exam format: CCDV-F exam guide v1.0 (July 2026) as reported by several independent prep sites. Model names, prices and limits are from
+      the <a href="https://platform.claude.com/docs/en/models-overview" target="_blank" rel="noopener">Claude Platform docs</a> as of November 2026 and change often.</p>
+  </div>
+</BaseLayout>
+
+<style>
+  .intro { display: grid; gap: 2.5rem; }
+  .lead { border-left: 8px solid var(--pink); }
+  .lead p:last-child { margin-bottom: 0; }
+  .grid h3 { margin-top: 0.25rem; }
+  .facts { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); }
+  .fact { display: flex; flex-direction: column; gap: 0.25rem; }
+  .fact__big { font: 700 2.75rem/1 var(--font-head); color: var(--pink-soft); }
+  .fact--pink { background: var(--pink); color: #fff; }
+  .fact--pink .fact__big { color: #fff; }
+  .weights { margin-top: 1.25rem; }
+  .weights a { color: inherit; text-decoration: none; }
+  .weights a:hover { color: var(--pink-dark); }
+  .weights__bar { width: 35%; }
+  .weights__bar span { display: block; height: 0.6rem; border-radius: 999px; background: var(--pink); }
+  .small { font-size: 0.9rem; }
+  .diff { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr)); }
+  .diff__card { border-top: 6px solid var(--charcoal); }
+  .diff__card h3 { margin: 0.4rem 0 0.3rem; }
+  .diff__card p { margin: 0; }
+  .diff__icon { font-size: 1.6rem; }
+  .first { border-left: 8px solid var(--charcoal); }
+  .first :global(pre) { margin: 0.75rem 0; }
+  .steps { display: grid; gap: 0.6rem; padding-left: 1.25rem; }
+  .source { font-size: 0.85rem; }
+</style>

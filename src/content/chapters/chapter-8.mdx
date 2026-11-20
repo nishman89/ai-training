@@ -1,0 +1,171 @@
+---
+number: 8
+title: "Claude Code"
+weight: 3
+minutes: 30
+summary: "Claude Code's explore–plan–code loop, permission modes and settings layers, durable context with CLAUDE.md, rules, skills, hooks and subagents, and sharing a setup as a plugin."
+objectives:
+  - "Choose a permission mode by risk, and know how settings layers and deny rules interact"
+  - "Put each kind of rule in the right place: CLAUDE.md, rules, skills, hooks or subagents"
+  - "Use hooks for guarantees and know the main lifecycle events"
+  - "Package a setup as a plugin that works on every teammate's machine"
+---
+import Gotcha from '../../components/Gotcha.astro';
+import SectionSummary from '../../components/SectionSummary.astro';
+import Flow from '../../components/diagrams/Flow.astro';
+import Tiles from '../../components/diagrams/Tiles.astro';
+import WhenThen from '../../components/WhenThen.astro';
+import Exercise from '../../components/Exercise.astro';
+import Resource from '../../components/Resource.astro';
+
+## 8.1 How Claude Code works
+
+### In plain English
+
+Claude Code is Claude working as a coding assistant inside your project folder. It can read files, write code and run commands, but asks permission first (how often depends on the permission mode). You give it standing project rules in a file called CLAUDE.md, and you can add automatic checks ("hooks") that always run, like "run the tests after every edit" or "never touch the secrets file".
+
+### Explore, plan, code
+
+<Flow caption="The sequence matters: plan mode holds Claude in exploration until you approve" steps={[
+  { title: 'Explore', sub: 'read files, trace logic' },
+  { title: 'Plan', sub: 'describe the edits' },
+  { title: 'You approve', sub: 'the human gate' },
+  { title: 'Code', sub: 'edit and run' },
+]} />
+
+The same agent loop is available programmatically through the Agent SDK (Python and TypeScript), with the same permission model.
+
+<SectionSummary points={[
+  "Claude Code runs the agent loop in your terminal: explore, plan, then code.",
+  "Plan mode holds it in exploration until you approve.",
+  "The Agent SDK exposes the same loop and permission model in code.",
+]} />
+
+## 8.2 Permission modes and settings
+
+### Pick the mode by risk, not speed
+
+| Mode | Auto-approves | Still gated | Use for |
+|---|---|---|---|
+| `default` | Reads | Edits and shell commands | New or unfamiliar codebases |
+| `acceptEdits` | Reads, edits and common file commands in the working dir | Other shell commands, writes outside the dir, protected paths | Trusted local work where shell still needs an eye |
+| `plan` | Reads only | Everything until you approve a plan | Sensitive or unfamiliar code |
+| `auto` | Most actions, after a classifier reviews each one | Deploys, mass deletes, credential access, force-push | Fewer prompts (research preview; not a safety guarantee) |
+| `dontAsk` | Only pre-approved tools | Everything else, auto-denied | Locked-down CI and scripts |
+| `bypassPermissions` | Everything | Almost nothing | Disposable containers or VMs only, never a live workstation |
+
+### Settings layers
+
+| Level | File | Applies to |
+|---|---|---|
+| User | `~/.claude/settings.json` | All your projects |
+| Project | `.claude/settings.json` (committed) | Everyone who clones the repo |
+| Local | `.claude/settings.local.json` (git-ignored) | Your overrides for one project |
+| Enterprise | Managed settings, set by admins | Everyone; can't be overridden |
+
+**Deny beats allow**, and an enterprise deny can't be overridden, even in bypass mode. Put the human gate where the worst case is hard to undo: the agent's work is an input to a human decision on sensitive code, not a replacement for one.
+
+<Gotcha
+  title={"bypassPermissions on a laptop"}
+  scenario={"To stop the approval prompts, a developer runs Claude Code in bypassPermissions mode on their workstation against the live repo."}
+  gotcha={"A misread instruction leads to a destructive git command, and there was no checkpoint left to stop it."}
+  fix={"Use bypass only in a disposable container or VM; locally prefer acceptEdits or plan, with deny rules on dangerous commands and paths."}
+/>
+
+<SectionSummary points={[
+  "Choose the permission mode by risk: default, acceptEdits, plan, auto, dontAsk, bypassPermissions (disposable environments only).",
+  "Settings layer user → project → local → enterprise; enterprise can't be overridden.",
+  "Deny beats allow, even in bypass mode.",
+]} />
+
+## 8.3 Durable context
+
+### Each rule in its right place
+
+<Tiles cols={5} caption="Five mechanisms, five jobs" tiles={[
+  { title: 'CLAUDE.md', sub: 'every session, always' },
+  { title: 'Rules', sub: 'when a path matches' },
+  { title: 'Skills', sub: 'loaded on demand' },
+  { title: 'Hooks', sub: 'guaranteed, outside the model' },
+  { title: 'Subagents', sub: 'isolated context' },
+]} />
+
+| Mechanism | Loads | Context cost | Belongs here |
+|---|---|---|---|
+| CLAUDE.md | At every session start (`/init` drafts one) | Constant; dilutes as it grows | Universal rules, build and test commands |
+| `.claude/rules` | When a file matches its `paths` glob | Only when triggered | Path-specific guidance |
+| Skills (`SKILL.md`) | Description at start, body on demand | Only when used | Reusable procedures; also replaces custom slash commands |
+| Hooks | At lifecycle events, as your script | Minimal | Guardrails, side effects, audit logs |
+| Subagents | Own context; returns a summary | Keeps the main context small | Exploration and parallel work |
+
+CLAUDE.md is a working set of rules, not an append log: every line weakens the others. Past a few hundred lines, audit it. Instructions are **probabilistic**; hooks are **guarantees**. If a rule must always hold, make it a hook. Custom subagents don't inherit your skills unless they're listed in the subagent's definition.
+
+### Hook events
+
+<WhenThen whenLabel="Event" thenLabel="Typical use" rows={[
+  { when: 'PreToolUse', then: 'Block an action before it runs (exit code 2), e.g. writes to .env or credentials in .mcp.json' },
+  { when: 'PostToolUse', then: 'Format after an edit, run tests, write an audit log entry' },
+  { when: 'UserPromptSubmit', then: 'Validate a prompt or inject context before the model sees it' },
+  { when: 'Stop', then: 'Follow-up when Claude finishes: notify, clean up, commit the audit log' },
+  { when: 'SessionStart / SessionEnd', then: 'Check environment variables and services; final audit writes' },
+]} />
+
+**For Java teams:** put `mvn -q test` or `./gradlew test` in CLAUDE.md and add a PostToolUse hook that runs your formatter (e.g. Spotless) after every edit. **For Python:** `pytest -q` and a `ruff format` hook.
+
+<Gotcha
+  title={"The CLAUDE.md rule that stopped working"}
+  scenario={"CLAUDE.md says \"never edit db/migrations\". It worked for weeks; then the file grew to 600 lines."}
+  gotcha={"Late in a long session the agent edits a migration. Instructions are probabilistic and get diluted as the file grows."}
+  fix={"Enforce must-hold rules with a PreToolUse hook or deny rule, and keep CLAUDE.md short; move path rules to `.claude/rules`."}
+/>
+
+<SectionSummary points={[
+  "CLAUDE.md: short universal rules, loaded every session. Rules: path-scoped. Skills: on demand. Hooks: guarantees. Subagents: isolated context.",
+  "Instructions are probabilistic, hooks are guaranteed: PreToolUse can block (exit code 2), PostToolUse formats, tests and logs.",
+  "Custom subagents don't inherit skills unless listed.",
+]} />
+
+## 8.4 Sharing a setup
+
+### Skills, commands and plugins
+
+- **Skill** - a SKILL.md in .claude/skills · loads when its description matches, or by name · the same skill can run in Claude Code, the API (code execution container) and the Agent SDK (set settingSources)
+- **Custom command** - a named, explicit entry point · now written as a skill (set disable-model-invocation to stop automatic use) · the old .claude/commands folder is legacy
+- **Plugin** - a versioned bundle of skills, hooks, subagents and MCP servers · installed from a marketplace in one step · admins can deploy org-wide
+
+### Make it portable
+
+A plugin that hard-codes `/Users/you/...` works for its author and fails for everyone else. Use `$CLAUDE_PROJECT_DIR` for project scripts and `${CLAUDE_PLUGIN_ROOT}` for scripts inside the plugin, bundle every file the plugin depends on, document and validate the environment variables it needs, and test the install on a clean machine. A deny rule or hook you relied on locally only travels with the plugin if it's bundled.
+
+<Exercise title="Where does it go?" id="exercise-where">
+
+1. "Never edit files in `migrations/`." It must hold every time.
+2. "Use the repository pattern for data access in `src/data/`."
+3. A 40-step release checklist you run once a fortnight.
+4. "Run `./gradlew test` to test."
+
+<div slot="answer">
+
+1. **A PreToolUse hook or deny rule.** It must be guaranteed. 2. **A path-scoped rule** in `.claude/rules`. 3. **A skill.** It loads only when needed. 4. **CLAUDE.md.** It's universal and short.
+
+</div>
+</Exercise>
+
+### Where this is in your course notes
+
+- **Claude Code, MCP & Integration §02–04** - permission modes, settings, durable context, hooks, skills, plugins
+
+<Resource kind="docs" href="https://code.claude.com/docs/en/features-overview" title="Claude Code features overview" text="When to use CLAUDE.md, skills, subagents, hooks, MCP and plugins." />
+
+<Gotcha
+  title={"The plugin that only worked for its author"}
+  scenario={"A team plugin's hook runs `/Users/sam/scripts/lint.sh`. Sam tested it and it's perfect."}
+  gotcha={"Everyone else's install fails, because the path only exists on Sam's machine, and the deny rule Sam relied on wasn't bundled."}
+  fix={"Bundle scripts and reference them with `${CLAUDE_PLUGIN_ROOT}`, bundle every guardrail, document environment variables, and test the install on a clean machine."}
+/>
+
+<SectionSummary points={[
+  "Skills are portable procedures; custom commands are now skills; plugins bundle skills, hooks, subagents and MCP servers.",
+  "Use `$CLAUDE_PROJECT_DIR` and `${CLAUDE_PLUGIN_ROOT}`, never absolute paths.",
+  "Bundle every dependency and guardrail, and test the install on a clean machine.",
+]} />

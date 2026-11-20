@@ -1,0 +1,36 @@
+---
+/**
+ * A real-world "gotcha": a scenario that looks fine, what actually goes wrong, and the fix.
+ * Placed at the end of a section (rehype-collapsible-sections.mjs lifts it to section level, above the summary).
+ *   <Gotcha title="…" scenario="…" gotcha="…" fix="…" />
+ * Backticks in any field become inline code.
+ */
+interface Props { title: string; scenario: string; gotcha: string; fix: string; }
+const { title, scenario, gotcha, fix } = Astro.props;
+const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const fmt = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
+---
+<aside class="gotcha" data-testid="gotcha">
+  <p class="gotcha__head"><span class="gotcha__badge" aria-hidden="true">⚠</span><span><span class="eyebrow">Gotcha</span><strong class="gotcha__title" set:html={fmt(title)} /></span></p>
+  <dl>
+    <div><dt>The scenario</dt><dd set:html={fmt(scenario)} /></div>
+    <div class="gotcha__bad"><dt>What goes wrong</dt><dd set:html={fmt(gotcha)} /></div>
+    <div class="gotcha__good"><dt>The fix</dt><dd set:html={fmt(fix)} /></div>
+  </dl>
+</aside>
+
+<style>
+  .gotcha { margin: 1.5rem 0 0; padding: 1.1rem 1.4rem 1.25rem; border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); border: 2px solid var(--pink-soft); }
+  .gotcha__head { display: flex; gap: 0.75rem; align-items: center; margin: 0 0 0.75rem; }
+  .gotcha__badge { flex: none; display: grid; place-items: center; width: 2.4rem; height: 2.4rem; border-radius: 50%; background: var(--pink); color: #fff; font-size: 1.2rem; }
+  .gotcha__head .eyebrow { margin-bottom: 0.1rem; }
+  .gotcha__title { display: block; font: 700 1.2rem/1.25 var(--font-head); }
+  dl { margin: 0; display: grid; gap: 0.6rem; }
+  dl > div { padding: 0.6rem 0.9rem; border-radius: 10px; background: var(--bg); }
+  dt { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--grey); margin-bottom: 0.15rem; }
+  dd { margin: 0; line-height: 1.5; }
+  .gotcha__bad { background: var(--pink-tint); }
+  .gotcha__bad dt { color: var(--pink-dark); }
+  .gotcha__good { background: var(--success-tint); }
+  .gotcha__good dt { color: var(--success); }
+</style>
