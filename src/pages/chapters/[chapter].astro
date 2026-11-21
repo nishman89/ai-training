@@ -4,6 +4,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import PageHead from '../../components/PageHead.astro';
 import WatchOut from '../../components/WatchOut.astro';
 import DomainOverview from '../../components/DomainOverview.astro';
+import DomainFit from '../../components/DomainFit.astro';
 import BlueprintSkills from '../../components/BlueprintSkills.astro';
 import { SECTION_TITLES as TITLES } from '../../data/syllabus-sections.mjs';
 const SECTION_TITLES: Record<string, string> = TITLES;
@@ -87,6 +88,7 @@ const mainCount = (await getQuestions(MAIN_SET, data.number)).length;
 
       <DomainOverview chapter={data.number} />
       <BlueprintSkills chapter={data.number} />
+      <p class="fit-jump no-print"><a href="#how-it-fits">🗺️ See how this domain fits together</a> (a one-screen map of the sections, at the end)</p>
 
       <div class="chapter-progress no-print" id="chapter-progress" data-testid="chapter-progress" data-chapter-progress data-chapter={data.number} data-total={headings.filter((h) => h.depth === 2).length}>
         <p class="chapter-progress__label"><strong data-progress-count>0</strong> of {headings.filter((h) => h.depth === 2).length} sections done</p>
@@ -100,6 +102,8 @@ const mainCount = (await getQuestions(MAIN_SET, data.number)).length;
         </label>
       </div>
       <div class="prose" id="chapter-notes" data-testid="chapter-notes"><Content /></div>
+
+      <DomainFit chapter={data.number} />
 
       <WatchOut chapter={data.number} />
 
@@ -239,6 +243,7 @@ const mainCount = (await getQuestions(MAIN_SET, data.number)).length;
 </script>
 
 <style>
+  .fit-jump { margin: 0.5rem 0 1rem; }
   .first-read { display: inline-flex; align-items: center; gap: 0.4rem; margin-left: auto; padding: 0.3rem 0.75rem; border-radius: 999px; background: var(--pink-tint); cursor: pointer; font-size: 0.9rem; }
   .first-read input { accent-color: var(--pink); width: 1.05rem; height: 1.05rem; }
   :global(html.first-read .prose .code-switch),

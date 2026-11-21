@@ -1,0 +1,26 @@
+// ── Setup: where the names below come from ──
+import { test, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+const BASELINE = 0.95;                                     // the score the live version gets today
+// classifier, bot: the code under test (both call Claude)
+// judge(question, reply): an LLM judge with a rubric, returns 1-5; already checked against humans (4.3)
+// log: your logger
+// ── The example ──
+test('support bot quality', async () => {                  // runs in CI on every pull request (4.4)
+  const cases = readFileSync('eval/tickets.jsonl', 'utf8').trim().split('\n')
+    .map((line) => JSON.parse(line));                      // ① real, labelled tickets (4.1)
+
+  // ② the cheapest grader that works: labels are exact, so exact match (4.2)
+  let correct = 0;
+  for (const c of cases) if ((await classifier.classify(c.input)) === c.label) correct++;
+  const accuracy = correct / cases.length;
+
+  // ③ written replies have no single right answer, so a calibrated LLM judge scores a sample (4.3)
+  let good = 0;
+  for (const c of cases.slice(0, 50)) if ((await judge(c.input, await bot.reply(c.input))) >= 4) good++;
+
+  // ④ log every run, so a drop can be traced back to the change that caused it (4.4)
+  log.info(`eval accuracy=${accuracy.toFixed(3)} judgedGood=${good}/50`);
+  expect(accuracy).toBeGreaterThanOrEqual(BASELINE);       // fails the build
+  expect(good).toBeGreaterThanOrEqual(45);
+});

@@ -51,7 +51,7 @@ const groups = cats.map((c) => ({ cat: c, id: slugOf(c), terms: GLOSSARY.filter(
   .letters { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 1rem; }
   .letters a { display: inline-block; padding: 0.35rem 0.8rem; border-radius: 8px; background: var(--surface); box-shadow: var(--shadow); font-weight: 700; text-decoration: none; color: var(--charcoal); }
   .letters a:hover { background: var(--pink); color: #fff; }
-  .gloss { display: grid; grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr)); gap: 1rem; margin: 2rem 0; }
+  .gloss { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(20rem, 100%), 1fr)); gap: 1rem; margin: 2rem 0; }
   .gloss__item { position: relative; margin: 0; scroll-margin-top: 6rem; }
   .gloss__item:target { outline: 3px solid var(--pink); }
   .group h2 { scroll-margin-top: 6rem; margin-top: 2.5rem; }

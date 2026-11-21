@@ -280,3 +280,41 @@ a.gl:hover, a.gl:focus-visible { color: var(--pink-dark); }
   font: 400 0.85rem/1.45 var(--font-body); box-shadow: var(--shadow); pointer-events: none; }
 .gl-tip strong { color: var(--pink-soft); }
 .gl-tip small { display: block; margin-top: 0.3rem; opacity: 0.7; }
+
+/* ---- Mobile: grid and flex children may shrink below their content, so wide code and tables scroll inside their box ---- */
+.container > *, .intro > *, .tips > *, .gloss > *, .sections > *, .grid > * { min-width: 0; }
+.card, figure, details, .prose > * { min-width: 0; max-width: 100%; }
+pre, .astro-code { max-width: 100%; overflow-x: auto; }
+img, svg, video { max-width: 100%; height: auto; }
+fieldset { min-width: 0; }
+@media (max-width: 40rem) {
+  h1 { overflow-wrap: anywhere; }
+  .prose code, .tip code, .gloss code { overflow-wrap: anywhere; }
+  .code-switch__bar { flex-direction: column; align-items: stretch; }
+  .code-switch__tabs { margin-left: 0; justify-content: stretch; }
+  .code-switch__tabs button { flex: 1; padding: 0.45rem 0.3rem; }
+  .lens__tabs { width: 100%; }
+  .lens__tabs button { flex: 1 1 45%; }
+}
+@media (max-width: 40rem) {
+  /* code keeps its line structure and scrolls sideways, rather than wrapping mid-statement */
+  pre.astro-code, pre.astro-code code { white-space: pre !important; word-break: normal !important; overflow-wrap: normal !important; }
+  pre.astro-code { font-size: 0.8rem; -webkit-overflow-scrolling: touch; }
+  label.opt, .opt { overflow-wrap: anywhere; }
+}
+
+/* keep short code names whole in the first column of tables (max_tokens, not max_to / kens) */
+table td:first-child code, table th:first-child code { white-space: nowrap; word-break: normal; overflow-wrap: normal; }
+
+/* Running examples: the step strip, and highlighted "← new" lines */
+.running { border: 1px solid var(--line); border-left: 4px solid var(--pink); border-radius: 10px; padding: 0.7rem 0.9rem; margin: 1.4rem 0 0.6rem; background: #fff; }
+.running__head { margin: 0 0 0.5rem; font-size: 0.92rem; }
+.running__steps { list-style: none; margin: 0 0 0.5rem; padding: 0; display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.running__steps a { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.55rem; border-radius: 999px; border: 1px solid var(--line); font-size: 0.8rem; text-decoration: none; color: inherit; }
+.running__steps .is-done a { background: #f3f4f4; }
+.running__steps .is-current a { background: var(--pink); border-color: var(--pink); color: #fff; font-weight: 600; }
+.running__n { display: inline-grid; place-items: center; width: 1.2rem; height: 1.2rem; border-radius: 50%; background: rgba(0,0,0,0.08); font-size: 0.72rem; }
+.running__steps .is-current .running__n { background: rgba(255,255,255,0.25); }
+.running__sec { opacity: 0.7; font-size: 0.72rem; }
+.running__adds { margin: 0; font-size: 0.88rem; }
+pre .line--new { display: inline-block; min-width: 100%; background: rgba(245, 166, 35, 0.22); box-shadow: inset 3px 0 0 #f5a623; }

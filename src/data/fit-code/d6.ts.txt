@@ -1,0 +1,31 @@
+// ── Setup: where the names below come from ──
+import Anthropic from '@anthropic-ai/sdk';
+import { z } from 'zod';
+import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
+const client = new Anthropic();                           // one per app; reads ANTHROPIC_API_KEY
+// vectorStore: your search index over the manuals; search(text, k) returns chunks with source and text
+// ── The example ──
+const TicketSummary = z.object({                          // ③ the exact shape the dashboard needs (6.3)
+  category: z.enum(['BILLING', 'TECHNICAL', 'OTHER']),
+  urgency: z.number().int(),                              // 1 (low) to 5 (urgent)
+  summary: z.string(),
+});
+
+async function summariseTicket(email: string, photoBase64?: string) {
+  const chunks = await vectorStore.search(email, 3);                         // ⑤ RAG: only the relevant pages (6.5)
+  const manuals = chunks.map((c) => `<doc source="${c.source}">${c.text}</doc>`).join('\n');
+  const content: Anthropic.ContentBlockParam[] = [{ type: 'text', text:
+    `<manuals>\n${manuals}\n</manuals>\n<email>\n${email}\n</email>\n` +   // ② data goes inside tags (6.2)
+    'Summarise this email for a support agent who has 10 seconds to read it.' }];   // ① the missing piece: audience (6.1)
+  if (photoBase64) content.unshift({ type: 'image',                          // ⑥ a photo of the router lights (6.6)
+    source: { type: 'base64', media_type: 'image/jpeg', data: photoBase64 } });
+
+  const response = await client.messages.parse({
+    model: 'claude-sonnet-5-5', max_tokens: 1024,
+    system: "You are Acme Broadband's support triage assistant. Use only the manuals provided.",   // ② role and rules
+    messages: [{ role: 'user', content }],
+    output_config: { format: zodOutputFormat(TicketSummary) },               // ③ guaranteed shape, no free-text parsing
+    // ④ thinking is adaptive on current models; raise effort only for hard cases (6.4, 5.2)
+  });
+  return response.parsed_output;
+}

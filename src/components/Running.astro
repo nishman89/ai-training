@@ -1,0 +1,27 @@
+---
+/**
+ * A strip above a code example that belongs to a running example: shows the thread, every step,
+ * and which one this is. Usage: <Running thread="tool" step={3} adds="what this step adds" />
+ */
+import { RUNNING } from '../data/running-examples';
+import { anchor } from '../lib/anchors';
+import { url } from '../lib/site';
+interface Props { thread: string; step: number; adds: string; from?: number; marks?: boolean; }
+const { thread, step, adds, marks = true } = Astro.props;
+const from = Astro.props.from ?? step - 1;
+const t = RUNNING[thread];
+const fmt = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/`([^`]+)`/g, '<code>$1</code>');
+---
+{t && (
+  <aside class="running" aria-label={`Running example: ${t.name}, step ${step} of ${t.steps.length}`}>
+    <p class="running__head"><span aria-hidden="true">🧵</span> Running example: <strong>{t.name}</strong> · step {step} of {t.steps.length}</p>
+    <ol class="running__steps">
+      {t.steps.map((s, i) => (
+        <li class={i + 1 === step ? 'is-current' : i + 1 < step ? 'is-done' : ''}>
+          <a href={url(`chapters/${s.chapter}/#${anchor('code', s.title)}`)}><span class="running__n">{i + 1}</span> {s.label} <span class="running__sec">{s.sec}</span></a>
+        </li>
+      ))}
+    </ol>
+    <p class="running__adds">{step === 1 ? 'Starts here: ' : `Builds on step ${from}, and adds `}<span set:html={fmt(adds)} />{step > 1 && marks && ' Highlighted lines (marked ← new) are what changed.'}</p>
+  </aside>
+)}

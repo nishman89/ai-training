@@ -11,9 +11,8 @@ const fmt = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
 ---
 <BaseLayout title="Summaries" description="Every section summary from the eight CCDV-F domains on one page, for quick revision.">
   <PageHead eyebrow="Quick revision" title="Summaries">
-    <p class="lead">All {total} section summaries on one page, grouped by domain. Each heading links to the full notes; a
-      <span class="mini-gotcha">⚠ Gotcha</span> link jumps to that section's real-world trap, and a <span class="mini-code">&lt;/&gt; Code</span> link
-      jumps straight to a worked example in Java, Python and TypeScript.</p>
+    <p class="lead">All {total} section summaries on one page, grouped by domain. Each heading links to the full notes, and each
+      domain ends with a link to its "How it all fits together" map.</p>
   </PageHead>
 
   <div class="container">
@@ -36,15 +35,10 @@ const fmt = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
             <article class="card sec" data-testid={`summary-${s.number.replace('.', '-')}`}>
               <h3><a href={`${url(`chapters/${d.number}`)}#${s.slug}`}><span class="sec__no">{s.number}</span> {s.title}</a></h3>
               <div class="pts">{s.points.map((p) => <p class="pt" set:html={fmt(p)} />)}</div>
-              {(s.gotchaLinks.length > 0 || s.code.length > 0) && (
-                <div class="links">
-                  {s.gotchaLinks.map((g) => <a class="gotcha-tag" href={`${url(`chapters/${d.number}`)}#${g.id}`}>⚠ Gotcha: <span set:html={fmt(g.title)} /></a>)}
-                  {s.code.map((c) => <a class="code-tag" href={`${url(`chapters/${d.number}`)}#${c.id}`} data-testid="code-link">&lt;/&gt; Code: <span set:html={fmt(c.title)} /></a>)}
-                </div>
-              )}
             </article>
           ))}
         </div>
+        <a class="fit-link no-print" href={`${url(`chapters/${d.number}`)}#how-it-fits`} data-testid={`fit-link-${d.number}`}>🗺️ How Domain {d.number} fits together →</a>
       </section>
     ))}
   </div>
@@ -52,6 +46,8 @@ const fmt = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
 
 <style>
   .lead { max-width: 50rem; }
+  .fit-link { display: inline-block; margin-top: 1rem; padding: 0.55rem 1rem; border-radius: 10px; background: var(--charcoal); color: #fff; font-weight: 700; text-decoration: none; }
+  .fit-link:hover { background: var(--pink); color: #fff; }
   .mini-gotcha { display: inline-block; padding: 0 0.5rem; border-radius: 999px; background: var(--pink-tint); color: var(--pink-dark); font-weight: 700; font-size: 0.85rem; }
   .jump { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0 0 2rem; }
   .jump a { display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.4rem 0.9rem 0.4rem 0.4rem; border-radius: 999px; background: var(--surface); box-shadow: var(--shadow); color: var(--charcoal); text-decoration: none; font-weight: 600; font-size: 0.9rem; }

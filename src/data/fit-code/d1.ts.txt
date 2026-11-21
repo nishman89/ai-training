@@ -1,0 +1,38 @@
+// ── Setup: where the names below come from ──
+import Anthropic from '@anthropic-ai/sdk';
+const client = new Anthropic();                           // one per app; reads ANTHROPIC_API_KEY
+// TOOLS: definitions for check_line_status, get_outages, get_router_logs (8.1)
+// runTool(name, input): your code that runs a tool; returns { text, failed }
+// billingWorkflow, humanQueue, progressNotes: your own handlers and storage
+// ── The example ──
+const textOf = (m: Anthropic.Message) => m.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
+
+async function handle(ticketId: string, ticket: string): Promise<string> {
+  // ① workflow or agent? ② the front door is a routing workflow: one cheap call (1.2)
+  const route = await client.messages.create({ model: 'claude-haiku-5-5', max_tokens: 5,
+    system: 'Reply with one word: BILLING, TECHNICAL or OTHER.',
+    messages: [{ role: 'user', content: ticket }] });
+  const category = textOf(route).trim();
+  if (category === 'BILLING') return billingWorkflow(ticket);        // known steps: a workflow
+  if (category !== 'TECHNICAL') return humanQueue.add(ticket);
+
+  // ③ technical faults: an agent loop (1.3). ④ here YOUR code runs the loop (1.4)
+  const history: Anthropic.MessageParam[] = [
+    { role: 'user', content: (await progressNotes.get(ticketId)) + ticket }];   // ⑤ memory (1.5)
+  let reply!: Anthropic.Message;
+  for (let turn = 0; turn < 15; turn++) {                             // exit condition: max turns
+    reply = await client.messages.create({ model: 'claude-sonnet-5-5', max_tokens: 2048,
+                                           tools: TOOLS, messages: history });
+    history.push({ role: 'assistant', content: reply.content });
+    if (reply.stop_reason !== 'tool_use') return textOf(reply);       // exit condition: goal reached
+    const results: Anthropic.ToolResultBlockParam[] = [];
+    for (const b of reply.content) {
+      if (b.type !== 'tool_use') continue;
+      const { text, failed } = await runTool(b.name, b.input);        // your code runs each tool
+      results.push({ type: 'tool_result', tool_use_id: b.id, content: text, is_error: failed });
+    }
+    history.push({ role: 'user', content: results });
+  }
+  await progressNotes.save(ticketId, textOf(reply));                  // ⑤ keep what was learned
+  return humanQueue.add(ticket);                                      // cap hit: hand over to a person
+}

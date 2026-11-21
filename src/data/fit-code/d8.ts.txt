@@ -1,0 +1,40 @@
+// ── Setup: where the names below come from ──
+import Anthropic from '@anthropic-ai/sdk';
+import { McpServer } from '@modelcontextprotocol/server';
+import { serveStdio } from '@modelcontextprotocol/server/stdio';
+import { z } from 'zod';
+const client = new Anthropic();                           // one per app; reads ANTHROPIC_API_KEY
+// inventoryApi: your existing REST client for the stock service
+// ── The example ──
+const GET_STOCK: Anthropic.Tool = {                                      // ② one clear job; says when NOT to use it (8.2)
+  name: 'get_stock',
+  description: 'Get the live stock level for one product SKU, e.g. RTR-500. Not for order status.',
+  input_schema: { type: 'object', properties: { sku: { type: 'string' } }, required: ['sku'] },
+};
+const WEB_SEARCH = { type: 'web_search_20250305' as const, name: 'web_search' as const, max_uses: 2 };   // ③ Anthropic runs it (8.3)
+
+const history: Anthropic.MessageParam[] = [{ role: 'user', content: 'Is the RTR-500 in stock?' }];
+let reply = await client.messages.create({ model: 'claude-sonnet-5-5', max_tokens: 1024,
+  tools: [GET_STOCK, WEB_SEARCH], messages: history });                  // ① tools go in every request (8.1)
+const use = reply.content.find((b) => b.type === 'tool_use');
+if (use) {                                                               // ① Claude asks; YOUR code runs it
+  let out: string, failed = false;
+  try { out = String(await inventoryApi.stockFor((use.input as { sku: string }).sku)); }
+  catch { out = 'Stock service timed out. Stock level unknown.'; failed = true; }   // ② report failures
+  history.push({ role: 'assistant', content: reply.content },
+    { role: 'user', content: [{ type: 'tool_result', tool_use_id: use.id, content: out, is_error: failed }] });
+  reply = await client.messages.create({ model: 'claude-sonnet-5-5', max_tokens: 1024,
+    tools: [GET_STOCK, WEB_SEARCH], messages: history });
+}
+
+// ④ the same tool as an MCP server, so Claude Code and other apps can reuse it (8.4)
+function createServer() {
+  const server = new McpServer({ name: 'inventory', version: '1.0.0' });
+  server.registerTool('get_stock',
+    { description: 'Get the live stock level for one product SKU, e.g. RTR-500. Not for order status.',
+      inputSchema: z.object({ sku: z.string() }) },
+    async ({ sku }) => ({ content: [{ type: 'text', text: String(await inventoryApi.stockFor(sku)) }] }));
+  return server;
+}
+serveStdio(createServer);
+// ⑤ who gets it and what it may do: .mcp.json scope, allow/deny rules, credentials (8.5)

@@ -1,0 +1,17 @@
+---
+/** "What this does": a short numbered walk-through under a plain code, config or Markdown block. **bold** and `code` work. */
+interface Props { steps: string[]; title?: string; }
+const { steps, title = 'What this does' } = Astro.props;
+const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const fmt = (t: string) => esc(t).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/`([^`]+)`/g, '<code>$1</code>');
+---
+<div class="explain" data-testid="explain">
+  <p class="explain__h">{title}</p>
+  <ol>{steps.map((t) => <li set:html={fmt(t)} />)}</ol>
+</div>
+
+<style>
+  .explain { margin: -0.4rem 0 1.25rem; padding: 0.75rem 1rem 0.8rem; background: #eef2f7; border-radius: 0 0 12px 12px; border-left: 6px solid #5b6b80; font-size: 0.93rem; }
+  .explain__h { margin: 0 0 0.3rem; font-weight: 800; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: #3c4a5c; }
+  .explain ol { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.25rem; line-height: 1.5; }
+</style>

@@ -101,6 +101,15 @@ const pom = `<dependency>
         already do in Java, test automation, data engineering and business analysis.</p>
     </section>
 
+    <section class="card codenote" data-testid="code-note">
+      <h2>About the code examples</h2>
+      <p>Most sections include code in <strong>Java, Python and TypeScript</strong>. It's there in case it helps, especially if you're a developer.
+        <strong>You don't need to understand the code to pass.</strong> Many examples are folded away behind "Show the code", and each one has a
+        plain-English "What this code does" list.</p>
+      <p>What you do need: the <strong>key points at the end of every section</strong> (they're all on the <a href={url('summaries')}>Summaries</a> page),
+        and the <strong>"How it all fits together"</strong> section at the end of each domain.</p>
+    </section>
+
     <section id="reading-order" data-testid="reading-order">
       <h2 class="dot">The eight domains in plain English, in the order to read them</h2>
       <p>The site keeps the official domain numbers, which put agents first. For a first read, go in this order instead: each domain only
@@ -191,7 +200,12 @@ const pom = `<dependency>
       <h2>Your first call</h2>
       <p>Add the official SDK (Maven for Java, <code>pip install anthropic</code> for Python, <code>npm install @anthropic-ai/sdk</code> for TypeScript), set <code>ANTHROPIC_API_KEY</code> from the Claude Console, then run.
         Every code example on this site has a <strong>Java / Python / TypeScript</strong> switch, and your choice is remembered.</p>
-      <CodeSwitch>
+      <CodeSwitch title="Your first call" explain={[
+        'Installs the official SDK (Maven, pip or npm).',
+        'Creates a client, which reads your key from the `ANTHROPIC_API_KEY` environment variable.',
+        'Sends one request: which model, a cap on the reply length, standing instructions (`system`) and the question.',
+        'Prints the text of the reply, then why Claude stopped and how many tokens went in and out (what you are billed for).',
+      ]}>
         <Code code={pom} lang="xml" />
         <Code code={firstCall} lang="java" />
         <Code code={'pip install anthropic'} lang="python" />
@@ -207,9 +221,9 @@ const pom = `<dependency>
     <section class="card card--tint">
       <h2>How to use this site</h2>
       <ol class="steps">
-        <li><strong>Follow the <a href="#reading-order">reading order</a> above.</strong> Each section is collapsible; tick sections off as you go. Every domain opens with a plain-English summary, then the detail, Java, Python and TypeScript examples, and links to the official docs.</li>
+        <li><strong>Follow the <a href="#reading-order">reading order</a> above.</strong> Each section is collapsible; tick sections off as you go. Every domain opens with a plain-English summary, then the detail, Java, Python and TypeScript examples, and links to the official docs. In the code, the lines under <strong>Setup</strong> show where each name comes from (the client, example inputs, and one-line notes for your own app's objects); the code under <strong>The example</strong> is the point being taught.</li>
         <li><strong>Spend most time on what's new to everyone:</strong> token and cost arithmetic, reading <code>stop_reason</code> and <code>usage</code>, the tool-use round trip, workflow vs agent, context strategies, and why prompt rules are never security controls.</li>
-        <li><strong>Check the "Watch out for…" box</strong> at the end of each domain: the confusions exam questions like to test.</li>
+        <li><strong>Check the "Watch out for…" box</strong> at the end of each domain: the common confusions.</li>
         <li><strong>Before the exam, read the <a href={url('exam-tips')}>Exam tips</a>:</strong> practical tips by topic, each linked to the notes.</li>
         <li><strong>Revise from the <a href={url('summaries')}>Summaries</a> page:</strong> every section's key points on one page.</li>
         <li><strong>Take the domain quiz.</strong> Original practice questions in the exam's style, every option explained, each linked to the Claude doc it's based on.</li>
@@ -225,6 +239,8 @@ const pom = `<dependency>
 <style>
   .intro { display: grid; gap: 2.5rem; }
   .lead { border-left: 8px solid var(--pink); }
+  .codenote { border-left: 8px solid #5b6b80; }
+  .codenote p:last-child { margin-bottom: 0; }
   .lead p:last-child { margin-bottom: 0; }
   .grid h3 { margin-top: 0.25rem; }
   .facts { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); }

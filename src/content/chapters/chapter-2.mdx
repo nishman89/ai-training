@@ -17,7 +17,9 @@ import RoleLens from '../../components/RoleLens.astro';
 import PictureIt from '../../components/PictureIt.astro';
 import Gotcha from '../../components/Gotcha.astro';
 import SectionSummary from '../../components/SectionSummary.astro';
+import Running from '../../components/Running.astro';
 import CodeSwitch from '../../components/CodeSwitch.astro';
+import Explain from "../../components/Explain.astro";
 import Flow from '../../components/diagrams/Flow.astro';
 import VsPair from '../../components/VsPair.astro';
 import WhenThen from '../../components/WhenThen.astro';
@@ -29,19 +31,20 @@ import Resource from '../../components/Resource.astro';
 
 <ExamRef section="2.1" />
 
-
-
-
-
-
-
 ### In plain English
 
-This domain is how your program talks to Claude. Claude is reached through an **API** (application programming interface): a web address your code sends requests to, like any REST service. Its main one, the **Messages API**, is the subject of this domain. You send one HTTP request, a package of settings plus the conversation so far, and get back a message, a note on why it stopped and an itemised bill. Everything is measured and billed in **tokens**, chunks of text of about ¾ of a word (more in 2.2). Everything else in the exam is a field on that request, a way to handle the reply, or a pattern for sending many requests in a row.
+This domain is about how your program talks to Claude.
+
+- **The API:** your code reaches Claude through an **API** (application programming interface), a web address your code sends requests to, like any REST service. The main one is the **Messages API**.
+- **The request:** one HTTP request with some settings and the conversation so far.
+- **The reply:** Claude's answer, a note saying why it stopped, and an itemised bill.
+- **Tokens:** everything is measured and billed in **tokens**, chunks of text of about ¾ of a word (more in 2.2).
+
+Most of the rest of this guide builds on this one request: its fields, how to handle the reply, and how to send many requests.
 
 **Real-life example:** a bank's help chat. Behind it, the bank's Java service sends each customer question to Claude and shows the answer. When 10,000 customers ask at once, some calls get a "slow down" error (429), and the service should wait and retry instead of crashing. That's Domain 2.
 
-<Flow caption="One Claude call: a stateless request and response (Exam guide: Claude API Mechanics)" steps={[
+<Flow caption="One Claude call: a stateless request and response" steps={[
   { title: 'Your app', sub: 'builds the request' },
   { title: 'POST /v1/messages', sub: 'API key + JSON' },
   { title: 'Claude', sub: 'reads, writes a reply' },
@@ -49,7 +52,7 @@ This domain is how your program talks to Claude. Claude is reached through an **
 ]} />
 
 {/* diagram */}
-<Flow caption="The API remembers nothing: every call resends the whole conversation (Exam guide: Claude API Mechanics)" steps={[
+<Flow caption="The API remembers nothing: every call resends the whole conversation" steps={[
   { title: 'Call 1 sends', sub: 'system prompt + question 1' },
   { title: 'Reply 1', sub: 'you store it' },
   { title: 'Call 2 sends', sub: 'system + Q1 + reply 1 + Q2' },
@@ -65,7 +68,7 @@ A request to `POST /v1/messages` needs three fields and two headers. Everything 
 | Part | What it is | Required? |
 |---|---|---|
 | `x-api-key` header | Your secret key; proves who you are and who pays | Yes |
-| `anthropic-version` header | API version, `2023-06-01`; beta features add `anthropic-beta` | Yes |
+| `anthropic-version` header | Which version of the API you're writing against, as a date (the current docs' examples use `2026-10-21`); the SDKs set it for you. Beta features add an `anthropic-beta` header | Yes |
 | `model` | Which Claude does the work, e.g. `claude-sonnet-5-5` | Yes |
 | `max_tokens` | Ceiling on the reply length, in tokens | Yes |
 | `messages` | The conversation: alternating `user` and `assistant` turns | Yes |
@@ -75,52 +78,162 @@ A request to `POST /v1/messages` needs three fields and two headers. Everything 
 
 The API is **stateless**: it keeps no conversation. Your app stores the history and resends it every turn, which is why long chats get slower and pricier.
 
-<CodeSwitch title="Create a client and make a call">
+### Where each part of the request comes from
+
+Nothing in a request arrives by magic: every part is supplied by you or your code.
+
+| Part | Who supplies it | Where it comes from |
+|---|---|---|
+| API key | You, once | Created in the **Claude Console** (platform.claude.com, Anthropic's website for developers), then stored as the `ANTHROPIC_API_KEY` environment variable. The SDK reads it from there (Domain 7 covers keeping it safe) |
+| `model`, `max_tokens` | You, when you build the feature | Usually in your app's configuration |
+| `system` | You: you write the instructions | Often a text file in your project (see the next example) |
+| `tools` | You: you describe your functions | Defined in your code, sent with every request (Domain 8) |
+| `messages` | **Your code**, on every call | The person's new message, plus the earlier turns your app saved |
+
+**How the `messages` array gets built.** The person using your app never sees or sends it. Take a support chat on a website:
+
+1. The customer types *"Red."* into the chat box and presses Send.
+2. Their browser sends just that text to **your** server, like any web form. Claude isn't involved yet.
+3. Your server loads the earlier turns of this chat from wherever you saved them (a database, the session), and adds the new text as a `user` turn.
+4. Your server calls Claude with the whole list.
+5. Your server saves Claude's reply as an `assistant` turn, so it's included next time, and sends the reply text back to the browser.
+
+So `"user"` means "from the human side" and `"assistant"` means "something Claude said earlier". **Your code adds both.**
+
+<CodeSwitch title="Where the messages array comes from: a chat endpoint" fold>
 
 ```java
-AnthropicClient client = AnthropicOkHttpClient.builder()
-    .fromEnv()          // reads ANTHROPIC_API_KEY - never hard-code it
-    .maxRetries(4)      // default is 2
-    .build();           // create ONE client per app: it owns the connection pool
+// ── Setup: where the names below come from ──
+// Imports: com.anthropic.client.*, com.anthropic.client.okhttp.*, com.anthropic.models.messages.*, java.util.*, java.util.stream.Collectors
+AnthropicClient client = AnthropicOkHttpClient.fromEnv();   // one per app; reads ANTHROPIC_API_KEY
+// chatStore: your storage for each chat's history (a database table, Redis...): load(id) and save(id, history)
+// ChatRequest: small records for the JSON the browser sends and receives
+// ── The example ──
+@PostMapping("/chat")
+ChatAnswer chat(@RequestBody ChatRequest req) {                      // step 2: only the new text arrives
+    List<MessageParam> history = chatStore.load(req.chatId());       // step 3: the earlier turns you saved
+    history.add(MessageParam.builder()
+        .role(MessageParam.Role.USER).content(req.text()).build()); //         + the new user turn
 
-Message msg = client.messages().create(MessageCreateParams.builder()
-    .model(Model.CLAUDE_SONNET_5_5)
-    .maxTokens(1024L)
-    .system("You are a concise support assistant.")
-    .addUserMessage("Summarise this ticket: ...")
-    .build());
+    Message reply = client.messages().create(MessageCreateParams.builder()   // step 4: call Claude
+        .model(Model.CLAUDE_SONNET_5_5).maxTokens(1024L)
+        .system("You are Acme Broadband's support assistant.")
+        .messages(history)                                          // the whole conversation, every time
+        .build());
+    String answer = reply.content().stream().flatMap(b -> b.text().stream())
+        .map(TextBlock::text).collect(Collectors.joining());
+
+    history.add(reply.toParam());                                   // step 5: save Claude's turn for next time
+    chatStore.save(req.chatId(), history);
+    return new ChatAnswer(answer);                                  // the browser shows this
+}
 ```
 
 ```python
+# ── Setup: where the names below come from ──
 import anthropic
+client = anthropic.Anthropic()            # one client per app; reads ANTHROPIC_API_KEY
+# chat_store: your storage for each chat's history (a database table, Redis...): load(id) and save(id, history)
+# app: your web framework's app object (FastAPI, Express): it turns a web request into a call to this function
+# ── The example ──
+@app.post("/chat")
+def chat(chat_id: str, text: str):                  # step 2: only the new text arrives
+    history = chat_store.load(chat_id)              # step 3: the earlier turns you saved
+    history.append({"role": "user", "content": text})          # + the new user turn
 
-client = anthropic.Anthropic(max_retries=4)   # reads ANTHROPIC_API_KEY; default retries is 2
-                                               # create ONE client per app and reuse it
-msg = client.messages.create(
-    model="claude-sonnet-5-5",
-    max_tokens=1024,
-    system="You are a concise support assistant.",
-    messages=[{"role": "user", "content": "Summarise this ticket: ..."}],
-)
+    reply = client.messages.create(                 # step 4: call Claude
+        model="claude-sonnet-5-5", max_tokens=1024,
+        system="You are Acme Broadband's support assistant.",
+        messages=history,                           # the whole conversation, every time
+    )
+    answer = "".join(b.text for b in reply.content if b.type == "text")
+
+    history.append({"role": "assistant", "content": answer})   # step 5: save Claude's turn for next time
+    chat_store.save(chat_id, history)
+    return {"answer": answer}                       # the browser shows this
 ```
 
 ```typescript
+// ── Setup: where the names below come from ──
 import Anthropic from '@anthropic-ai/sdk';
+const client = new Anthropic();             // one per app; reads ANTHROPIC_API_KEY
+// chatStore: your storage for each chat's history (a database table, Redis...): load(id) and save(id, history)
+// app: your web framework's app object (FastAPI, Express): it turns a web request into a call to this function
+// ── The example ──
+app.post('/chat', async (req, res) => {
+  const { chatId, text } = req.body;                // step 2: only the new text arrives
+  const history = await chatStore.load(chatId);     // step 3: the earlier turns you saved
+  history.push({ role: 'user', content: text });    //         + the new user turn
 
-const client = new Anthropic({ maxRetries: 4 });   // reads ANTHROPIC_API_KEY; default retries is 2
-                                                   // create ONE client per app and reuse it
-const msg = await client.messages.create({
-  model: 'claude-sonnet-5-5',
-  max_tokens: 1024,
-  system: 'You are a concise support assistant.',
-  messages: [{ role: 'user', content: 'Summarise this ticket: ...' }],
+  const reply = await client.messages.create({      // step 4: call Claude
+    model: 'claude-sonnet-5-5', max_tokens: 1024,
+    system: "You are Acme Broadband's support assistant.",
+    messages: history,                              // the whole conversation, every time
+  });
+  const answer = reply.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
+
+  history.push({ role: 'assistant', content: reply.content });   // step 5: save Claude's turn for next time
+  await chatStore.save(chatId, history);
+  res.json({ answer });                             // the browser shows this
 });
 ```
 
 </CodeSwitch>
 
+<Running thread="call" step={1} adds="one call to Claude: a client, a request with a system prompt and the customer's question, and printing the reply." />
+
+<CodeSwitch title="Acme assistant, step 1: make the call">
+
+```java
+// ── Setup: where the names below come from ──
+// Imports: com.anthropic.client.*, com.anthropic.client.okhttp.*, com.anthropic.models.messages.*
+// ── The example ──
+AnthropicClient client = AnthropicOkHttpClient.fromEnv();   // reads ANTHROPIC_API_KEY; create ONE per app and reuse it
+
+Message msg = client.messages().create(MessageCreateParams.builder()
+    .model(Model.CLAUDE_SONNET_5_5)                            // which Claude
+    .maxTokens(1024L)                                          // the longest reply allowed
+    .system("You are Acme's support assistant. Answer briefly and politely.")    // how to behave
+    .addUserMessage("Can I upgrade my plan mid-contract?")                 // the customer's question
+    .build());
+
+System.out.println(msg.content().get(0).text().get().text());   // simplified: assumes the first block is text
+```
+
+```python
+import anthropic
+
+client = anthropic.Anthropic()                  # reads ANTHROPIC_API_KEY; create ONE per app and reuse it
+
+msg = client.messages.create(
+    model="claude-sonnet-5-5",                  # which Claude
+    max_tokens=1024,                            # the longest reply allowed
+    system="You are Acme's support assistant. Answer briefly and politely.",   # how to behave
+    messages=[{"role": "user", "content": "Can I upgrade my plan mid-contract?"}],   # the customer's question
+)
+
+print(msg.content[0].text)                      # simplified: assumes the first block is text
+```
+
+```typescript
+import Anthropic from '@anthropic-ai/sdk';
+
+const client = new Anthropic();                 // reads ANTHROPIC_API_KEY; create ONE per app and reuse it
+
+const msg = await client.messages.create({
+  model: 'claude-sonnet-5-5',                   // which Claude
+  max_tokens: 1024,                             // the longest reply allowed
+  system: "You are Acme's support assistant. Answer briefly and politely.",   // how to behave
+  messages: [{ role: 'user', content: 'Can I upgrade my plan mid-contract?' }],   // the customer's question
+});
+
+console.log((msg.content[0] as Anthropic.TextBlock).text);   // simplified: assumes the first block is text
+```
+
+</CodeSwitch>
+
 <PictureIt title="What a request really looks like">
-**The scenario:** Acme's support site has a "Ask us anything" box. Behind it is a Java (or Python) service. The long instructions Claude follows live in a text file in the project, not inside Claude.
+**The scenario:** Acme's support site has an "Ask us anything" box. Behind it is a Java (or Python) service. The long instructions Claude follows live in a text file in the project, not inside Claude.
 
 #### 1. Where the system prompt lives
 
@@ -134,9 +247,13 @@ acme-support/
 
 #### 2. The code that sends it
 
-<CodeSwitch title="Load the system prompt from a file">
+<CodeSwitch title="Load the system prompt from a file" fold>
 
 ```java
+// ── Setup: where the names below come from ──
+// Imports: com.anthropic.client.*, com.anthropic.client.okhttp.*, com.anthropic.models.messages.*, java.nio.file.*
+AnthropicClient client = AnthropicOkHttpClient.fromEnv();   // one per app; reads ANTHROPIC_API_KEY
+// ── The example ──
 String systemPrompt = Files.readString(Path.of("src/main/resources/prompts/support-system.txt"));
 
 Message reply = client.messages().create(MessageCreateParams.builder()
@@ -148,6 +265,11 @@ Message reply = client.messages().create(MessageCreateParams.builder()
 ```
 
 ```python
+# ── Setup: where the names below come from ──
+from pathlib import Path
+import anthropic
+client = anthropic.Anthropic()            # one client per app; reads ANTHROPIC_API_KEY
+# ── The example ──
 system_prompt = Path("prompts/support-system.txt").read_text()
 
 reply = client.messages.create(
@@ -159,6 +281,10 @@ reply = client.messages.create(
 ```
 
 ```typescript
+// ── Setup: where the names below come from ──
+import Anthropic from '@anthropic-ai/sdk';
+const client = new Anthropic();             // one per app; reads ANTHROPIC_API_KEY
+// ── The example ──
 const systemPrompt = await readFile('prompts/support-system.txt', 'utf8');   // node:fs/promises
 
 const reply = await client.messages.create({
@@ -207,29 +333,118 @@ Your code shows the `text` block to the customer (pick blocks by `type`, never `
 
 </PictureIt>
 
-### The response: content, stop_reason, usage
+### Reading the response
 
-| Field | Meaning | Real-life comparison |
+This is the one place that covers everything you get back from a call. Other sections link here.
+
+#### Every call ends in one of three ways
+
+<Compare caption="The three outcomes of any call: check them in this order" columns={[
+  { title: '1. An error', sub: 'HTTP 4xx or 5xx', points: ['No reply at all', 'The SDK throws an exception', 'The status code says why (2.4)', 'Some are worth retrying, some never'] },
+  { title: '2. A reply, but not finished', sub: 'HTTP 200', points: ['stop_reason is max_tokens, refusal, pause_turn, tool_use or model_context_window_exceeded', 'No exception: easy to miss', 'Your code must act on it'] },
+  { title: '3. A finished reply', sub: 'HTTP 200', points: ['stop_reason is end_turn (or your stop_sequence)', 'Safe to use the text', 'Log usage for cost'] },
+]} />
+
+The trap: **outcome 2 looks like success.** The HTTP status is 200, nothing is thrown, and the text may look fine until it stops mid-sentence or turns out to be a tool request. So always check `stop_reason`, the way you'd check a program's exit code.
+
+#### A reply, field by field
+
+```json
+{
+  "id": "msg_01XFDUDYJgAACzvnptvVoYEL",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-sonnet-5-5",
+  "content": [
+    { "type": "thinking", "thinking": "", "signature": "EqQBCkYIARgC..." },
+    { "type": "text", "text": "Your March bill shows two charges of £32. I've flagged the duplicate." }
+  ],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 312,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 9800,
+    "output_tokens": 145
+  }
+}
+```
+
+<Explain title="Reading it" steps={["`id`: this reply's unique ID. Log it, with the `request-id` response header, so a support ticket can trace it.", "`model`: the exact model that answered. Useful when you used an alias.", "`content`: a **list** of blocks. Here a `thinking` block comes first (its text is empty by default on the newest models; the `signature` proves it's genuine), then the `text` block with the actual answer.", "`stop_reason`: `end_turn`, so Claude finished naturally (outcome 3). `stop_sequence` would name the string that stopped it, if one had.", "`usage`: the itemised bill for this one call (explained below)."]} />
+
+#### `content`: what Claude said
+
+`content` is a list, and each block has a `type`:
+
+| Block type | What it holds | What your code does with it |
 |---|---|---|
-| `content` | A list of **content blocks**, each with a type: `text` (the answer), `tool_use` (a request to run a tool, Domain 8) or `thinking` (Claude's reasoning before it answers, 6.4) | The work delivered |
-| `stop_reason` | Why it stopped (below) | The contractor's note: "done", "ran out of hours", "need you to fetch something" |
-| `usage` | `input_tokens`, `output_tokens`, plus two cache counters used by prompt caching (Domain 5) | The itemised invoice |
+| `text` | The written answer | Show it, or parse it |
+| `thinking` | Claude's reasoning before answering (6.4) | Usually ignore it; keep it unchanged in the history during tool use |
+| `tool_use` | A request to run one of your tools: a name, an ID and the inputs (8.1) | Run the tool, send back a `tool_result` |
+| `server_tool_use` and its result | A tool Anthropic ran for you, such as web search (8.3) | Nothing to run; the results are already there |
 
-| `stop_reason` | Means | Your code should… |
+**The rule: pick blocks by `type`, never by position.** Code that reads `content[0].text` breaks as soon as a `thinking` or `tool_use` block comes first.
+
+#### `stop_reason`: why it stopped
+
+| `stop_reason` | What happened | Example | Your code should… |
+|---|---|---|---|
+| `end_turn` | Claude finished naturally | A normal chat answer | Use the answer |
+| `max_tokens` | It hit your `max_tokens` cap mid-reply | A JSON list of 150 items stops at item 61 | Treat it as **incomplete**: raise the cap, ask for less, or continue. Never parse it as complete JSON |
+| `stop_sequence` | It wrote one of your `stop_sequences` | It wrote `</answer>`, so it stopped (2.2) | Use the text before the marker |
+| `tool_use` | It wants you to run a tool | "Run `get_order` with `A-1234`" | Run it and send a `tool_result` (8.1); this is how the agent loop continues (1.3) |
+| `pause_turn` | A long server-tool job (e.g. several web searches) was paused | A research question needing many searches | Send the conversation back as it is, and it carries on (8.3) |
+| `refusal` | It declined for safety reasons | A request for something harmful | Read `stop_details` (it says why), log it, show a polite message or try a fallback model. Don't resend unchanged |
+| `model_context_window_exceeded` | The reply filled the whole **context window** (input plus output, 6.5) | A huge document plus a long answer | Treat it as truncated, like `max_tokens` |
+
+#### `usage`: the itemised bill
+
+Every reply says exactly how many tokens it used. Anthropic bills from these same numbers.
+
+| Field | What it counts | Price on Sonnet 5.5 |
 |---|---|---|
-| `end_turn` | Claude finished naturally | Use the answer |
-| `max_tokens` | Hit your `max_tokens` cap; the reply is cut off | Raise the cap, ask for less, or continue |
-| `stop_sequence` | Wrote one of your stop strings | Use the text before it |
-| `tool_use` | Wants you to run a tool | Run it, send back a `tool_result` (Domain 8) |
-| `pause_turn` | A long-running **server tool** (a tool Anthropic runs for you, such as web search, 8.3) paused | Resend the conversation as it is |
-| `refusal` | Declined for safety reasons | Read `stop_details` (which says why), log it, and show it to the user or retry on a different (fallback) model; don't just resend the same request |
-| `model_context_window_exceeded` | The reply filled the model's **context window** (the most text it can handle in one request: input plus output) | Treat it as truncated, like `max_tokens` |
+| `input_tokens` | Input that was **not** read from or written to the cache: usually the newest part of the conversation | $2 per million |
+| `cache_creation_input_tokens` | Input written to the cache on this call (5.3) | 1.25× = $2.50 per million |
+| `cache_read_input_tokens` | Input read back from the cache | 0.05× = $0.10 per million |
+| `output_tokens` | Everything Claude wrote, **including thinking** | $10 per million |
 
-A 200 OK does **not** mean a complete answer. Branch on `stop_reason` every time, like checking an exit code.
+**The total input is the sum of the first three.** `input_tokens` alone is *not* everything you sent once caching is on.
 
-<CodeSwitch title="Read the reply: text, stop_reason and usage">
+**Worked example**, using the reply above:
+
+| | Tokens | Rate | Cost |
+|---|---|---|---|
+| Uncached input | 312 | $2 / M | $0.000624 |
+| Cache read | 9,800 | $0.10 / M | $0.00098 |
+| Output | 145 | $10 / M | $0.00145 |
+| **Total** | 10,112 input + 145 output | | **≈ $0.0031** |
+
+Without the cache, the same 10,112 input tokens would cost about $0.0202, so caching cut the input cost by about 92%.
+
+**Reading `usage` to find problems:**
+
+| You see | It means |
+|---|---|
+| `input_tokens` grows on every turn of a chat | The history is growing: you're resending it all (expected, but watch it, 6.5) |
+| `cache_read_input_tokens` is 0 on repeated calls | The cache isn't being hit: something at the start changes each time (5.3) |
+| `cache_creation_input_tokens` is high on every call | You're paying to write the cache and never reading it back |
+| `output_tokens` equals your `max_tokens` | The reply was cut off: check `stop_reason` |
+| `output_tokens` is far larger than the visible text | Most of it was thinking: consider lower effort (5.2) |
+
+#### Where errors fit
+
+If a call fails (outcome 1), there's no `content`, `stop_reason` or `usage` at all, just an error with a status code. 2.4 covers what each error means, which to retry and how.
+
+<CodeSwitch title="Read the reply: text, stop_reason and usage" fold>
 
 ```java
+// ── Setup: where the names below come from ──
+// Imports: com.anthropic.client.*, com.anthropic.client.okhttp.*, com.anthropic.models.messages.*
+AnthropicClient client = AnthropicOkHttpClient.fromEnv();   // one per app; reads ANTHROPIC_API_KEY
+Message msg = client.messages().create(MessageCreateParams.builder()
+    .model(Model.CLAUDE_SONNET_5_5).maxTokens(1024L)
+    .addUserMessage("Summarise this ticket: ...").build());
+// ── The example ──
 msg.content().forEach(b -> b.text().ifPresent(t -> System.out.println(t.text())));
 
 if (msg.stopReason().map(StopReason.MAX_TOKENS::equals).orElse(false)) {
@@ -239,6 +454,12 @@ System.out.printf("in=%d out=%d%n", msg.usage().inputTokens(), msg.usage().outpu
 ```
 
 ```python
+# ── Setup: where the names below come from ──
+import anthropic
+client = anthropic.Anthropic()            # one client per app; reads ANTHROPIC_API_KEY
+msg = client.messages.create(model="claude-sonnet-5-5", max_tokens=1024,
+                             messages=[{"role": "user", "content": "Summarise this ticket: ..."}])
+# ── The example ──
 for block in msg.content:
     if block.type == "text":
         print(block.text)
@@ -249,6 +470,12 @@ print(f"in={msg.usage.input_tokens} out={msg.usage.output_tokens}")
 ```
 
 ```typescript
+// ── Setup: where the names below come from ──
+import Anthropic from '@anthropic-ai/sdk';
+const client = new Anthropic();             // one per app; reads ANTHROPIC_API_KEY
+const msg = await client.messages.create({ model: 'claude-sonnet-5-5', max_tokens: 1024,
+  messages: [{ role: 'user', content: 'Summarise this ticket: ...' }] });
+// ── The example ──
 for (const block of msg.content) {
   if (block.type === 'text') console.log(block.text);
 }
@@ -261,6 +488,134 @@ console.log(`in=${msg.usage.input_tokens} out=${msg.usage.output_tokens}`);
 
 </CodeSwitch>
 
+<CodeSwitch title="Handle every stop_reason">
+
+```java
+// ── Setup: where the names below come from ──
+// Imports: com.anthropic.client.*, com.anthropic.client.okhttp.*, com.anthropic.models.messages.*
+AnthropicClient client = AnthropicOkHttpClient.fromEnv();   // one per app; reads ANTHROPIC_API_KEY
+MessageCreateParams params = MessageCreateParams.builder()   // the request you are sending
+    .model(Model.CLAUDE_SONNET_5_5).maxTokens(1024L).addUserMessage("Summarise this ticket: ...").build();
+Logger log = LoggerFactory.getLogger(SupportService.class);   // SLF4J
+// show: your UI code that displays text to the user
+// textOf: a small helper that joins the text blocks of a reply into one string
+// runToolsAndCallAgain, continueConversation, retryWithMoreRoomOrLessWork: your own helpers for each case (the agent loop in 1.3; resending for pause_turn; a retry with a bigger max_tokens or smaller job)
+// ── The example ──
+Message msg = client.messages().create(params);
+StopReason why = msg.stopReason().orElseThrow();
+
+if (why.equals(StopReason.END_TURN) || why.equals(StopReason.STOP_SEQUENCE)) {
+    show(textOf(msg));                                  // outcome 3: finished
+} else if (why.equals(StopReason.TOOL_USE)) {
+    runToolsAndCallAgain(msg);                          // the agent loop continues (1.3, 8.1)
+} else if (why.equals(StopReason.MAX_TOKENS) || why.equals(StopReason.MODEL_CONTEXT_WINDOW_EXCEEDED)) {
+    log.warn("Truncated reply {}", msg.id());           // incomplete: never parse as complete
+    retryWithMoreRoomOrLessWork(params);
+} else if (why.equals(StopReason.PAUSE_TURN)) {
+    continueConversation(msg);                          // send it back as it is (8.3)
+} else if (why.equals(StopReason.REFUSAL)) {
+    log.info("Refused: {}", msg.id());
+    show("Sorry, I can't help with that one.");         // or try a fallback model
+}
+log.info("usage in={} cacheRead={} cacheWrite={} out={}", msg.usage().inputTokens(),
+    msg.usage().cacheReadInputTokens().orElse(0L), msg.usage().cacheCreationInputTokens().orElse(0L),
+    msg.usage().outputTokens());
+```
+
+```python
+# ── Setup: where the names below come from ──
+import anthropic
+import logging
+client = anthropic.Anthropic()            # one client per app; reads ANTHROPIC_API_KEY
+params = dict(model="claude-sonnet-5-5", max_tokens=1024,          # the request you are sending
+              messages=[{"role": "user", "content": "Summarise this ticket: ..."}])
+log = logging.getLogger(__name__)
+# show: your UI code that displays text to the user
+# text_of: a small helper that joins the text blocks of a reply into one string
+# run_tools_and_call_again, continue_conversation, retry_with_more_room_or_less_work: your own helpers for each case (the agent loop in 1.3; resending for pause_turn; a retry with a bigger max_tokens or smaller job)
+# ── The example ──
+msg = client.messages.create(**params)
+
+match msg.stop_reason:
+    case "end_turn" | "stop_sequence":
+        show(text_of(msg))                              # outcome 3: finished
+    case "tool_use":
+        run_tools_and_call_again(msg)                   # the agent loop continues (1.3, 8.1)
+    case "max_tokens" | "model_context_window_exceeded":
+        log.warning("Truncated reply %s", msg.id)       # incomplete: never parse as complete
+        retry_with_more_room_or_less_work(params)
+    case "pause_turn":
+        continue_conversation(msg)                      # send it back as it is (8.3)
+    case "refusal":
+        log.info("Refused: %s", msg.id)
+        show("Sorry, I can't help with that one.")      # or try a fallback model
+
+u = msg.usage
+log.info("usage in=%s cache_read=%s cache_write=%s out=%s", u.input_tokens,
+         u.cache_read_input_tokens, u.cache_creation_input_tokens, u.output_tokens)
+```
+
+```typescript
+// ── Setup: where the names below come from ──
+import Anthropic from '@anthropic-ai/sdk';
+const client = new Anthropic();             // one per app; reads ANTHROPIC_API_KEY
+const params: Anthropic.MessageCreateParamsNonStreaming = {   // the request you are sending
+  model: 'claude-sonnet-5-5', max_tokens: 1024,
+  messages: [{ role: 'user', content: 'Summarise this ticket: ...' }] };
+const log = console;   // or your logger (pino, winston...)
+// show: your UI code that displays text to the user
+// textOf: a small helper that joins the text blocks of a reply into one string
+// runToolsAndCallAgain, continueConversation, retryWithMoreRoomOrLessWork: your own helpers for each case (the agent loop in 1.3; resending for pause_turn; a retry with a bigger max_tokens or smaller job)
+// ── The example ──
+const msg = await client.messages.create(params);
+
+switch (msg.stop_reason) {
+  case 'end_turn':
+  case 'stop_sequence':
+    show(textOf(msg));                                  // outcome 3: finished
+    break;
+  case 'tool_use':
+    await runToolsAndCallAgain(msg);                    // the agent loop continues (1.3, 8.1)
+    break;
+  case 'max_tokens':
+  case 'model_context_window_exceeded':
+    log.warn(`Truncated reply ${msg.id}`);              // incomplete: never parse as complete
+    await retryWithMoreRoomOrLessWork(params);
+    break;
+  case 'pause_turn':
+    await continueConversation(msg);                    // send it back as it is (8.3)
+    break;
+  case 'refusal':
+    log.info(`Refused: ${msg.id}`);
+    show("Sorry, I can't help with that one.");         // or try a fallback model
+    break;
+}
+const u = msg.usage;
+log.info(`usage in=${u.input_tokens} cache_read=${u.cache_read_input_tokens} cache_write=${u.cache_creation_input_tokens} out=${u.output_tokens}`);
+```
+
+</CodeSwitch>
+
+<Exercise title="Read these four replies" id="exercise-read-replies">
+
+For each reply, which of the three outcomes is it, and what should your code do?
+
+1. HTTP 200, `stop_reason: "max_tokens"`, `output_tokens: 4096` (your `max_tokens` is 4096), and the text ends `{"items": [{"sku": "A1"}, {"sk`
+2. HTTP 200, `stop_reason: "tool_use"`, and `content` holds a `tool_use` block for `get_order` with `{"order_id": "A-1234"}`
+3. HTTP 429 with a `retry-after: 6` header
+4. HTTP 200, `stop_reason: "end_turn"`, `usage.cache_read_input_tokens: 0` on the 50th identical-prefix call today
+
+<div slot="answer">
+
+1. **Outcome 2, truncated.** It hit the cap, so the JSON is incomplete. Don't parse it: raise `max_tokens`, ask for fewer items per call, or continue.
+2. **Outcome 2, a tool request.** Run `get_order("A-1234")` in your code, send the result back as a `tool_result` with the same ID, and call Claude again.
+3. **Outcome 1, an error.** You're over your rate limit. Wait 6 seconds and retry (the SDK does this for you), and reduce how many calls you make at once.
+4. **Outcome 3, finished, but there's a cost problem.** The answer is fine, but the cache never hits. Something at the start of the prompt (a timestamp, a user ID) changes every call. Move it after the cached part (5.3).
+
+</div>
+
+</Exercise>
+
 <Gotcha
   title={"The chatbot with amnesia"}
   scenario={"A Java service sends each new customer message to Claude on its own, using only the latest user turn."}
@@ -272,7 +627,9 @@ console.log(`in=${msg.usage.input_tokens} out=${msg.usage.output_tokens}`);
   "A call is one stateless `POST /v1/messages`: your app resends the whole history every time.",
   "Required: `model`, `max_tokens`, `messages` plus the API-key and `anthropic-version` headers. `system` is a top-level field, not a role.",
   "The response gives you `content` blocks, a `stop_reason` and `usage`.",
-  "A 200 OK isn't a complete answer: branch on `stop_reason` (end_turn, max_tokens, stop_sequence, tool_use, pause_turn, refusal, model_context_window_exceeded).",
+  "Every call ends one of three ways: an error (no reply), a 200 that isn't finished (max_tokens, tool_use, pause_turn, refusal, model_context_window_exceeded), or a finished 200 (end_turn, stop_sequence). Always check `stop_reason`.",
+  "Pick `content` blocks by `type`, never `content[0]`.",
+  "`usage`: total input = `input_tokens` + cache writes + cache reads; `output_tokens` includes thinking.",
 ]} />
 
 ## 2.2 Request parameters, explained
@@ -280,76 +637,70 @@ console.log(`in=${msg.usage.input_tokens} out=${msg.usage.output_tokens}`);
 <ExamRef section="2.2" />
 <Imagine text={"Acme's chatbot works, but some answers are cut off mid-sentence and the bill is higher than expected. The cause is in the handful of settings sent with every request."} />
 
+### What this section is about
+
+Every request you send to Claude is a small JSON object of **settings** (also called **parameters**): which model, how long the reply may be, the instructions, the conversation, and a few optional dials. Section 2.1 showed that a request exists. This section takes the settings **one at a time**: what each does, what happens if you get it wrong, and how to set it in code.
+
+Here's a typical request body. Each line is one setting, and each gets its own heading below:
+
+```json
+{
+  "model": "claude-sonnet-5-5",
+  "max_tokens": 1024,
+  "system": "You are Acme Broadband's support assistant. Be brief.",
+  "messages": [
+    { "role": "user", "content": "My router light is red. What do I do?" }
+  ],
+  "stop_sequences": ["</answer>"]
+}
+```
 
 
-
-
-
+The first three plus `messages` are what you'll set on almost every call. Only `model`, `max_tokens` and `messages` are required; everything else is optional.
 
 ### Think of a call as a job for a contractor
 
 You pick the contractor (`model`), hand over the standing brief (`system`) and the case file so far (`messages`), and cap the billable hours (`max_tokens`). You get back the work (`content`), a note on why they stopped (`stop_reason`) and an invoice (`usage`).
 
 {/* diagram */}
-<Compare caption="max_tokens is a ceiling, not a target (Exam guide: Claude API Mechanics)" columns={[
+<Compare caption="max_tokens is a ceiling, not a target" columns={[
   { title: 'The reply fits', sub: 'stop_reason: end_turn', points: ['Claude finished naturally', 'You pay only for tokens written', 'Safe to parse'] },
   { title: 'The reply is too long', sub: 'stop_reason: max_tokens', points: ['Cut off mid-sentence, no error', 'JSON is left incomplete', 'Check stop_reason before using it'] },
 ]} />
 
-<RoleLens dev={"`max_tokens` is a hard cap on the reply, not a target. `temperature` is randomness. `stop_sequences` cut output at a marker. All go in the same request builder."} test={"Set low temperature for anything you assert on, and always test the `max_tokens` boundary: what does the app do with a half-finished reply?"} data={"For bulk extraction, set `max_tokens` to fit the largest expected output plus margin, and fail the row (not the batch) when `stop_reason` is `max_tokens`."} ba={"Response length and tone are requirements: \"answers under 80 words, formal tone\" becomes `max_tokens` and system-prompt wording. Agree them with stakeholders."} />
+<RoleLens dev={"`max_tokens` is a hard cap on the reply, not a target. `temperature` is randomness. `stop_sequences` cut output at a marker. All go in the same request builder."} test={"Assert on properties, not exact wording (temperature can't be lowered on the newest models), and always test the `max_tokens` boundary: what does the app do with a half-finished reply?"} data={"For bulk extraction, set `max_tokens` to fit the largest expected output plus margin, and fail the row (not the batch) when `stop_reason` is `max_tokens`."} ba={"Response length and tone are requirements: \"answers under 80 words, formal tone\" becomes `max_tokens` and system-prompt wording. Agree them with stakeholders."} />
 
 ### Tokens
 
 <Imagine text={"Acme's finance team asks why one chatbot conversation cost 3p and another 40p, when both were \"one chat\". The difference is how much text went in and came out, measured in **tokens**."} />
 
-
 A token is the unit Claude reads, writes and bills in: a chunk of text of roughly ¾ of an English word. Think of a taxi meter that ticks per chunk of road. Your prompt, the whole history, tool definitions, tool results and images all tick the **input** meter. Everything Claude writes ticks the **output** meter, which costs 5× more per token on every current model.
 
 {/* more:2-tokens */}
 **Example:** the sentence *"Please summarise this invoice."* is about 6–8 tokens. A one-page email is roughly 500 tokens; a 300-page book is roughly 100,000. You never count by hand: the API reports exact numbers in `usage` on every reply, and 5.5 shows how to count before sending.
+
+To see where the tokens in a reply are reported, see `usage` in 2.1; to turn them into a daily bill, see the worked example in 5.5.
 {/* /more */}
-
-
-
-
-
-
-
 
 ### model
 
 <Imagine text={"Acme's ticket tagger and its fault-finding agent use the same model. For the tagger it's overkill; the agent struggles. Each job needs a different size of Claude."} />
 
+The `model` field chooses which Claude does the work. Think of choosing junior, mid-level or senior staff: seniors are better, but slower and more expensive.
 
-Which Claude does the work. Think of choosing junior, mid or senior staff: seniors are better, slower and pricier.
+For this field, you only need to know that the value is a model ID such as `claude-sonnet-5-5`. The rest lives elsewhere:
 
-- **Haiku** - tagging 1M support tickets overnight
-- **Sonnet** - a customer-facing chatbot
-- **Opus** - a multi-hour coding agent
-- **Fable** - the hardest reasoning, when Opus still falls short on your **evals** (your automated tests for AI output, Domain 4)
+- **Which model to choose**, with prices and the Haiku / Sonnet / Opus / Fable trade-offs: **5.1**
+- **How hard it thinks** (effort): **5.2**
+- **Pinning the exact version** for production, and upgrading safely: **2.5**
 
-<CodeSwitch title="Choose the model">
 
-```java
-.model(Model.CLAUDE_SONNET_5_5)      // or .model("claude-sonnet-5-5"); pin the full ID in production
-```
-
-```python
-model="claude-sonnet-5-5"      # pin the full ID in production
-```
-
-```typescript
-model: 'claude-sonnet-5-5',      // pin the full ID in production
-```
-
-</CodeSwitch>
 
 ### max_tokens
 
 <Imagine text={"You ask Claude for 150 product descriptions in one JSON list, and the reply stops halfway through item 61. No error, just a broken list."} />
 
-
-A hard ceiling on how many tokens Claude may **write** in this reply. It isn't a target, it doesn't limit the input, and you only pay for what's actually written. Think of a word limit on an essay.
+`max_tokens` is a hard ceiling on how many tokens Claude may **write** in this reply. It isn't a target (Claude doesn't try to fill it), it doesn't limit what you send, and you only pay for what's actually written. Think of a word limit on an essay.
 
 If Claude reaches the limit mid-sentence, the reply is simply cut off and `stop_reason` is `max_tokens`. There's **no error**: just truncated text or broken JSON. Size it to the longest good answer: about 300 tokens for a label plus a reason, 1,024–4,096 for chat, and much more (with streaming) for long documents or code.
 
@@ -384,7 +735,6 @@ HTTP status: **200 OK**. No exception. The text simply stops mid-word, so `JSON.
 
 <Imagine text={"A customer asks \"What's your refund policy?\", then \"And without a receipt?\". The second question only makes sense if Claude can see the first, and Claude also needs Acme's rules for how to answer."} />
 
-
 <VsPair
   left={{ title: 'system', meaning: 'Standing rules for the whole conversation: role, scope, format. A top-level field.', example: '"You are Acme\'s support agent. Answer only about Acme products, in under 80 words."' }}
   right={{ title: 'messages', meaning: 'The conversation so far, as alternating user and assistant turns, resent every call.', example: 'user: refund policy? → assistant: 30 days → user: and without a receipt?' }}
@@ -392,7 +742,7 @@ HTTP status: **200 OK**. No exception. The text simply stops mid-word, so `JSON.
 
 Think of it as the employee handbook versus today's case file. Because the API remembers nothing, it's like phoning a call-centre agent who has no notes: you read out the whole file each time.
 
-<CodeSwitch title="System prompt plus conversation history">
+<CodeSwitch title="System prompt plus conversation history" fold>
 
 ```java
 .system("You are Acme's support agent. Answer only about Acme products, in under 80 words.")
@@ -425,10 +775,21 @@ messages: [
 
 <Imagine text={"Acme's marketing team wants ten **different** names for a new tariff. The billing team wants the **same** category label every time. The fault agent should think hard; the FAQ bot shouldn't. Those are three different dials."} />
 
-
 - **stop_sequences** - strings that end the reply as soon as Claude writes them; stop_reason becomes stop_sequence · e.g. stop at a closing answer tag so no commentary follows
 - **temperature / top_p** - randomness settings that older models accepted, low = predictable · on the newest models you can't set them: steer with the prompt and test properties, not exact wording
 - **effort** - how hard the model thinks before answering · current models decide for themselves how much to think (**adaptive thinking**), and effort steers it: low for sorting an email into a category, high for a tricky bug · more thinking = more output tokens, cost and latency
+
+{/* more:2-dials */}
+**The dials side by side:**
+
+| Setting | What it controls | Turn it… | Acme example | On current models |
+|---|---|---|---|---|
+| `max_tokens` | The longest the reply may be | Up for long outputs | 4,096 for a detailed answer | Required on every request |
+| `stop_sequences` | Text that ends the reply immediately | Set it when you want nothing after a marker | Stop at `</answer>` | Works as normal |
+| `temperature` | How varied word choices are (0 to 1) | Low for consistency, high for variety | Same label every time vs ten tariff names | Can't change it: Opus 5.5 and Sonnet 5.5 reject non-default values |
+| `top_p` | A different way to limit variety | Rarely touched | | Same as temperature |
+| `effort` | How hard Claude thinks before answering | Low for simple jobs, high for hard ones | Low for the FAQ bot, high for the fault agent | The main dial for speed, cost and depth |
+{/* /more */}
 
 {/* more:2-temp */}
 #### Temperature, explained
@@ -442,13 +803,19 @@ When Claude writes, it picks each next word from a ranked list of likely options
 
 **On the newest models you don't set either.** Opus 5.5 and Sonnet 5.5 reject any value except the default, so you steer variety through the prompt instead: *"Give one short name"* for consistency, *"Give five names that are very different from each other"* for variety. And because answers vary, your tests check **properties** (is it under 20 characters? does it avoid the word "coffee"?) rather than exact text.
 
+
 #### stop_sequences, in practice
 
 A **stop sequence** is a piece of text that ends the reply the moment Claude writes it. Useful when you ask for an answer inside a tag and want nothing after it.
 
-<CodeSwitch title="Stop at a marker with stop_sequences">
+<CodeSwitch title="Stop at a marker with stop_sequences" fold>
 
 ```java
+// ── Setup: where the names below come from ──
+// Imports: com.anthropic.client.*, com.anthropic.client.okhttp.*, com.anthropic.models.messages.*
+AnthropicClient client = AnthropicOkHttpClient.fromEnv();   // one per app; reads ANTHROPIC_API_KEY
+String ticket = "I was charged twice for my March bill.";   // an example input
+// ── The example ──
 Message msg = client.messages().create(MessageCreateParams.builder()
     .model(Model.CLAUDE_HAIKU_5_5).maxTokens(200L)
     .addUserMessage("Classify this ticket. Put only the label inside <answer></answer>: " + ticket)
@@ -458,6 +825,11 @@ Message msg = client.messages().create(MessageCreateParams.builder()
 ```
 
 ```python
+# ── Setup: where the names below come from ──
+import anthropic
+client = anthropic.Anthropic()            # one client per app; reads ANTHROPIC_API_KEY
+ticket = "I was charged twice for my March bill."   # an example input
+# ── The example ──
 msg = client.messages.create(
     model="claude-haiku-5-5", max_tokens=200,
     messages=[{"role": "user", "content": f"Classify this ticket. Put only the label inside <answer></answer>: {ticket}"}],
@@ -467,6 +839,11 @@ msg = client.messages.create(
 ```
 
 ```typescript
+// ── Setup: where the names below come from ──
+import Anthropic from '@anthropic-ai/sdk';
+const client = new Anthropic();             // one per app; reads ANTHROPIC_API_KEY
+const ticket = 'I was charged twice for my March bill.';   // an example input
+// ── The example ──
 const msg = await client.messages.create({
   model: 'claude-haiku-5-5', max_tokens: 200,
   messages: [{ role: 'user', content: `Classify this ticket. Put only the label inside <answer></answer>: ${ticket}` }],
@@ -478,28 +855,7 @@ const msg = await client.messages.create({
 </CodeSwitch>
 {/* /more */}
 
-
-
-
-
-
-
-
-### Worked cost example
-
-<Imagine text={"The chatbot will handle 100,000 conversations a day. Before launch, finance wants the daily cost on one page."} />
-
-
-Sonnet 5.5 costs $2 per million input tokens and $10 per million output tokens. A support-bot call with a 3,000-token system prompt, 1,500 tokens of history and a 400-token answer:
-
-| Item | Tokens | Rate | Cost |
-|---|---|---|---|
-| Input | 4,500 | $2 / 1M | $0.0090 |
-| Output | 400 | $10 / 1M | $0.0040 |
-| **Per call** | | | **$0.0130** |
-| **100,000 calls a day** | | | **≈ $1,300 a day** |
-
-**Prompt caching**, which lets Claude reuse the processed system prompt instead of reading it again on every call (cache reads cost 0.05× base on Sonnet 5.5), cuts that slice from $0.006 to $0.0003 per call, saving about $570 a day. Domain 5 covers how.
+### Exercise: a truncated reply
 
 <Exercise title="What went wrong?" id="exercise-max-tokens">
 
@@ -523,10 +879,10 @@ Fixes: check `stop_reason` before parsing; raise `max_tokens` or, better, **spli
 
 <SectionSummary points={[
   "Tokens are the unit of reading, writing and billing; output costs about 5× input.",
-  "`model` picks the tier: Haiku for volume, Sonnet as the default, Opus or Fable for the hardest work.",
+  "`model` picks the tier: Haiku for high volume, Sonnet for a balance of speed and quality, Opus or Fable for the hardest work.",
   "`max_tokens` caps the reply only. Hitting it truncates silently with `stop_reason: max_tokens`, never an error.",
   "`system` holds standing rules; `messages` holds the alternating conversation.",
-  "Cost = input tokens × input price + output tokens × output price: estimate it before you scale.",
+  "Cost = input tokens × input price + output tokens × output price. 5.5 works through a full example.",
 ]} />
 
 ## 2.3 Streaming
@@ -534,15 +890,11 @@ Fixes: check `stop_reason` before parsing; raise `max_tokens` or, better, **spli
 <ExamRef section="2.3" />
 <Imagine text={"Customers stare at an empty chat box for eight seconds while a long answer is generated, and some think it's broken. You want the words to appear as they're written, like someone typing."} />
 
-
-
-
-
-
-
 ### When to stream
 
-Streaming sends the reply as it's written, like watching a live broadcast instead of waiting for the recording. Use it for chat UIs and long outputs. Skip it for short backend jobs where nobody is watching: it adds code (you assemble the message yourself) without benefit.
+**Streaming** sends the reply piece by piece as it's written, like watching a live broadcast instead of waiting for the recording. Use it for chat screens and long outputs. Skip it for short background jobs where nobody is watching: it means extra code (you assemble the message yourself) for no benefit.
+
+**How the words reach the user's screen:** Claude streams to **your server**, not to the user. Your server passes each piece on to the browser as it arrives (usually over its own streaming connection), and the chat window adds the words as they come. Your server also collects the pieces, so it can save the complete reply to the history at the end.
 
 <RoleLens dev={"Streaming sends text as server-sent events so the UI updates as it's written. Only commit the message to history once the stream has completed cleanly."} test={"Test the interrupted-stream case: kill the connection mid-reply and check the app doesn't save half an answer or show it as final."} data={"You rarely stream in batch pipelines: you want the whole result. Streaming matters for long outputs on the request path, where it avoids HTTP timeouts."} ba={"Streaming is a UX decision: users see words appear immediately. It makes no difference to cost or quality, so it belongs in the non-functional requirements."} />
 
@@ -550,7 +902,7 @@ Streaming sends the reply as it's written, like watching a live broadcast instea
 
 A streamed reply arrives as a series of small, named messages called **events**. Each reply is built from **content blocks** (a text block, a tool request), and the events tell you when each block starts, what to add to it, and when it's finished.
 
-<Flow caption="Server-sent events for one streamed message (Exam guide: Claude API Mechanics)" steps={[
+<Flow caption="Server-sent events for one streamed message" steps={[
   { title: 'message_start', sub: 'empty shell' },
   { title: 'content_block_start', sub: 'block type + index' },
   { title: 'content_block_delta', sub: 'append fragment' },
@@ -559,14 +911,57 @@ A streamed reply arrives as a series of small, named messages called **events**.
   { title: 'message_stop', sub: 'message is whole' },
 ]} />
 
+Every event has a `type`. Here's what each one means, in the order they arrive:
+
+| # | Event | What it carries | What your code does |
+|---|---|---|---|
+| 1 | `message_start` | An empty message shell: `id`, `model`, and `usage` with the **input** token count | Start a new reply |
+| 2 | `content_block_start` | A new block at position `index`, and its type (`text`, `tool_use`, `thinking`) | Open a new block |
+| 3 | `content_block_delta` | A fragment to add to that block: `text_delta` (words), `input_json_delta` (part of a tool's JSON input) or `thinking_delta` | Append it. Show text to the user as it arrives |
+| 4 | `content_block_stop` | Nothing new: that block is complete | Only now is a tool's JSON input complete and safe to parse |
+| 5 | `message_delta` | Top-level changes for the whole message: the **`stop_reason`** and the final **`usage.output_tokens`** | Record why it stopped and the final token count |
+| 6 | `message_stop` | Nothing new: the message is finished | Save the complete reply to the history |
+
+Steps 2–4 repeat once per block (a reply with thinking, then text, then a tool call has three rounds). You may also see `ping` events, which just keep the connection alive, and an `error` event if something fails mid-stream.
+
+**Easy to get wrong:** the `stop_reason` and final output-token count are **not** in `message_start` (the reply hasn't been written yet) and not in `content_block_stop` (that only closes one block). They arrive in **`message_delta`**, just before `message_stop`.
+
+Here's a short stream as it arrives, slightly trimmed:
+
+```text
+event: message_start
+data: {"type":"message_start","message":{"id":"msg_01...","model":"claude-sonnet-5-5","content":[],"stop_reason":null,"usage":{"input_tokens":25,"output_tokens":1}}}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Your router light"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" is red because..."}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":42}}
+
+event: message_stop
+data: {"type":"message_stop"}
+```
+
+<Explain title="Reading it" steps={["`message_start`: the reply begins. `stop_reason` is still `null`, and `usage` shows the input tokens.", "`content_block_start` with `index: 0`: the first block is a text block, empty so far.", "Two `content_block_delta` events: fragments of text. A chat screen shows each one as it arrives.", "`content_block_stop`: block 0 is complete.", "`message_delta`: now you learn **why** it stopped (`end_turn`) and the final output count (42 tokens).", "`message_stop`: the reply is complete. This is the moment to save it to the history."]} />
+
+The SDKs assemble these events for you (`text_stream` / `on('text')` for the words, and a final-message helper for the complete reply), so you rarely parse them by hand. But you need to know the order: it's how you know when it's safe to act.
+
 A `tool_use` block's input arrives as JSON fragments, so it isn't valid JSON until its `content_block_stop`. **Never act on a partial block.**
 
 ### Interrupted streams
 
 <Imagine text={"A customer's train goes into a tunnel halfway through a reply. The next time they type, the bot fails with a strange error about a tool."} />
 
-
-A stream *ending* isn't the same as a message *completing*. Only `message_stop` means the message is whole. If your handler saves a turn whenever its read loop exits, a dropped connection writes a half-built block into history, and the failure shows up on the **next** request.
+A stream *ending* isn't the same as a message *completing*. Only `message_stop` means the message is whole. A common bug: the code saves whatever it has received when its read loop ends. If the connection drops, that saves a half-built reply into the conversation history, and the error only appears on the **next** request.
 
 <WhenThen whenLabel="When the stream…" thenLabel="…do this" rows={[
   { when: 'reaches message_stop', then: 'Append the assembled message to history, then check stop_reason' },
@@ -574,36 +969,68 @@ A stream *ending* isn't the same as a message *completing*. Only `message_stop` 
   { when: 'a retry then fails with a tool-use error', then: 'Check whether the previous turn was built from an interrupted stream before touching the schema' },
 ]} />
 
-<CodeSwitch title="Stream a reply safely">
+<Running thread="call" step={2} adds="streaming: the words appear as Claude writes them, and you only keep the reply once it has finished." />
+
+<CodeSwitch title="Acme assistant, step 2: stream the reply">
 
 ```java
-MessageAccumulator acc = MessageAccumulator.create();
-try (StreamResponse<RawMessageStreamEvent> stream = client.messages().createStreaming(params)) {
-    stream.stream()
-        .peek(acc::accumulate)                              // rebuilds the full Message
-        .flatMap(e -> e.contentBlockDelta().stream())
-        .flatMap(d -> d.delta().text().stream())
-        .forEach(t -> System.out.print(t.text()));         // show text as it arrives
+// ── Setup: where the names below come from ──
+// Imports: com.anthropic.client.*, com.anthropic.client.okhttp.*, com.anthropic.models.messages.*, com.anthropic.helpers.MessageAccumulator, com.anthropic.core.http.StreamResponse
+AnthropicClient client = AnthropicOkHttpClient.fromEnv();   // one per app; reads ANTHROPIC_API_KEY
+// ── The example ──
+// Same client and request as step 1
+MessageCreateParams params = MessageCreateParams.builder()
+    .model(Model.CLAUDE_SONNET_5_5).maxTokens(1024L)
+    .system("You are Acme's support assistant. Answer briefly and politely.")
+    .addUserMessage("Can I upgrade my plan mid-contract?")
+    .build();
+
+MessageAccumulator acc = MessageAccumulator.create();   // ← new: rebuilds the full reply
+try (StreamResponse<RawMessageStreamEvent> stream = client.messages().createStreaming(params)) {   // ← new
+    stream.stream()   // ← new
+        .peek(acc::accumulate)   // ← new
+        .flatMap(e -> e.contentBlockDelta().stream())   // ← new: the text pieces
+        .flatMap(d -> d.delta().text().stream())   // ← new
+        .forEach(t -> System.out.print(t.text()));   // ← new: show each piece now
 }
-Message complete = acc.message();   // only reached if the stream ended cleanly
-history.add(complete.toParam());    // commit to history AFTER completion
+Message msg = acc.message();   // ← new: only reached if the stream finished; save THIS to the chat history
 ```
 
 ```python
-with client.messages.stream(model="claude-sonnet-5-5", max_tokens=1024, messages=history) as stream:
-    for text in stream.text_stream:          # show text as it arrives
-        print(text, end="", flush=True)
-    complete = stream.get_final_message()     # only reached if the stream ended cleanly
+# ── Setup: where the names below come from ──
+import anthropic
+client = anthropic.Anthropic()            # one client per app; reads ANTHROPIC_API_KEY
+# ── The example ──
+# Same client and request as step 1
+with client.messages.stream(   # ← new: stream instead of create
+    model="claude-sonnet-5-5",
+    max_tokens=1024,
+    system="You are Acme's support assistant. Answer briefly and politely.",
+    messages=[{"role": "user", "content": "Can I upgrade my plan mid-contract?"}],
+) as stream:
+    for text in stream.text_stream:   # ← new: each piece of text as it arrives
+        print(text, end="", flush=True)   # ← new: show it now
+    msg = stream.get_final_message()   # ← new: only reached if the stream finished
 
-history.append({"role": "assistant", "content": complete.content})   # commit AFTER completion
+# save msg to the chat history now, never a half-finished reply
 ```
 
 ```typescript
-const stream = client.messages.stream({ model: 'claude-sonnet-5-5', max_tokens: 1024, messages: history });
-stream.on('text', (text) => process.stdout.write(text));   // show text as it arrives
+// ── Setup: where the names below come from ──
+import Anthropic from '@anthropic-ai/sdk';
+const client = new Anthropic();             // one per app; reads ANTHROPIC_API_KEY
+// ── The example ──
+// Same client and request as step 1
+const stream = client.messages.stream({   // ← new: stream instead of create
+  model: 'claude-sonnet-5-5',
+  max_tokens: 1024,
+  system: "You are Acme's support assistant. Answer briefly and politely.",
+  messages: [{ role: 'user', content: 'Can I upgrade my plan mid-contract?' }],
+});
+stream.on('text', (text) => process.stdout.write(text));   // ← new: show each piece as it arrives
 
-const complete = await stream.finalMessage();   // rejects if the stream didn't end cleanly
-history.push({ role: 'assistant', content: complete.content });   // commit AFTER completion
+const msg = await stream.finalMessage();   // ← new: waits for the end; fails if the stream broke
+// save msg to the chat history now, never a half-finished reply
 ```
 
 </CodeSwitch>
@@ -644,6 +1071,8 @@ The team spends a morning looking at the tool schema, which was never the proble
   fix={"Append to history only after `message_stop`; on interruption, discard the partial turn and retry from the last complete one."}
 />
 
+**Streaming uses server-sent events, not websockets.** Server-sent events are one-way: the server keeps an ordinary HTTP response open and pushes events down it. A **websocket** is a two-way connection that both sides can send on at any time. Claude's API (and MCP over HTTP) uses SSE. If your web app uses websockets between its own server and the browser, your server simply passes the streamed text along.
+
 <SectionSummary points={[
   "Stream when a person is watching or the output is long; skip it for short backend jobs.",
   "Events run message_start → content_block_start/delta/stop → message_delta → message_stop.",
@@ -656,11 +1085,25 @@ The team spends a morning looking at the tool schema, which was never the proble
 <ExamRef section="2.4" />
 <Imagine text={"Monday, 9am: 10,000 customers report an outage at once. Your service floods Claude with requests, gets \"slow down\" errors and starts failing. Which errors should it retry, how, and which never?"} />
 
+### What an error looks like
 
+When a call fails, there's no reply at all: no `content`, no `stop_reason`, no `usage` (outcome 1 in 2.1). Instead you get an HTTP status code and a small JSON error, and the SDK turns it into an exception.
 
+```http
+HTTP/1.1 429 Too Many Requests
+retry-after: 6
+request-id: req_011CQ4ezo8X3cXYEUm1ECQLX
 
+{
+  "type": "error",
+  "error": { "type": "rate_limit_error", "message": "Number of request tokens has exceeded your per-minute rate limit." },
+  "request_id": "req_011CQ4ezo8X3cXYEUm1ECQLX"
+}
+```
 
+<Explain title="Reading it" steps={["The **status code** (429) is the category: 4xx means a problem with your request or account, 5xx a problem on Anthropic's side.", "`error.type` (`rate_limit_error`) is the precise kind. Branch on this, or on the SDK's exception class (`RateLimitError`).", "`message` is human-readable. Log it, but don't write code that depends on its exact wording.", "`retry-after` says how many seconds to wait. The SDK honours it automatically.", "`request_id` identifies this call. Include it in any support ticket to Anthropic."]} />
 
+A failed call to Claude is an **API error**. A failure inside one of your own tools is different: it goes back to Claude as a tool result (8.2 compares the two).
 
 ### Retriable or terminal?
 
@@ -668,7 +1111,7 @@ A **retriable** error might succeed if you wait and send the same request again 
 
 | Status | `error.type` | Meaning | Retry? |
 |---|---|---|---|
-| 400 | `invalid_request_error` | Bad request shape (or a spend limit you set) | **No**: fix the request |
+| 400 | `invalid_request_error` | Something is wrong with the request itself: a missing field, an invalid value | **No**: fix the request |
 | 401 / 403 | authentication / permission | Bad key or no access | **No** |
 | 404 / 413 | not_found / request_too_large | Wrong model or path; payload too big | **No** |
 | 429 | `rate_limit_error` | Your org hit a rate or spend limit | **Yes**, after `retry-after`. A spend-cap 429 has no `retry-after` and won't clear by waiting |
@@ -677,12 +1120,12 @@ A **retriable** error might succeed if you wait and send the same request again 
 | 200 + `refusal` | (not an error) | A content decision by the model | **Not as-is**: read `stop_details`, log it, then surface it or fall back to another model |
 
 <VsPair
-  left={{ title: '429 rate_limit_error', meaning: 'YOU are sending too much: your organisation hit RPM, ITPM or OTPM.', example: 'Fix: honour retry-after, reduce concurrency, ask for a higher tier.' }}
+  left={{ title: '429 rate_limit_error', meaning: 'YOU are sending too much: your organisation went over one of its rate limits (explained just below).', example: 'Fix: honour retry-after, reduce concurrency, ask for a higher tier.' }}
   right={{ title: '529 overloaded_error', meaning: 'ANTHROPIC is busy across the board, whatever your rate.', example: 'Fix: backoff with jitter, fail over or degrade gracefully if it persists.' }}
 />
 
 {/* diagram */}
-<Compare caption="Which errors to retry: the SDK already retries the left column for you (Exam guide: Software Engineering Foundations)" columns={[
+<Compare caption="Which errors to retry: the SDK already retries the left column for you" columns={[
   { title: 'Retry, with backoff', sub: 'temporary problems', points: ['429 rate limited', '529 overloaded', '500 server error', 'Network drop or timeout'] },
   { title: 'Don\'t retry: fix the request', sub: 'it will fail every time', points: ['400 bad request', '401 bad API key', '403 not allowed', '413 request too large'] },
 ]} />
@@ -693,13 +1136,39 @@ A **retriable** error might succeed if you wait and send the same request again 
 
 <Imagine text={"A nightly job fires 5,000 requests in its first minute and most are rejected, even though Anthropic isn't down at all."} />
 
+A **rate limit** is a cap on how much you can send to Claude in a given time. Go over it and Anthropic rejects the extra requests with a **429** error until you slow down. It isn't a fault, just a speed limit.
 
-Limits are set **per organisation, per model**, as requests per minute (RPM), input tokens per minute (ITPM) and output tokens per minute (OTPM). They work like a **token bucket**: your allowance refills at a steady rate rather than resetting once a minute. They rise with your **usage tier**, which Anthropic raises as your account's spending history grows. Cached input reads typically don't count against ITPM on current models, so caching raises throughput as well as cutting cost.
+There are three caps, and you hit whichever runs out first:
+
+| Limit | What it counts | Hit it when… |
+|---|---|---|
+| **RPM**: requests per minute | How many calls you make | You fire thousands of small calls at once |
+| **ITPM**: input tokens per minute | How much text you *send* (prompt, documents, history) | Each call carries a long document or a big conversation |
+| **OTPM**: output tokens per minute | How much text Claude *writes back* | You ask for long answers in bulk |
+
+Four things to know about them:
+
+- **They're shared.** The limits apply to your whole **organisation** (your company's Anthropic account), separately for each model. Two teams on the same account share one Sonnet allowance.
+- **They refill gradually.** Think of a water tank with a tap that fills it steadily, not one that's emptied and refilled on the hour. If your limit is 60 requests a minute, you get roughly one request's worth back every second. A sudden burst of 60 at once can still be rejected (this is called a **token bucket**).
+- **They grow over time.** Each account has a **usage tier**. As you spend more with Anthropic, it moves you up a tier, and the limits rise.
+- **Caching helps.** On most current models, input read from the prompt cache (see 5.3) doesn't count towards ITPM. So caching a long system prompt lets you send more requests a minute, as well as making each one cheaper.
+
+**Example:** your limit is 400,000 input tokens a minute and every call sends a 20,000-token policy document. That's only 20 calls a minute before you get 429s. Cache the policy, and the cached part no longer counts, so the same limit allows far more calls.
+
+**How you see it in code:** every response carries headers that show how much is left. On a 429, a `retry-after` header says how many seconds to wait.
+
+```http
+anthropic-ratelimit-requests-remaining: 12
+anthropic-ratelimit-input-tokens-remaining: 38000
+anthropic-ratelimit-input-tokens-reset: 2026-11-21T10:15:30Z
+retry-after: 4
+```
+<Explain steps={["`requests-remaining`: how many more calls you can make right now before hitting RPM.", "`input-tokens-remaining`: how much more input you can send before hitting ITPM.", "`…-reset`: when that allowance will be fully refilled.", "`retry-after`: only on a 429. It says to wait 4 seconds before trying again. The SDK reads this for you."]} />
+
 
 ### What the SDK already does
 
 <Imagine text={"Your team wrapped every Claude call in its own 5-attempt retry loop, not knowing the SDK already retries. During a short blip, each request became 15."} />
-
 
 The official SDKs retry connection errors, 408, 409, 429 and 5xx automatically, **twice by default**, with exponential backoff, honouring `retry-after`. Don't wrap your own retry loop around that: it multiplies attempts. Tune `maxRetries`, then handle what's left.
 
@@ -708,45 +1177,90 @@ The official SDKs retry connection errors, 408, 409, 429 and 5xx automatically, 
 
 **Tuning it:** set retries and a timeout once, when you create the client.
 
-<CodeSwitch title="Configure retries and timeouts">
+<Running thread="call" step={3} from={1} adds="retry and timeout settings on the client, and a friendly message for when the retries run out." />
+
+<CodeSwitch title="Acme assistant, step 3: survive busy moments">
 
 ```java
+// ── Setup: where the names below come from ──
+// Imports: com.anthropic.client.*, com.anthropic.client.okhttp.*, com.anthropic.models.messages.*, com.anthropic.errors.*, java.time.Duration
+// ── The example ──
 AnthropicClient client = AnthropicOkHttpClient.builder()
     .fromEnv()
-    .maxRetries(4)                          // default is 2
-    .timeout(Duration.ofSeconds(60))        // give up on one attempt after 60 s
+    .maxRetries(4)   // ← new: retry 429, 529 and 5xx up to 4 times, with backoff (default 2)
+    .timeout(Duration.ofSeconds(60))   // ← new: give up on one attempt after 60 s
     .build();
+
+try {   // ← new
+    Message msg = client.messages().create(MessageCreateParams.builder()
+        .model(Model.CLAUDE_SONNET_5_5).maxTokens(1024L)
+        .system("You are Acme's support assistant. Answer briefly and politely.")
+        .addUserMessage("Can I upgrade my plan mid-contract?")
+        .build());
+    System.out.println(msg.content().get(0).text().get().text());
+} catch (RateLimitException | InternalServerException | AnthropicIoException e) {   // ← new: retries ran out
+    System.out.println("Sorry, we're very busy. Please try again in a minute.");   // ← new
+}   // ← new
 ```
 
 ```python
+# ── Setup: where the names below come from ──
+import anthropic
+# ── The example ──
 client = anthropic.Anthropic(
-    max_retries=4,       # default is 2
-    timeout=60.0,        # give up on one attempt after 60 s
+    max_retries=4,   # ← new: retry 429, 529 and 5xx up to 4 times, with backoff (default 2)
+    timeout=60.0,   # ← new: give up on one attempt after 60 s
 )
-# one call that must fail fast (e.g. a health check):
-client.with_options(max_retries=0).messages.create(...)
+
+try:   # ← new
+    msg = client.messages.create(
+        model="claude-sonnet-5-5", max_tokens=1024,
+        system="You are Acme's support assistant. Answer briefly and politely.",
+        messages=[{"role": "user", "content": "Can I upgrade my plan mid-contract?"}],
+    )
+    print(msg.content[0].text)
+except (anthropic.RateLimitError, anthropic.InternalServerError,   # ← new: retries ran out
+        anthropic.APIConnectionError):   # ← new
+    print("Sorry, we're very busy. Please try again in a minute.")   # ← new
 ```
 
 ```typescript
+// ── Setup: where the names below come from ──
+import Anthropic from '@anthropic-ai/sdk';
+// ── The example ──
 const client = new Anthropic({
-  maxRetries: 4,       // default is 2
-  timeout: 60_000,     // give up on one attempt after 60 s (milliseconds)
+  maxRetries: 4,   // ← new: retry 429, 529 and 5xx up to 4 times, with backoff (default 2)
+  timeout: 60_000,   // ← new: give up on one attempt after 60 s (milliseconds)
 });
+
+try {   // ← new
+  const msg = await client.messages.create({
+    model: 'claude-sonnet-5-5', max_tokens: 1024,
+    system: "You are Acme's support assistant. Answer briefly and politely.",
+    messages: [{ role: 'user', content: 'Can I upgrade my plan mid-contract?' }],
+  });
+  console.log((msg.content[0] as Anthropic.TextBlock).text);
+} catch (err) {   // ← new: retries ran out
+  if (err instanceof Anthropic.RateLimitError || err instanceof Anthropic.InternalServerError
+      || err instanceof Anthropic.APIConnectionError) {   // ← new
+    console.log("Sorry, we're very busy. Please try again in a minute.");   // ← new
+  } else throw err;   // ← new: anything else is a bug
+}   // ← new
 ```
 
 </CodeSwitch>
 {/* /more */}
 
-
-
-
-
-
-
-
 <CodeSwitch title="Handle errors by type">
 
 ```java
+// ── Setup: where the names below come from ──
+// Imports: com.anthropic.client.*, com.anthropic.client.okhttp.*, com.anthropic.models.messages.*, com.anthropic.errors.*
+AnthropicClient client = AnthropicOkHttpClient.fromEnv();   // one per app; reads ANTHROPIC_API_KEY
+MessageCreateParams params = MessageCreateParams.builder()   // the request you are sending
+    .model(Model.CLAUDE_SONNET_5_5).maxTokens(1024L).addUserMessage("Summarise this ticket: ...").build();
+Logger log = LoggerFactory.getLogger(SupportService.class);   // SLF4J
+// ── The example ──
 try {
     Message msg = client.messages().create(params);
 } catch (RateLimitException e) {          // 429, after the SDK's retries ran out
@@ -763,6 +1277,14 @@ try {
 ```
 
 ```python
+# ── Setup: where the names below come from ──
+import anthropic
+import logging
+client = anthropic.Anthropic()            # one client per app; reads ANTHROPIC_API_KEY
+params = dict(model="claude-sonnet-5-5", max_tokens=1024,          # the request you are sending
+              messages=[{"role": "user", "content": "Summarise this ticket: ..."}])
+log = logging.getLogger(__name__)
+# ── The example ──
 try:
     msg = client.messages.create(**params)
 except anthropic.RateLimitError:          # 429, after the SDK's retries ran out
@@ -778,6 +1300,14 @@ except anthropic.APIConnectionError:      # network problem
 ```
 
 ```typescript
+// ── Setup: where the names below come from ──
+import Anthropic from '@anthropic-ai/sdk';
+const client = new Anthropic();             // one per app; reads ANTHROPIC_API_KEY
+const params: Anthropic.MessageCreateParamsNonStreaming = {   // the request you are sending
+  model: 'claude-sonnet-5-5', max_tokens: 1024,
+  messages: [{ role: 'user', content: 'Summarise this ticket: ...' }] };
+const log = console;   // or your logger (pino, winston...)
+// ── The example ──
 try {
   const msg = await client.messages.create(params);
 } catch (err) {
@@ -814,12 +1344,166 @@ Python raises `anthropic.BadRequestError`, `RateLimitError`, `InternalServerErro
   fix={"Rely on the SDK's backoff and tune `maxRetries`; never retry 4xx except 429; treat a 429 without `retry-after` as a billing or limit problem, alert, and fail gracefully."}
 />
 
+### Absorbing spikes: put a queue in front of Claude
+
+<Imagine text={"Acme receives 10,000 tickets a day, unevenly, and up to 5× more during an outage, exactly when customers are most upset. The business rule: no ticket may ever be lost."} />
+
+If tickets go straight from the website to Claude, a spike means hundreds of calls at once, 429 errors, and, once the SDK's retries run out, **lost tickets**. Retries alone can't fix that, because a request that keeps failing for minutes is eventually given up.
+
+The standard design is a **queue** (a message queue such as SQS, RabbitMQ or Kafka, or a database table used as one) between the intake and the Claude calls:
+
+<Flow caption="A queue absorbs bursts; workers drain it at a rate Claude's limits allow" steps={[
+  { title: 'Intake', sub: 'save the ticket, reply \"received\"' },
+  { title: 'Queue', sub: 'durable: nothing is lost' },
+  { title: 'Workers', sub: 'a fixed number, e.g. 10' },
+  { title: 'Claude', sub: '429? back off, retry' },
+  { title: 'Done or dead-letter', sub: 'failures kept for a person' },
+]} />
+
+- **The queue absorbs the burst.** Tickets wait safely instead of failing; the backlog shrinks once the spike passes.
+- **A fixed number of workers** limits calls in flight, so you stay within your rate limits (see the async example below).
+- **A ticket leaves the queue only when it's done.** If a worker crashes or Claude keeps failing, the ticket goes back on the queue. After several failed attempts it moves to a **dead-letter queue** for a person to look at, so it's never silently dropped.
+
+**Why the tempting alternatives aren't enough:** a higher rate limit still has a ceiling that a 5× spike can exceed; a bigger context window (many tickets in one call) doesn't absorb bursts and makes parsing fragile; more web servers don't help, because the bottleneck is Claude's throughput, not your front end.
+
+<CodeSwitch title="A queue worker that never drops a ticket" fold>
+
+```java
+// ── Setup: where the names below come from ──
+// Imports: com.anthropic.errors.*, java.time.Duration
+// queue, deadLetters, store: your queue (SQS, RabbitMQ, a database table…), a dead-letter queue for failures, and where results are saved
+// triage: your function that makes the Claude call for one ticket
+// ── The example ──
+while (true) {
+    QueueMessage m = queue.receive();                  // wait for the next ticket
+    try {
+        String reply = triage(m.body());               // the Claude call (SDK retries 429/529 itself)
+        store.save(m.ticketId(), reply);
+        queue.delete(m);                               // remove it ONLY after success
+    } catch (RateLimitException | InternalServerException e) {
+        queue.releaseLater(m, Duration.ofSeconds(30)); // back on the queue: try again later
+    } catch (BadRequestException e) {
+        deadLetters.add(m, e.getMessage());            // won't succeed by retrying: a person looks at it
+        queue.delete(m);
+    }
+}
+```
+
+```python
+# ── Setup: where the names below come from ──
+import anthropic
+# queue, dead_letters, store: your queue (SQS, RabbitMQ, a database table…), a dead-letter queue for failures, and where results are saved
+# triage: your function that makes the Claude call for one ticket
+# ── The example ──
+while True:
+    m = queue.receive()                                 # wait for the next ticket
+    try:
+        reply = triage(m.body)                          # the Claude call (SDK retries 429/529 itself)
+        store.save(m.ticket_id, reply)
+        queue.delete(m)                                 # remove it ONLY after success
+    except (anthropic.RateLimitError, anthropic.InternalServerError):
+        queue.release_later(m, seconds=30)              # back on the queue: try again later
+    except anthropic.BadRequestError as e:
+        dead_letters.add(m, str(e))                     # won't succeed by retrying: a person looks at it
+        queue.delete(m)
+```
+
+```typescript
+// ── Setup: where the names below come from ──
+import Anthropic from '@anthropic-ai/sdk';
+// queue, deadLetters, store: your queue (SQS, RabbitMQ, a database table…), a dead-letter queue for failures, and where results are saved
+// triage: your function that makes the Claude call for one ticket
+// ── The example ──
+while (true) {
+  const m = await queue.receive();                     // wait for the next ticket
+  try {
+    const reply = await triage(m.body);                // the Claude call (SDK retries 429/529 itself)
+    await store.save(m.ticketId, reply);
+    await queue.delete(m);                             // remove it ONLY after success
+  } catch (err) {
+    if (err instanceof Anthropic.RateLimitError || err instanceof Anthropic.InternalServerError) {
+      await queue.releaseLater(m, 30);                 // back on the queue: try again later
+    } else if (err instanceof Anthropic.BadRequestError) {
+      await deadLetters.add(m, String(err));           // won't succeed by retrying: a person looks at it
+      await queue.delete(m);
+    } else throw err;
+  }
+}
+```
+
+</CodeSwitch>
+
+### Calling Claude from async code: limit how many at once
+
+<Imagine text={"A backfill script fires all 5,000 requests at once using async code. Most fail with 429 errors in the first second, and the retries make it worse."} />
+
+**Async** (asynchronous) code lets one program wait on many network calls at the same time, instead of one after another. Each SDK has an async client for this: `AsyncAnthropic` in Python, and the normal client in TypeScript, where every call returns a promise. Async isn't the same as *unlimited*, though. Cap how many calls are **in flight** at once, so you stay inside your rate limits.
+
+<CodeSwitch title="Run many calls at once, at most 10 at a time" fold>
+
+```java
+// ── Setup: where the names below come from ──
+// Imports: java.util.*, java.util.concurrent.*
+// tickets: tonight's tickets from your database; each has an id and text
+// summarise: e.g. a cheap Haiku call that shortens the document
+// ── The example ──
+ExecutorService pool = Executors.newFixedThreadPool(10);       // at most 10 calls in flight
+List<Future<String>> results = tickets.stream()
+    .map(t -> pool.submit(() -> summarise(t)))                  // each task makes one Claude call
+    .toList();
+for (Future<String> f : results) System.out.println(f.get());  // collect as they finish
+pool.shutdown();
+```
+
+```python
+# ── Setup: where the names below come from ──
+import asyncio
+import anthropic
+aclient = anthropic.AsyncAnthropic()    # the async client: calls can run at the same time
+# tickets: tonight's tickets from your database; each has an id and text
+# ── The example ──
+limit = asyncio.Semaphore(10)                       # at most 10 calls in flight
+
+async def summarise(ticket: str) -> str:
+    async with limit:                               # wait for a free slot
+        msg = await aclient.messages.create(model="claude-haiku-5-5", max_tokens=200,
+            messages=[{"role": "user", "content": f"Summarise in one line: {ticket}"}])
+        return "".join(b.text for b in msg.content if b.type == "text")
+
+async def main():
+    return await asyncio.gather(*(summarise(t) for t in tickets))
+
+summaries = asyncio.run(main())
+```
+
+```typescript
+// ── Setup: where the names below come from ──
+import Anthropic from '@anthropic-ai/sdk';
+const client = new Anthropic();             // one per app; reads ANTHROPIC_API_KEY
+// tickets: tonight's tickets from your database; each has an id and text
+// ── The example ──
+import pLimit from 'p-limit';
+const limit = pLimit(10);                            // at most 10 calls in flight
+
+const summaries = await Promise.all(tickets.map((t) => limit(async () => {
+  const msg = await client.messages.create({ model: 'claude-haiku-5-5', max_tokens: 200,
+    messages: [{ role: 'user', content: `Summarise in one line: ${t}` }] });
+  return msg.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
+})));
+```
+
+</CodeSwitch>
+
+If nobody is waiting for the results, the **Batch API** (5.4) is simpler still: one request, no concurrency to manage, and half the price.
+
 <SectionSummary points={[
   "First question for any failure: could the same request succeed later? Retriable: 429, 500, 504, 529. Terminal: 400, 401, 403, 404, 413.",
   "429 is your organisation's limit (honour `retry-after`); 529 is Anthropic-wide overload.",
   "Limits are per organisation and model: RPM, ITPM, OTPM.",
   "The SDK already retries with backoff (2× by default): tune `maxRetries`, don't stack your own loop.",
   "A refusal arrives as 200 OK: read `stop_details` and log it; surface it or fall back to another model, never back off and resend the same request.",
+  "Async code runs many calls at once, but cap how many are in flight (a semaphore or thread pool) to stay under rate limits.",
+  "Spiky load plus \"nothing may be lost\" → a durable queue in front of Claude, a fixed number of workers, retries with backoff, and a dead-letter queue. Higher limits alone can't guarantee it.",
 ]} />
 
 ## 2.5 The lifecycle and deployment
@@ -827,17 +1511,11 @@ Python raises `anthropic.BadRequestError`, `RateLimitError`, `InternalServerErro
 <ExamRef section="2.5" />
 <Imagine text={"The chatbot is ready to go live. Acme's data must stay in the UK, the company already runs on AWS, and the answers mustn't suddenly change next month when nobody touched anything."} />
 
-
-
-
-
-
-
 ### Seven lifecycle phases
 
 A Claude application moves through the same lifecycle as any engineered system. Each phase ends with a gate you must pass before moving on.
 
-<Flow caption="The lifecycle of a Claude application, with gates between phases (Exam guide: Systems Life Cycle)" steps={[
+<Flow caption="The lifecycle of a Claude application, with gates between phases" steps={[
   { title: 'Requirements', sub: 'functional + infra' },
   { title: 'Design', sub: 'platform, model, trust' },
   { title: 'Build', sub: 'agent, tools, prompts' },
@@ -857,32 +1535,52 @@ A Claude application moves through the same lifecycle as any engineered system. 
 
 <Imagine text={"Acme's biggest customer insists everything runs inside its own Google Cloud account, under its own access controls."} />
 
-
 Claude isn't only available from Anthropic directly: the big cloud providers also offer it, so a **platform** here means *where you call Claude from*. The customer's existing cloud, identity and compliance agreements usually decide the platform.
 
 | Platform | Identity and data | Choose when |
 |---|---|---|
 | Claude API (first-party) | Anthropic identity and terms; new features first | No binding cloud or residency constraint |
-| Claude Platform on AWS | Through the customer's AWS account, Anthropic model IDs and lifecycle | On AWS but wants first-party parity |
-| Amazon Bedrock | AWS identity; data stays in the configured AWS boundary | On AWS with a compliance posture there |
+| Claude Platform on AWS | Through the customer's AWS account, with Anthropic's own model IDs and release schedule | On AWS, but wants the same features as Anthropic's own API |
+| Amazon Bedrock | AWS identity; data stays within the customer's AWS setup | On AWS, with compliance rules that require data to stay there |
 | Google Vertex AI | Google Cloud IAM (Google's identity and access system); regional or global endpoints | On Google Cloud |
 | Microsoft Foundry (Microsoft's AI platform) | Microsoft's identity and billing | Customer already runs Foundry |
 
-Compare platforms on **latency** (measured from the customer's region), **compliance** (usually pass or fail) and **total cost** (tokens plus **egress**, the charge for data leaving a cloud, plus fees and integration effort), not token price alone.
+Don't choose on token price alone. Compare the platforms on three things:
+
+- **Latency:** how fast replies arrive, measured from where the customer's users are.
+- **Compliance:** whether the platform meets the customer's rules (for example, "data must stay in our AWS account"). This is usually pass or fail: if a platform fails, it's out, however cheap it is.
+- **Total cost:** token prices, plus **egress** (the fee a cloud charges when data leaves it), plus platform fees and the effort of integrating it.
 
 ### Pin the exact model version you release
 
 <Imagine text={"On Monday morning the chatbot's answers suddenly look different. Nobody deployed anything over the weekend."} />
 
+The **model ID** is the exact name you put in the `model` field. There are two kinds:
 
-The **model ID** is the exact name you send in `model`. A full ID points at a fixed **snapshot**, a frozen version of the model that never changes. An **alias** is a nickname that's moved to newer snapshots over time, and it may point at different versions on different platforms. Pin the full ID in configuration, keep the previous version available for rollback, and promote a new model only after it matches or beats your **eval baseline**, the score your current version gets on your tests (Domain 4). A moving alias is fine for a throwaway prototype, never for production.
+| | Full ID (a **snapshot**) | **Alias** |
+|---|---|---|
+| What it is | A frozen version of the model | A nickname Anthropic re-points to newer versions over time |
+| Does it change? | Never: same model every call | Yes, and it may point at different versions on different platforms |
+| Use it for | Production | Quick prototypes you'll throw away |
+
+The safe routine for production:
+
+1. Put the full ID in **configuration**, not in code, so changing model is a config change.
+2. Keep the previous ID to hand, so you can **roll back** quickly.
+3. Move to a new model only after it scores at least as well as your **eval baseline**: the score your current model gets on your test set (Domain 4).
 
 {/* more:2-pin */}
 **Example:** keep the model ID in configuration, not in code, so an upgrade is a config change you can test and roll back.
 
-<CodeSwitch title="Read the model ID from configuration">
+<CodeSwitch title="Read the model ID from configuration" fold>
 
 ```java
+// ── Setup: where the names below come from ──
+// Imports: com.anthropic.client.*, com.anthropic.client.okhttp.*, com.anthropic.models.messages.*, java.util.*
+AnthropicClient client = AnthropicOkHttpClient.fromEnv();   // one per app; reads ANTHROPIC_API_KEY
+String question = "How many days do I have to return a router?";   // the user's question
+Properties config = loadConfig();   // your app's settings (application.properties, env...)
+// ── The example ──
 // application.properties: claude.model=claude-sonnet-5-5
 String model = config.getProperty("claude.model");
 Message msg = client.messages().create(MessageCreateParams.builder()
@@ -892,12 +1590,23 @@ Message msg = client.messages().create(MessageCreateParams.builder()
 ```
 
 ```python
+# ── Setup: where the names below come from ──
+import os
+import anthropic
+client = anthropic.Anthropic()            # one client per app; reads ANTHROPIC_API_KEY
+question = "How many days do I have to return a router?"   # the user's question
+# ── The example ──
 MODEL = os.environ["CLAUDE_MODEL"]          # e.g. "claude-sonnet-5-5", set per environment
 msg = client.messages.create(model=MODEL, max_tokens=1024,
                              messages=[{"role": "user", "content": question}])
 ```
 
 ```typescript
+// ── Setup: where the names below come from ──
+import Anthropic from '@anthropic-ai/sdk';
+const client = new Anthropic();             // one per app; reads ANTHROPIC_API_KEY
+const question = 'How many days do I have to return a router?';   // the user's question
+// ── The example ──
 const MODEL = process.env.CLAUDE_MODEL!;    // e.g. 'claude-sonnet-5-5', set per environment
 const msg = await client.messages.create({ model: MODEL, max_tokens: 1024,
                                            messages: [{ role: 'user', content: question }] });
@@ -905,13 +1614,6 @@ const msg = await client.messages.create({ model: MODEL, max_tokens: 1024,
 
 </CodeSwitch>
 {/* /more */}
-
-
-
-
-
-
-
 
 ### Further reading
 
@@ -926,9 +1628,69 @@ const msg = await client.messages.create({ model: MODEL, max_tokens: 1024,
   fix={"Pin the full model ID in config, keep the previous version available, and promote upgrades only after the eval passes."}
 />
 
+### Ask before you design
+
+<Imagine text={"A bank wants a support assistant that will \"answer anything customers ask\". Before choosing a model or writing a prompt, there are questions that must be answered first."} />
+
+Vague goals hide the decisions that matter most. Before any design, clarify:
+
+| Ask | Why it comes first | Bank example |
+|---|---|---|
+| **Scope:** which topics may it handle, and which must it refuse or hand over? | It shapes the prompt, the tools, the data it can see and the evals | Account and card questions: yes. Investment advice: no, hand over |
+| **Escalation:** when and how does a person take over? | Every assistant needs a safe exit | Disputes, vulnerable customers, anything about fraud |
+| **Compliance and data:** what rules apply, and where may data go? | It can rule out platforms, models and features outright | Data must stay in the UK; every answer logged for audit |
+| **Success:** how will you know it works? | It becomes the eval set and the release gate (4.1) | 95% of answers correct on 300 labelled real questions |
+| **Volume and speed:** how many requests, how spiky, how fast? | It decides streaming, queues, batching and cost (next table) | 50,000 chats a day, replies within 3 seconds |
+
+Model choice, streaming and scaling come **after** these answers, because they depend on them.
+
+### From business need to technical requirement
+
+<Imagine text={"The brief says: \"handle every ticket, answer customers within a few seconds, keep UK data in the UK, and keep costs predictable\". Each phrase quietly implies a piece of infrastructure."} />
+
+Part of the developer's job is turning what the business says into what the system must have. These pairings come up again and again:
+
+| The business says… | So the system needs… | See |
+|---|---|---|
+| "No request may be lost," with uneven or spiky load | A durable **queue**, a fixed number of workers, retries with backoff, a dead-letter queue | 2.4 |
+| "Answers within 2 seconds" | **Streaming**, a smaller or faster model, short outputs, prompt caching | 2.3, 5.5 |
+| "Data must stay in the UK/EU" | A platform and **regional** endpoint that meets the rule | 2.5 above, 7.4 |
+| "Costs must be predictable" | Token budgets, **workspace spend limits**, the cheapest model that passes, caching, batching | 5.5 |
+| "Process last year's 2 million records" | The **Batch API** (nobody is waiting) | 5.4 |
+| "Same answer quality after updates" | A **pinned model ID**, versioned prompts, an eval gate | 2.5, 4.1 |
+| "The agent must never refund over £100" | A check **in the tool's code**, plus human approval | 7.2 |
+| "We must be able to explain any answer" | Logging: prompt version, model, `request-id`, inputs and outputs | 4.4 |
+
+### Version your prompts like code
+
+<Imagine text={"Answers got worse last Tuesday. Nobody changed the code, but someone \"tidied up\" the system prompt in a shared document, and nobody can say what it said before."} />
+
+A prompt is part of your application: change it and behaviour changes. Treat it like code:
+
+- **Keep prompts in files in Git**, not pasted into code or kept in a shared document. Changes then get reviewed in pull requests and are easy to roll back.
+- **Give each version an ID** (`support-v7`) and log it with every call (4.4), so you can tell which prompt produced which answer.
+- **Change one thing, then run the evals** before releasing (4.1). A prompt change goes through the same gate as a model change.
+- **Pin the pair:** a released version is *this prompt with this model ID*. Changing either one is a new release.
+
+```text
+prompts/
+  support-system.v7.txt      ← live
+  support-system.v8.txt      ← candidate: must match or beat v7 on the eval set
+config/production.yaml       ← claude.model: claude-sonnet-5-5   prompt: support-system.v7
+```
+
+### Organising access: workspaces, limits and the Workbench
+
+In the **Claude Console**, an organisation can be split into **workspaces**, for example one per team or per environment (dev, staging, production). Each workspace has its own API keys, its own **spend and rate limits**, and its own usage reports. A runaway test script in dev then can't use up production's budget, and finance can see what each team spends.
+
+The Console's **Workbench** is a browser playground for drafting and testing prompts against real models before you write any code. When a prompt works there, its code view gives you the request to copy into your app.
+
 <SectionSummary points={[
   "Requirements → design → build → test → deploy → operate → iterate, with a gate between phases.",
   "Capture infrastructure requirements (residency, latency, identity) first: they often decide the platform.",
   "The customer's cloud and compliance posture usually pick the platform; compare latency, compliance and total cost.",
   "Pin the full model ID, keep the previous version, and promote a new one only when it clears the eval.",
+  "Version prompts like code: files in Git, a version ID logged with every call, evals before release. A release is a prompt plus a pinned model.",
+  "Workspaces split an organisation by team or environment, each with its own keys and limits; the Workbench is for drafting and testing prompts.",
+  "Before designing, clarify scope, escalation paths, compliance and data rules, success criteria, and volume. Model and scaling choices come after.",
 ]} />

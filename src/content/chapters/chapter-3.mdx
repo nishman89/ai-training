@@ -13,6 +13,7 @@ import Compare from '../../components/diagrams/Compare.astro';
 import Imagine from '../../components/Imagine.astro';
 import ExamRef from '../../components/ExamRef.astro';
 import CodeSwitch from '../../components/CodeSwitch.astro';
+import Explain from '../../components/Explain.astro';
 import RoleLens from '../../components/RoleLens.astro';
 import Gotcha from '../../components/Gotcha.astro';
 import SectionSummary from '../../components/SectionSummary.astro';
@@ -27,17 +28,20 @@ import Resource from '../../components/Resource.astro';
 <ExamRef section="3.1" />
 <Imagine text={"An Acme developer must add tests to an old billing module nobody understands. Instead of reading 40 files, they ask a coding agent to explore the code, propose a plan, and then write and run the tests."} />
 
-
-
-
-
-
-
 ### In plain English
 
-**Claude Code** is Anthropic's coding agent: Claude working as a coding assistant inside your project folder, from your terminal or IDE. It can read files, write code and run commands, but asks permission first (how often depends on the **permission mode**, see 3.2). You give it standing project rules in a file called CLAUDE.md, and you can add automatic checks ("hooks") that always run, like "run the tests after every edit" or "never touch the secrets file".
+**Claude Code** is Anthropic's coding agent: Claude working as a coding assistant inside your project folder, from your terminal or IDE.
+
+- **What it does:** reads files, writes code and runs commands.
+- **Permission:** it asks first; how often depends on the **permission mode** (3.2).
+- **Project rules:** standing instructions go in a file called CLAUDE.md.
+- **Hooks:** automatic checks that always run, like "run the tests after every edit" or "never touch the secrets file".
 
 {/* more:3-claudemd */}
+**How you start it:** install Claude Code (the [quickstart](https://code.claude.com/docs/en/quickstart) has the one-line installer), open a terminal in your project folder and type `claude`. The first time, it asks you to log in (with a Claude subscription or a Claude Console account), then starts a session in that folder. The IDE extensions (VS Code, JetBrains) run the same thing inside your editor.
+
+**Where CLAUDE.md lives:** in the root of your project, committed to Git so the whole team shares it. Type `/init` in a session and Claude scans the project and writes a first draft for you to trim. You can also keep a personal one in `~/.claude/CLAUDE.md` that applies to all your projects.
+
 **Example CLAUDE.md** for a Java service (kept short on purpose: every line costs context in every session):
 
 ```markdown
@@ -48,14 +52,8 @@ import Resource from '../../components/Resource.astro';
 - Never edit files in `db/migrations/`: add a new migration instead.
 - Run the tests after every change and fix failures before moving on.
 ```
+<Explain steps={["Claude Code loads this file at the start of every session, so nobody has to retype these rules.", "It covers the build and test command, coding conventions and the one no-go area.", "It's kept short on purpose: every line costs context in every session, and a long file dilutes the rules that matter."]} />
 {/* /more */}
-
-
-
-
-
-
-
 
 <RoleLens dev={"Claude Code is an agent in your terminal: it reads the repo, edits files and runs `mvn test` or `npm test` itself, asking permission before risky actions."} test={"Ask it to \"write REST Assured tests for this controller and run them until green\". It loops on the real test output, so the tests it hands back have actually run."} data={"Useful for SQL and dbt models: \"add a test for null customer_ids and run dbt test\". It reads the project, writes the test and runs it."} ba={"Point it at a repo and ask \"explain what this service does in business terms\" or \"which code implements the refund rule?\". It's good for impact analysis."} />
 
@@ -63,7 +61,7 @@ import Resource from '../../components/Resource.astro';
 
 The recommended way to work is to let Claude read and understand the code first, then describe what it intends to change, and only edit once you've agreed. **Plan mode** enforces this: Claude can read but can't change anything until you approve its plan.
 
-<Flow caption="The sequence matters: plan mode holds Claude in exploration until you approve (Exam guide: Claude Code Operation)" steps={[
+<Flow caption="The sequence matters: plan mode holds Claude in exploration until you approve" steps={[
   { title: 'Explore', sub: 'read files, trace logic' },
   { title: 'Plan', sub: 'describe the edits' },
   { title: 'You approve', sub: 'the human gate' },
@@ -84,31 +82,61 @@ claude -p "Review the changes in this branch and list any bugs" \
 # Start an interactive session in plan mode (read-only until you approve a plan)
 claude --permission-mode plan
 ```
+<Explain steps={["`-p` (print) runs one prompt with no interactive screen, then exits: ideal for a CI job.", "`--allowedTools` pre-approves only reading, searching and the test command; anything else is refused.", "`--output-format json` produces output another script can parse.", "The last command starts an interactive session in plan mode: Claude can read but changes nothing until you approve its plan."]} />
 {/* /more */}
 
+### Managing context in a session
 
+<Imagine text={"Two hours into a refactor, Claude Code starts forgetting decisions you made at the start and re-reading files it already read. The session's context window is nearly full."} />
 
+A Claude Code session has one context window, just like an API conversation (6.5). Everything goes into it: CLAUDE.md, every file Claude reads, every command's output and the whole chat. Four built-in commands manage it:
 
+| Command | What it does | Use it when |
+|---|---|---|
+| `/context` | Shows what's filling the window: system prompt, CLAUDE.md, tools, MCP servers, messages | Before a big task, or when answers start getting worse |
+| `/compact` | Replaces the conversation so far with a summary. You can **direct** it: `/compact keep the API design decisions and the failing test names` | Mid-task, when the window is filling but the work so far matters |
+| `/clear` | Starts a fresh, empty context (CLAUDE.md still loads) | Switching to an unrelated task. Stale context from the last task only gets in the way |
+| `/rewind` (or Esc twice) | Goes back to an earlier checkpoint, undoing the conversation and, optionally, the file edits | A dead end: Claude went the wrong way, so roll back instead of arguing it out |
 
+**Subagents** (1.5, 3.3) are the other tool: a subagent reads 40 files in its own window and returns only a summary, so your main session stays lean.
 
+```text
+> /context
+  System prompt and tools ........ 18k tokens
+  CLAUDE.md ......................  2k tokens
+  MCP servers (3) ................ 11k tokens
+  Messages ...................... 141k tokens
+> /compact keep the decisions about the Order record and the list of failing tests
+> /clear      ← before starting the unrelated logging task
+```
 
+<Explain title="Reading it" steps={["`/context` shows the messages are taking most of the space; three MCP servers also cost 11k tokens on every turn (disconnect ones you don't need).", "`/compact` with instructions keeps exactly what matters for the rest of the task. Without instructions the summary is general and may drop it.", "`/clear` before an unrelated task: nothing from the refactor is needed, so start clean."]} />
+
+### Sessions: continue, resume, and output formats
+
+Each conversation with Claude Code is a **session**, saved on your machine so you can pick it up later:
+
+| Command | What it does |
+|---|---|
+| `claude --continue` (`-c`) | Reopens your most recent session in this folder, with its history |
+| `claude --resume` (`-r`) | Lets you pick an earlier session to reopen |
+| `claude -p "..."` | Headless: one prompt, no interactive screen (see above) |
+| `--output-format text \| json \| stream-json` | For headless runs: plain text, one JSON result at the end, or a **stream** of JSON events as the work happens (for live progress in a script or UI) |
+
+**Session hygiene:** one task per session. Use `/clear` (or a new session) between unrelated tasks, `--continue` to pick the same task back up, and put anything that must outlive the session in CLAUDE.md or a notes file, not in the chat.
 
 <SectionSummary points={[
   "Claude Code runs the agent loop in your terminal: explore, plan, then code.",
   "Plan mode holds it in exploration until you approve.",
   "The Agent SDK exposes the same loop and permission model in code.",
+  "Manage the session's window: /context to see it, /compact (with instructions) to summarise, /clear for a new task, /rewind to undo a dead end.",
+  "Sessions: --continue the last one, --resume an older one; headless output can be text, json or stream-json. One task per session.",
 ]} />
 
 ## 3.2 Permission modes and settings
 
 <ExamRef section="3.2" />
 <Imagine text={"That coding agent is about to run commands on a laptop that can reach production. How much should it be allowed to do before it has to ask?"} />
-
-
-
-
-
-
 
 ### Pick the mode by risk, not speed
 
@@ -124,7 +152,7 @@ A **permission mode** sets how much Claude Code may do without asking you first.
 | `bypassPermissions` | Everything | Almost nothing | Disposable **containers** or virtual machines only (throwaway environments you can wipe), never a live workstation |
 
 {/* diagram */}
-<Flow caption="Settings layers: later layers override earlier ones, and enterprise wins (Exam guide: Claude Code Operation)" steps={[
+<Flow caption="Settings layers: later layers override earlier ones, and enterprise wins" steps={[
   { title: 'User', sub: '~/.claude/settings.json' },
   { title: 'Project', sub: '.claude/settings.json (committed)' },
   { title: 'Local', sub: '.claude/settings.local.json' },
@@ -136,7 +164,6 @@ A **permission mode** sets how much Claude Code may do without asking you first.
 ### Settings layers
 
 <Imagine text={"You let Claude run tests on your laptop; the team wants everyone to have that; and security wants nobody, anywhere, to read `.env` files."} />
-
 
 Claude Code reads its settings, including **permission rules** (lists of actions that are always allowed or always blocked), from up to four files. Each layer can override the one before it.
 
@@ -164,6 +191,7 @@ Claude Code reads its settings, including **permission rules** (lists of actions
   }
 }
 ```
+<Explain steps={["`allow`: Claude may run the Maven and npm test commands without asking.", "`deny`: it may never read `.env` or anything under `secrets/`, and may never run `git push`.", "If an allow and a deny both match, the deny wins."]} />
 
 </div>
 {/* /code */}
@@ -186,17 +214,11 @@ Claude Code reads its settings, including **permission rules** (lists of actions
 <ExamRef section="3.3" />
 <Imagine text={"Every session, the developer retypes \"build with ./mvnw verify, never touch db/migrations\". And once, late in a long session, Claude touched db/migrations anyway."} />
 
-
-
-
-
-
-
 ### Where each kind of rule goes
 
 **Durable context** means instructions that persist from one session to the next, so you don't have to retype them into every conversation. Claude Code has five places to put them, and each loads at a different time and costs a different amount of the context window.
 
-<Tiles cols={5} caption="Five mechanisms, five jobs (Exam guide: Claude Code Operation)" tiles={[
+<Tiles cols={5} caption="Five mechanisms, five jobs" tiles={[
   { title: 'CLAUDE.md', sub: 'every session, always' },
   { title: 'Rules', sub: 'when a path matches' },
   { title: 'Skills', sub: 'loaded on demand' },
@@ -216,12 +238,89 @@ A **subagent** here is a helper agent with its own separate context (as in 1.5).
 
 <RoleLens dev={"`CLAUDE.md` holds the repo's standing instructions: build commands, conventions, \"use AssertJ, not JUnit asserts\". It's read at the start of every session."} test={"Put your test conventions in `CLAUDE.md`: Page Object pattern, naming, where fixtures live. Every generated test then follows them."} data={"Document the warehouse conventions there: schema naming, \"never `SELECT *` in models\", how to run the pipeline locally."} ba={"`CLAUDE.md` is effectively a living definition of done for the AI. A BA can help write the domain glossary section."} />
 
-### Hook events
+### The CLAUDE.md hierarchy: which file wins
+
+<Imagine text={"The company says \"never commit secrets\", the team's repo says \"use Gradle\", and you personally prefer short answers. All three should apply, and the company rule must never be switched off."} />
+
+Claude Code can load several CLAUDE.md files at once. From broadest to most specific:
+
+| Level | Where | Shared with | Use it for |
+|---|---|---|---|
+| **Managed policy** | A system folder set by IT (for example `/etc/claude-code/CLAUDE.md` on Linux) | Everyone on the machine or in the organisation; users can't turn it off | Company-wide rules: security, compliance |
+| **Project** | `./CLAUDE.md` (or `./.claude/CLAUDE.md`) in the repo, committed | The whole team | Build commands, conventions, architecture |
+| **User** | `~/.claude/CLAUDE.md` | Just you, in every project | Personal preferences |
+| **Local** | `./CLAUDE.local.md`, gitignored | Just you, in this project | Your sandbox URLs, personal notes |
+
+How they combine:
+
+- **They add up, rather than replace each other.** Every file that applies is loaded, so Claude sees all the rules.
+- **Where they conflict, the more specific file generally wins.** The exception is managed policy, which exists so that it **can't** be overridden.
+- **Folders matter.** CLAUDE.md files in the folders *above* where you start are loaded at launch. Files in sub-folders load only when Claude starts working in that sub-folder, so a monorepo can keep a short root file plus one per service.
+- **Imports keep files short.** A line like `@docs/testing.md` pulls in another file.
+
+This is separate from the **settings** hierarchy (`settings.json`, 3.2), which controls permissions and hooks rather than instructions.
+
+### Hooks: what they are and when to use them
 
 <Imagine text={"You want the code formatter to run after every single edit, automatically, not \"whenever Claude remembers\"."} />
 
+A **hook** is a command or script **you** write, which Claude Code runs **automatically** at a fixed moment in its loop. Claude doesn't choose to run it and can't skip it. If you know Git, it's like a **pre-commit hook**: Git runs it on every commit whether or not you remember. That's the key difference from everything else in this section:
 
-A **hook** is your own script that Claude Code runs automatically at a set moment, called an **event**. Because your code runs it, not the model, it always happens. These are the main events:
+| Mechanism | What it is | Deterministic or probabilistic? (7.2) |
+|---|---|---|
+| Reminding Claude in the prompt | A request, this time only | **Probabilistic**: usually followed, but Claude may forget, especially in long sessions |
+| A line in CLAUDE.md | A standing request, loaded every session | **Probabilistic**: guidance the model weighs, diluted as the file grows |
+| A subagent "whose job is formatting" | Another model that has to be asked to run | **Probabilistic**: a model still has to decide to call it |
+| **A hook** | **Your code, run by Claude Code at a fixed event** | **Deterministic**: every time the event happens |
+
+**Rule of thumb:** if something must happen *every time without exception* (format, test, block, log), use a hook. If it's advice about *how* to do the work, put it in CLAUDE.md.
+
+The moments a hook can attach to are called **events**. They fit around the agent loop like this:
+
+<Flow caption="Where hooks fire in Claude Code's loop" steps={[
+  { title: 'SessionStart', sub: 'session opens' },
+  { title: 'UserPromptSubmit', sub: 'you send a message' },
+  { title: 'PreToolUse', sub: 'before a tool runs: can BLOCK it' },
+  { title: 'PostToolUse', sub: 'after a tool runs: format, test, log' },
+  { title: 'Stop', sub: 'Claude finishes its turn' },
+]} />
+
+How Claude Code reads a hook's result: **exit code 0** means carry on; **exit code 2** means block (for PreToolUse the action doesn't happen), and whatever the script printed to standard error is passed to Claude as the reason; any other exit code is reported as a non-blocking error.
+
+**The matcher picks the tool, not the action.** `"matcher": "Bash"` makes the hook run on **every** Bash command, safe or dangerous. To block only `rm -rf`, the script itself must read the planned command, which Claude Code sends as JSON on standard input (`tool_input.command`), and decide:
+
+```bash
+#!/bin/bash
+# block-dangerous-bash.sh: registered as a PreToolUse hook with "matcher": "Bash"
+cmd=$(jq -r '.tool_input.command')            # the exact command Claude wants to run
+if echo "$cmd" | grep -Eq 'rm -rf|git push --force|DROP TABLE'; then
+  echo "Blocked: '$cmd' is destructive. Ask a person to run it." >&2
+  exit 2                                      # 2 = block; exit 1 would NOT block
+fi
+exit 0                                        # anything else: allowed
+```
+
+<Explain title="Reading it" steps={["The matcher (`Bash`) only decides that this script runs for Bash commands; it knows nothing about which command.", "The script reads the JSON on standard input and pulls out `tool_input.command`.", "If it matches a dangerous pattern, it prints a reason to standard error and exits with **2**, which blocks the command and shows Claude the reason.", "Exit code **1** would only report an error and let the command run anyway, a common bug."]} />
+
+**The formatter case, in full:** a PostToolUse hook that runs Prettier on every file Claude edits.
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [{ "type": "command",
+                    "command": "jq -r '.tool_input.file_path' | xargs npx prettier --write" }]
+      }
+    ]
+  }
+}
+```
+
+<Explain title="Reading it" steps={["This lives in `.claude/settings.json`, committed to the repo, so the whole team gets it.", "`PostToolUse` with `matcher: \"Edit|Write\"`: it runs straight after **every** edit or new file, whatever Claude intended.", "Claude Code passes details of the tool call to the command as JSON; `jq` pulls out the edited file's path.", "`npx prettier --write` formats that file. Claude never had to remember."]} />
+
+These are the main events and what they're typically used for:
 
 <WhenThen whenLabel="Event" thenLabel="Typical use" rows={[
   { when: 'PreToolUse', then: 'Block an action before it runs (exit code 2), e.g. writes to .env or credentials in .mcp.json' },
@@ -261,6 +360,7 @@ if jq -r '.tool_input.file_path' | grep -q '/db/migrations/'; then
   exit 2   # 2 = block the action
 fi
 ```
+<Explain steps={["The settings register a **PreToolUse** hook that runs before every Edit or Write.", "Claude Code passes the planned action to the script as JSON on standard input, and `jq` pulls out the file path.", "If the path is inside `db/migrations/`, the script prints a reason and exits with code **2**, which blocks the edit and tells Claude why.", "Any other exit code lets the edit go ahead."]} />
 
 </div>
 {/* /code */}
@@ -276,18 +376,14 @@ fi
   "CLAUDE.md: short universal rules, loaded every session. Rules: path-scoped. Skills: on demand. Hooks: guarantees. Subagents: isolated context.",
   "Instructions are probabilistic, hooks are guaranteed: PreToolUse can block (exit code 2), PostToolUse formats, tests and logs.",
   "Custom subagents don't inherit skills unless listed.",
+  "CLAUDE.md levels: managed policy (can't be overridden) → project (shared) → user (you, everywhere) → local (you, this repo). They combine; the more specific wins on conflict.",
+  "A hook's matcher only selects the tool (e.g. Bash). To block specific commands, the script must read tool_input from stdin and exit 2; exit 1 doesn't block.",
 ]} />
 
 ## 3.4 Sharing a setup
 
 <ExamRef section="3.4" />
 <Imagine text={"The setup works so well the whole team wants it: the same rules, the same release-notes command and the same safety checks, on every laptop, without copying files around."} />
-
-
-
-
-
-
 
 ### Skills, commands and plugins
 
@@ -309,17 +405,137 @@ description: Draft release notes from the commits since the last tag. Use when a
 2. Run `git log <tag>..HEAD --oneline` and group commits into Features, Fixes and Chores.
 3. Write the notes in `RELEASE_NOTES.md`, newest version first, one line per change.
 ```
+<Explain steps={["Only the header's `description` is loaded at session start; it tells Claude when this skill is relevant.", "When you ask for release notes, Claude loads the full steps and follows them.", "The steps are ordinary instructions: which commands to run and what to produce."]} />
 {/* /more */}
 
+### Skills in depth
 
+<Imagine text={"Acme's finance team has a 12-step procedure for turning raw sales exports into the monthly report, plus a Python script that does the currency conversion. They want Claude to follow it whenever someone asks for the monthly report, in Claude Code and in their own app."} />
 
+A **skill** is a folder with a `SKILL.md` file at its root. It can also hold extra instruction files, templates and scripts. Think of it as an onboarding guide for a new hire: a short cover note saying what it's for, the steps, and an appendix you only open when you need it.
 
+```text
+monthly-report/
+├── SKILL.md            ← required: frontmatter + main steps
+├── FORMATTING.md       ← extra detail, read only if needed
+├── template.xlsx       ← a resource the steps refer to
+└── scripts/
+    └── convert_fx.py   ← run by Claude; only its output enters the context
+```
 
+#### What loads when: progressive disclosure
 
+**Progressive disclosure** means Claude loads a skill in stages, only as far as the task needs. That's why you can install dozens of skills without filling the context window.
 
+| Level | What | When it loads | Rough cost |
+|---|---|---|---|
+| **1. Metadata** | `name` and `description` from the frontmatter | Always, at session start, for every installed skill | About 100 tokens per skill |
+| **2. Instructions** | The body of `SKILL.md` | When a request matches the description (or you call it by name) | Keep it under about 5,000 tokens |
+| **3. Resources** | Extra files and scripts in the folder | Only when the steps point to them | Nothing until used. A script's code never enters the context, only its output |
+
+So the **description is the trigger**. If it's vague, the skill never fires.
+
+#### The frontmatter rules
+
+| Field | Rules | Good example |
+|---|---|---|
+| `name` | Required. Up to 64 characters; lowercase letters, numbers and hyphens only; can't contain "anthropic" or "claude" | `monthly-report` |
+| `description` | Required. Up to 1,024 characters. Must say **what** it does **and when** to use it | "Builds the monthly sales report from the raw export. Use when asked for the monthly report, sales summary or month-end figures." |
+
+#### Where skills live, and where they run
+
+| Surface | Where the skill comes from | Notes |
+|---|---|---|
+| Claude Code | `~/.claude/skills/` (personal, all projects) or `.claude/skills/` (project, committed to Git), or inside a plugin | Full network access, like any program on your machine |
+| Agent SDK | The same folders, **if** you set `settingSources` / `setting_sources` (1.4) | Without it, skills may silently not load |
+| Claude API | Anthropic's pre-built skills (`pptx`, `xlsx`, `docx`, `pdf`) or your own, uploaded through the `/v1/skills` endpoints and shared across the workspace | Runs in the code execution sandbox: **no network access, no installing packages** |
+| claude.ai | Uploaded as a zip in settings | Needs code execution turned on |
+
+**Skills don't sync between surfaces.** A skill uploaded to claude.ai isn't on the API, and neither has your Claude Code skills. Keep the source in Git and publish it to each place.
+
+#### Using a skill through the API
+
+You list the skills in the request's **`container`** parameter and include the **code execution tool**, because skills run inside its sandbox. Two beta headers switch it on: `code-execution-2025-08-25` and `skills-2025-10-02`.
+
+<CodeSwitch title="Use a pre-built skill through the API" fold>
+
+```java
+// ── Setup: where the names below come from ──
+// Imports: com.anthropic.client.*, com.anthropic.client.okhttp.*, com.anthropic.models.beta.AnthropicBeta, com.anthropic.models.beta.messages.*, com.anthropic.core.JsonValue, java.util.*
+AnthropicClient client = AnthropicOkHttpClient.fromEnv();   // one per app; reads ANTHROPIC_API_KEY
+// figures: the sales figures from your own system, as text
+// ── The example ──
+// The Java SDK has no typed container field here, so it is sent as an extra body property.
+BetaMessage reply = client.beta().messages().create(MessageCreateParams.builder()
+    .model("claude-sonnet-5-5").maxTokens(8000)
+    .addBeta(AnthropicBeta.of("code-execution-2025-08-25"))
+    .addBeta(AnthropicBeta.of("skills-2025-10-02"))
+    .putAdditionalBodyProperty("container", JsonValue.from(Map.of("skills", List.of(
+        Map.of("type", "anthropic", "skill_id", "xlsx", "version", "latest")))))
+    .addTool(BetaCodeExecutionTool20250825.builder().build())   // skills run in this sandbox
+    .addUserMessage("Turn these sales figures into a spreadsheet with a total row: " + figures)
+    .build());
+```
+
+```python
+# ── Setup: where the names below come from ──
+import anthropic
+client = anthropic.Anthropic()            # one client per app; reads ANTHROPIC_API_KEY
+# figures: the sales figures from your own system, as text
+# ── The example ──
+reply = client.beta.messages.create(
+    model="claude-sonnet-5-5", max_tokens=8000,
+    betas=["code-execution-2025-08-25", "skills-2025-10-02"],
+    container={"skills": [
+        {"type": "anthropic", "skill_id": "xlsx", "version": "latest"},   # pre-built
+        # {"type": "custom", "skill_id": "skill_01...", "version": "latest"}  # one you uploaded
+    ]},
+    tools=[{"type": "code_execution_20250825", "name": "code_execution"}],  # skills run here
+    messages=[{"role": "user",
+               "content": f"Turn these sales figures into a spreadsheet with a total row: {figures}"}],
+)
+```
+
+```typescript
+// ── Setup: where the names below come from ──
+import Anthropic from '@anthropic-ai/sdk';
+const client = new Anthropic();             // one per app; reads ANTHROPIC_API_KEY
+// figures: the sales figures from your own system, as text
+// ── The example ──
+const reply = await client.beta.messages.create({
+  model: 'claude-sonnet-5-5', max_tokens: 8000,
+  betas: ['code-execution-2025-08-25', 'skills-2025-10-02'],
+  container: { skills: [
+    { type: 'anthropic', skill_id: 'xlsx', version: 'latest' },   // pre-built
+  ] },
+  tools: [{ type: 'code_execution_20250825', name: 'code_execution' }],   // skills run here
+  messages: [{ role: 'user',
+    content: `Turn these sales figures into a spreadsheet with a total row: ${figures}` }],
+});
+```
+
+</CodeSwitch>
+
+The spreadsheet Claude makes stays in the sandbox; you download it with the **Files API** using the file ID in the reply. To keep working on it in the next turn, pass the same container ID back.
+
+#### Skills are software: treat them that way
+
+A skill can tell Claude to run scripts and call tools, so a malicious or careless one can misuse tools or leak data. So:
+
+- Use skills only from sources you trust: your own, or Anthropic's.
+- Read every file in the folder before installing one.
+- Be wary of skills that fetch content from the internet: that content could carry injected instructions (7.1).
+- Review changes to a shared skill like a code change.
+
+<Gotcha
+  title={"The skill that never fires"}
+  scenario={"A team writes a careful 30-step `SKILL.md` for their release process. Asked to \"prepare the release\", Claude ignores it and improvises."}
+  gotcha={"The description says only \"Release helper.\" Claude decides whether to load a skill from the description alone (level 1), so a vague one never matches the request."}
+  fix={"Rewrite the description to say what it does and when: \"Prepares a release: bumps the version, writes notes, tags. Use when asked to prepare, cut or ship a release.\" Then test with the phrases people actually use. For must-run steps, invoke it by name or use a hook."}
+/>
 
 {/* diagram */}
-<Compare caption="Three ways to share a setup, from smallest to biggest (Exam guide: Claude Code Operation)" columns={[
+<Compare caption="Three ways to share a setup, from smallest to biggest" columns={[
   { title: 'Skill', sub: 'SKILL.md', points: ['Loads when its description matches', 'Or invoked by name', 'Runs in Claude Code, API and Agent SDK'] },
   { title: 'Custom command', sub: 'an explicit entry point', points: ['Now written as a skill', 'disable-model-invocation stops auto use', '.claude/commands is legacy'] },
   { title: 'Plugin', sub: 'a versioned bundle', points: ['Skills, hooks, subagents, MCP servers', 'Installed from a marketplace', 'Admins can deploy org-wide'] },
@@ -331,8 +547,25 @@ description: Draft release notes from the commits since the last tag. Use when a
 
 <Imagine text={"A teammate's shared plugin works perfectly on their machine and fails on everyone else's."} />
 
+A plugin that hard-codes a path like `/Users/you/...` works on its author's laptop and fails for everyone else. To make it work for everyone:
 
-A plugin that hard-codes `/Users/you/...` works for its author and fails for everyone else. Use the environment variables Claude Code sets for you instead: `$CLAUDE_PROJECT_DIR` (the project's folder) for project scripts and `${CLAUDE_PLUGIN_ROOT}` (the plugin's install folder) for scripts inside the plugin, bundle every file the plugin depends on, document and validate the environment variables it needs, and test the install on a clean machine. A deny rule or hook you relied on locally only travels with the plugin if it's bundled.
+- **Don't hard-code paths.** Use the variables Claude Code fills in for you: `$CLAUDE_PROJECT_DIR` is the project's folder, and `${CLAUDE_PLUGIN_ROOT}` is wherever the plugin was installed.
+- **Bundle everything it needs.** A script, hook or deny rule that only exists on your machine doesn't travel with the plugin.
+- **Say which environment variables it needs**, and have it check that they're set, failing with a clear message if not.
+- **Test the install on a clean machine** (or a fresh container) before you share it.
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [{
+      "matcher": "Edit|Write",
+      "hooks": [{ "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/run-tests.sh" }]
+    }]
+  }
+}
+```
+<Explain steps={["A hook inside a plugin: after Claude uses the Edit or Write tool, run the test script.", "`${CLAUDE_PLUGIN_ROOT}` is replaced with the plugin's install folder on each person's machine, so the same file works for everyone.", "The script lives in the plugin's own `scripts/` folder, so it's bundled and travels with the plugin."]} />
+
 
 <Exercise title="Where does it go?" id="exercise-where">
 
@@ -359,8 +592,65 @@ A plugin that hard-codes `/Users/you/...` works for its author and fails for eve
   fix={"Bundle scripts and reference them with `${CLAUDE_PLUGIN_ROOT}`, bundle every guardrail, document environment variables, and test the install on a clean machine."}
 />
 
+### Automating it: headless, routines, GitHub Actions and Code Review
+
+<Imagine text={"Your team wants every pull request reviewed by Claude, a nightly job that triages new issues, and @claude in a PR comment to fix small things. Nobody should have to open a terminal."} />
+
+Once a setup works interactively, you can run it without anyone watching. There are four ways to do that, from most do-it-yourself to most managed:
+
+| Option | What it is | Use it when |
+|---|---|---|
+| **Headless mode** (`claude -p`) | Runs one prompt with no interactive screen and prints the result (3.1) | Inside your own scripts or CI pipeline |
+| **GitHub Actions** (`anthropics/claude-code-action`) | Runs Claude Code in a GitHub workflow. Mention **@claude** in a PR or issue comment and it analyses, edits and pushes commits | Custom automation in GitHub: fixes, issue-to-PR, scheduled reports |
+| **Code Review** | A managed service: the Claude GitHub App reviews each pull request and posts findings as inline comments. There's nothing to build or host | You only need reviews, not custom workflows. It posts findings; it doesn't fix them |
+| **Routines** | Prompts scheduled to run on Anthropic's infrastructure | Recurring jobs, such as a nightly triage, without your own scheduler |
+
+```yaml
+# .github/workflows/claude.yml: respond when someone writes @claude in a comment
+name: Claude
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  claude:
+    if: contains(github.event.comment.body, '@claude')
+    runs-on: ubuntu-latest
+    permissions: { contents: write, pull-requests: write, issues: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+<Explain title="Reading it" steps={["The workflow runs whenever a comment is posted, but only continues if the comment mentions `@claude`.", "`permissions` lets it push commits and comment on PRs and issues. Grant only what it needs.", "The API key comes from the repository's **secrets**, never from the workflow file itself (7.3).", "Claude Code runs on a GitHub-hosted runner, so it uses your Actions minutes as well as API tokens. Your CLAUDE.md, skills and settings in the repo apply here too."]} />
+
+**Verify what ran unattended.** The less you watched, the more you check. Gate on real results (a hook that runs the tests, 3.3), read the diff, and require a human to approve the merge.
+
+### Reviewing a pull request that adds a Claude feature
+
+<Imagine text={"A teammate's pull request adds a Claude-powered endpoint. It works in the demo, but the API key is in the code, the reply is parsed with string slicing, and there's no error handling."} />
+
+Whether a person or Claude Code Review does the first pass, the reviewer decides what **blocks** the merge and what's **feedback**:
+
+| Finding | Block or comment? | Why |
+|---|---|---|
+| API key or other secret in the code | **Block.** Revoke and rotate the key too | It's in Git history the moment it's pushed (7.3) |
+| No handling of API errors or `stop_reason` | **Block** for production code | Outages and truncated replies will break it (2.1, 2.4) |
+| Parsing the reply by string slicing or `content[0]` | **Block** or strong comment | Breaks when a thinking block or extra text appears (2.1, 6.3) |
+| Untrusted input in the system prompt; no limits on what tools can do | **Block** | Security (6.2, 7.2) |
+| Model alias instead of a pinned ID; prompt not versioned | Comment, or block for release branches | Reproducibility (2.5) |
+| Naming, style, small refactors | Comment | Not a risk |
+
+Be specific and constructive: say what's wrong, why it matters, and what to do instead. A good review teaches the pattern, so the same mistake doesn't come back.
+
 <SectionSummary points={[
   "Skills are portable procedures; custom commands are now skills; plugins bundle skills, hooks, subagents and MCP servers.",
   "Use `$CLAUDE_PROJECT_DIR` and `${CLAUDE_PLUGIN_ROOT}`, never absolute paths.",
   "Bundle every dependency and guardrail, and test the install on a clean machine.",
+  "Run it unattended: headless (`claude -p`) in your own CI, the GitHub Action (@claude), managed Code Review for PRs, or scheduled routines. Verify unattended work.",
+  "In PR review, block secrets in code, missing error/stop_reason handling, brittle parsing and security gaps; comment on style.",
+  "Skills load in three levels: name + description always (~100 tokens), SKILL.md body when triggered, bundled files and scripts only when used. The description is the trigger.",
+  "Skill name: lowercase, hyphens, 64 chars max. Description: what it does and when, 1,024 chars max.",
+  "Skills live in ~/.claude/skills (personal) or .claude/skills (project); via the API they go in container.skills with the code execution tool, with no network or package installs. They don't sync between surfaces.",
 ]} />

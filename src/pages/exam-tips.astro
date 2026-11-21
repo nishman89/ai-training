@@ -42,7 +42,7 @@ const fmt = (s: string) => esc(s).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</stron
             <div class="tip__table">
               <table>
                 <thead><tr>{c.table.head.map((h) => <th>{h}</th>)}</tr></thead>
-                <tbody>{c.table.rows.map((r) => <tr>{r.map((cell, i) => (i === 0 ? <th scope="row">{cell}</th> : <td>{cell}</td>))}</tr>)}</tbody>
+                <tbody>{c.table.rows.map((r) => <tr>{r.map((cell, i) => (i === 0 ? <th scope="row" data-label={c.table!.head[i]} set:html={fmt(cell)} /> : <td data-label={c.table!.head[i]} set:html={fmt(cell)} />))}</tr>)}</tbody>
               </table>
             </div>
           )}
@@ -90,4 +90,15 @@ const fmt = (s: string) => esc(s).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</stron
   .tip__read span { font-weight: 700; color: var(--grey); }
   .tip__read a { padding: 0.2rem 0.65rem; border-radius: 999px; background: var(--pink-tint); color: var(--pink-dark); font-weight: 700; text-decoration: none; }
   .tip__read a:hover { background: var(--pink); color: #fff; }
+
+  @media (max-width: 40rem) {
+    .tip__table { overflow: visible !important; }
+    .tip__table table, .tip__table tbody, .tip__table tr, .tip__table th, .tip__table td { display: block; width: 100%; }
+    .tip__table thead { display: none; }
+    .tip__table tr { border: 1px solid #e3e3e3; border-radius: 10px; margin: 0 0 0.6rem; overflow: hidden; background: #fff; }
+    .tip__table tbody th[scope="row"] { background: #2b2b2b; color: #fff; white-space: normal; }
+    .tip__table td, .tip__table tbody th { padding: 0.45rem 0.75rem; border: 0; text-align: left; }
+    .tip__table td::before, .tip__table tbody th::before { content: attr(data-label); display: block; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #c8102e; margin-bottom: 0.15rem; }
+    .tip__table tbody th::before { color: #ffb3c0; }
+  }
 </style>

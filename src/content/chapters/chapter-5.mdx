@@ -17,7 +17,9 @@ import RoleLens from '../../components/RoleLens.astro';
 import PictureIt from '../../components/PictureIt.astro';
 import Gotcha from '../../components/Gotcha.astro';
 import SectionSummary from '../../components/SectionSummary.astro';
+import Running from '../../components/Running.astro';
 import CodeSwitch from '../../components/CodeSwitch.astro';
+import Explain from "../../components/Explain.astro";
 import Compare from '../../components/diagrams/Compare.astro';
 import Flow from '../../components/diagrams/Flow.astro';
 import WhenThen from '../../components/WhenThen.astro';
@@ -30,15 +32,13 @@ import Resource from '../../components/Resource.astro';
 <ExamRef section="5.1" />
 <Imagine text={"Acme runs three AI jobs: tagging 2 million tickets a month, a customer chatbot, and an agent that investigates network faults. One model for all three would be too weak for the hard job or far too expensive for the easy one."} />
 
-
-
-
-
-
-
 ### In plain English
 
-Picking which Claude to use, and not wasting money. Bigger models are smarter but cost more and respond more slowly. Sorting emails into "billing" or "tech" is easy, so use Haiku; reviewing a tricky contract is hard, so use a bigger model. The two big money-savers are **caching** (re-sending the same long document is far cheaper the second time) and **batching** (send a pile of jobs to run overnight at half price).
+Picking which Claude to use, and not wasting money.
+
+- **Bigger models** are smarter but cost more and respond more slowly. Sorting emails into "billing" or "tech" is easy, so use Haiku; reviewing a tricky contract is hard, so use a bigger model.
+- **Caching:** re-sending the same long document is far cheaper the second time.
+- **Batching:** send a pile of jobs to run overnight at half price.
 
 <RoleLens dev={"Start capability-first on Opus 5.5 or efficiency-first on Haiku 5.5. Lower `effort` before you switch model, then swap the model ID and rerun the evals to decide."} test={"Run the same eval suite across Haiku, Sonnet and Opus. The cheapest model that passes the threshold wins."} data={"Classifying 10 million rows? Haiku plus Batch is usually the answer. Cost per row is your metric."} ba={"Model choice is a cost-quality trade-off you can show as a table: price per 1,000 tickets against accuracy. That's a business decision with numbers."} />
 
@@ -53,18 +53,44 @@ All four current models have a 1M-token **context window** (the most one request
 | Sonnet 5.5 | `claude-sonnet-5-5` | $2 / $10 | high | Fast | The balanced default |
 | Haiku 5.5 | `claude-haiku-5-5` | from $0.10 / $0.50 | medium | Fastest | Classification, extraction, routing, high volume |
 
-Prices and IDs change: check the [models overview](https://platform.claude.com/docs/en/models-overview) when you build. Use the Models API (`GET /v1/models`) to read limits and capabilities in code, and read its `line` field (the model family, such as `opus`) rather than parsing the ID.
+Prices and IDs change: check the [models overview](https://platform.claude.com/docs/en/models-overview) when you build. In code, the Models API (`GET /v1/models`) lists the models your account can use, with their limits and capabilities. Read those values from it rather than hard-coding them.
+
+### How a model works: the basics
+
+Every model choice rests on a few facts about how Claude produces text:
+
+| Property | What it means | What you do about it |
+|---|---|---|
+| **Next-token prediction** | Claude writes one token at a time, each time picking a likely next token given everything so far | It's why output costs per token, and why a reply can stop mid-sentence at `max_tokens` |
+| **Non-determinism** | The same prompt can give different wording each time | Test **properties** ("is it valid JSON? under 50 words?"), not exact text (4.2) |
+| **Knowledge cutoff** | What the model knows comes from training data up to a date; it knows nothing after that, or about your private data | Give it the facts in the prompt: RAG, tools, web search |
+| **Working memory = the context window** | It "remembers" only what's in this one request | Resend history; manage the window (6.5) |
+| **Hallucination** | When it lacks the facts, it can produce a confident, plausible answer that's wrong | Supply sources; let it say "I don't know"; ask it to quote its sources before answering; check outputs in code |
+| **Steerability** | Clear instructions, examples and a system prompt change its behaviour a lot | Prompt engineering (Domain 6) is the first lever, before changing model |
 
 ### Pick a starting point, then let your test results decide
 
-<Flow caption="Model choice is an eval-gated decision, in both directions (Exam guide: Model Selection and Tradeoffs)" steps={[
+<Flow caption="Model choice is an eval-gated decision, in both directions" steps={[
   { title: 'Pick a start', sub: 'Opus 5.5 (capability-first) or Haiku 5.5 (efficiency-first)' },
   { title: 'Run the eval', sub: 'your own prompts and data' },
   { title: 'Tune effort first', sub: 'often the better lever' },
   { title: 'Then switch model', sub: 'up on a gap, down when quality holds' },
 ]} />
 
-Anthropic's guidance offers two starting points. **Capability-first:** start on Opus 5.5 (the recommendation for most workloads), then lower effort or move down a tier as the workflow matures. **Efficiency-first:** start on Haiku 5.5 for prototypes, tight latency, cost-sensitive or high-volume simple work, and move up only when tests show a specific gap. Either way, **adjust effort before switching models**, and move only on measured results from your own test set. Fable 5.2 is for when evals still fall short at the highest effort levels.
+Anthropic's guidance gives two ways to pick a starting model:
+
+| | **Capability-first** | **Efficiency-first** |
+|---|---|---|
+| Start on | Opus 5.5 (Anthropic's recommendation for most work) | Haiku 5.5 |
+| Good for | Getting quality right first | Prototypes, fast replies, high-volume simple jobs, tight budgets |
+| Then | Lower the effort, or move down to Sonnet, once it works | Move up only when your tests show a specific gap |
+
+Two rules apply either way:
+
+- **Try changing effort before changing model.** It's a one-line change, and it's often enough.
+- **Decide with your own test results**, not by feel.
+
+Fable 5.2, the top tier, is for when even Opus at the highest effort still fails your tests.
 
 {/* more:5-costs */}
 **Worked example: tagging 1 million support tickets.** Each ticket is about 300 input tokens and the label about 20 output tokens, so the job is 300M input tokens and 20M output tokens. Using list prices (thinking would add a little more output):
@@ -78,48 +104,24 @@ Anthropic's guidance offers two starting points. **Capability-first:** start on 
 If Haiku passes your eval on a sample of real tickets, it does the job for about 1/40th of the Opus price. That's why the model choice is a measured decision, not a default.
 {/* /more */}
 
-
-
-
-
-
-
-
 ### Routing: a default plus an override
 
 <Imagine text={"90% of chats are simple FAQs and 10% are complex faults. Running all of them on the most capable model wastes money on the 90%."} />
 
+**Routing** (the workflow pattern from 1.2) means sending each request to a different model depending on what kind of request it is: simple ones to a cheap model, hard ones to a capable one. You don't have to use one model for everything.
 
-**Routing** (the workflow pattern from 1.2) means sending each request to a different model depending on what kind of request it is, so simple ones go to a cheap model and hard ones to a capable one. You don't have to use one model for everything. The common production pattern sends most traffic to a balanced default and routes specific requests up or down by task type, input length or a difficulty classification.
+A common setup in production: most requests go to a middle model (usually Sonnet), and your code moves particular requests up or down:
+
+| Request | Goes to | Decided by |
+|---|---|---|
+| "What are your opening hours?" | Haiku | Task type: a simple FAQ |
+| A normal support question | Sonnet (the default) | Everything else |
+| A 300-page contract to review | Opus | Input length and difficulty |
 
 - **Handles well** - matching each workload to the cheapest model that meets its quality bar
 - **Costs** - a classification step and a second model path to maintain
 - **Skip it when** - traffic is uniform at one quality bar: pin one model
 
-{/* code:5.1 */}
-**In code:** the Models API tells you what's available, so you don't have to hard-code it.
-
-<CodeSwitch title="List the available models">
-
-```java
-for (ModelInfo m : client.models().list().autoPager()) {
-    System.out.println(m.id() + "  " + m.displayName());
-}
-```
-
-```python
-for m in client.models.list():
-    print(m.id, m.display_name)
-```
-
-```typescript
-for await (const m of client.models.list()) {
-  console.log(m.id, m.display_name);
-}
-```
-
-</CodeSwitch>
-{/* /code */}
 
 <Gotcha
   title={"The classifier that cost more than the product"}
@@ -140,29 +142,40 @@ for await (const m of client.models.list()) {
 <ExamRef section="5.2" />
 <Imagine text={"The same model answers \"when is my bill due?\" and \"why does my line drop every evening at 7pm?\". The first needs no thought; the second needs real reasoning. Paying for deep thinking on both wastes money."} />
 
-
-
-
-
-
-
 ### Two separate decisions
 
-Choosing the model and choosing how much it reasons are set separately. Current models use **adaptive thinking**: they decide when to think and how much. You tune depth with `effort` (low → max) rather than a fixed token budget. Thinking content is omitted by default on the newest models; ask for a summarised display when you need to show it.
+**Reasoning** (or **thinking**) is Claude working a problem through step by step before it writes the answer, like doing rough working before filling in the final box on an exam paper. That working costs tokens and time, so how much Claude does is something you control.
 
-<Compare middle="vs" caption="Where reasoning earns its cost (Exam guide: LLM Fundamentals)" columns={[
+There are two separate decisions:
+
+| Decision | What you choose | Like choosing… |
+|---|---|---|
+| **Model** (5.1) | Which Claude: Haiku, Sonnet, Opus, Fable | Which person does the job |
+| **Effort** (this section) | How hard that model thinks: `low`, `medium`, `high`, `xhigh`, `max` | How long you give them |
+
+Current models use **adaptive thinking**: they decide for themselves when a question needs thinking and how much. `effort` sets how far they'll go. You don't set an exact token budget any more. By default the newest models don't show you the thinking text; ask for a summarised version (6.4) if you need to see or display it.
+
+<Compare middle="vs" caption="Where reasoning earns its cost" columns={[
   { title: 'Worth it', sub: 'raise effort', points: ['Multi-step debugging', 'Planning an agent task', 'Complex analysis or maths', 'Ambiguous requirements'] },
   { title: 'Wasted', sub: 'lower effort', points: ['Lookups', 'Classification and routing', 'Simple extraction', 'Reformatting'] },
 ]} />
 
-More thinking means more output tokens, so more cost and latency. In a multi-turn conversation, pass **thinking blocks** (the reasoning parts of a reply) back unchanged (6.4).
+Things to know:
+
+- **More thinking means more output tokens**, so more cost and more waiting. Thinking tokens are billed as output.
+- **On some models you can't switch it off.** Opus 5.5 and Fable 5.2 always think: sending `thinking: {type: "disabled"}` or an old-style fixed `budget_tokens` returns a 400 error. Use low effort instead.
+- **In a multi-turn conversation**, pass the **thinking blocks** (the reasoning parts of a reply) back unchanged. 6.4 covers how thinking looks in a reply and how to show it.
 
 {/* code:5.2 */}
 **In code:** effort is one field, `output_config.effort`: `low`, `medium`, `high`, `xhigh` or `max`. Leave it out and you get the model's default (`medium` on Opus 5.5 and Haiku 5.5, `high` on the others).
 
-<CodeSwitch title="Set the effort level">
+<CodeSwitch title="Set the effort level" fold>
 
 ```java
+// ── Setup: where the names below come from ──
+// Imports: com.anthropic.client.*, com.anthropic.client.okhttp.*, com.anthropic.models.messages.*
+AnthropicClient client = AnthropicOkHttpClient.fromEnv();   // one per app; reads ANTHROPIC_API_KEY
+// ── The example ──
 Message msg = client.messages().create(MessageCreateParams.builder()
     .model(Model.CLAUDE_OPUS_5_5).maxTokens(4096L)
     .addUserMessage("Analyse the trade-offs between microservices and a monolith")
@@ -173,6 +186,10 @@ Message msg = client.messages().create(MessageCreateParams.builder()
 ```
 
 ```python
+# ── Setup: where the names below come from ──
+import anthropic
+client = anthropic.Anthropic()            # one client per app; reads ANTHROPIC_API_KEY
+# ── The example ──
 msg = client.messages.create(
     model="claude-opus-5-5", max_tokens=4096,
     messages=[{"role": "user", "content": "Analyse the trade-offs between microservices and a monolith"}],
@@ -181,6 +198,10 @@ msg = client.messages.create(
 ```
 
 ```typescript
+// ── Setup: where the names below come from ──
+import Anthropic from '@anthropic-ai/sdk';
+const client = new Anthropic();             // one per app; reads ANTHROPIC_API_KEY
+// ── The example ──
 const msg = await client.messages.create({
   model: 'claude-opus-5-5', max_tokens: 4096,
   messages: [{ role: 'user', content: 'Analyse the trade-offs between microservices and a monolith' }],
@@ -191,10 +212,26 @@ const msg = await client.messages.create({
 </CodeSwitch>
 {/* /code */}
 
+### Fast mode: same model, faster output
+
+<Imagine text={"A coding agent on Opus 5.5 gives excellent answers, but developers wait too long while it writes long diffs. Switching to a smaller model would lower quality."} />
+
+**Fast mode** runs the same Opus-class model on a faster setup: up to about **2.5× more output tokens per second**, with the **same quality**, at a **premium price**. You switch it on per request with `speed: "fast"` (with a beta header on some models).
+
+| | Lower effort | Smaller model | Fast mode |
+|---|---|---|---|
+| What changes | It thinks less | A different, cheaper model | The same model writes faster |
+| Quality | Less depth on hard problems | Lower on hard tasks | **Unchanged** |
+| Cost | Lower | Much lower | **Higher** |
+| Speeds up | Total time (less thinking) | Everything | Output speed, not the wait for the first token |
+
+Use fast mode when quality must stay at Opus level *and* speed matters more than cost, for example an interactive coding agent. It isn't the answer for cutting cost.
+
 <SectionSummary points={[
   "Choosing a model and choosing how much it reasons are separate decisions.",
   "Current models think adaptively; tune depth with `effort`, not a token budget.",
   "Spend reasoning on multi-step problems, not lookups, classification or reformatting: thinking tokens are output tokens.",
+  "Fast mode: same Opus-class model, up to 2.5× faster output, same quality, premium price. For speed, not for saving money.",
 ]} />
 
 <RoleLens dev={"Extended thinking and the effort setting let Claude reason more before answering, which costs more tokens and time. Turn it up only where accuracy needs it."} test={"Higher effort can fix a failing eval case, but measure the latency and cost change too. That's a performance test."} data={"Don't switch on deep reasoning for simple row classification. It multiplies cost across millions of rows for little gain."} ba={"More thinking is slower and costs more, so ask: does this decision need it? A complex claim assessment might; a ticket tag doesn't."} />
@@ -204,35 +241,32 @@ const msg = await client.messages.create({
 <ExamRef section="5.3" />
 <Imagine text={"Every chatbot call sends the same 20,000-token policy handbook before the customer's question. You're paying to process identical text 10,000 times a day."} />
 
-
-
-
-
-
-
 ### How it works
 
-Prompt caching stores the processing of a stable **prefix** of your request so the next request with the same prefix reads it back instead of recomputing it. The prefix is built in a fixed order: **tools → system → messages**, up to and including the block marked with `cache_control`. That marker is called a **breakpoint**: it means "cache everything up to here".
+Many apps send the same long text at the start of every request: a 20-page policy document, a big system prompt, a long list of tools.
 
-Think of a barista who remembers your usual order: the first visit takes longer to set up, and every repeat is quick and cheap.
+- **Without caching:** Claude reads it from scratch each time, and you pay full price each time.
+- **With prompt caching:** Claude keeps its already-processed version for a few minutes. The next request that starts the same way reuses it: much faster, and about a tenth of the price for that part.
+
+Three words you'll see:
+
+- **Prefix:** the unchanging start of your request. It's built in a fixed order: **tools → system → messages**.
+- **Breakpoint:** the `cache_control` marker. It means "cache everything up to here".
+- **Where the cache lives:** on Anthropic's side, private to your organisation. You don't look anything up: when a new request *starts* with exactly the same text as one cached in the last few minutes, it's reused automatically, and the reply's `usage` shows it as `cache_read_input_tokens`.
+
+Two ways to mark it:
 
 - **Automatic** - one top-level cache_control; the breakpoint moves forward as the conversation grows · best for multi-turn chat
 - **Explicit** - cache_control on specific blocks, up to 4 breakpoints · best when sections change at different rates (tools rarely, retrieved documents daily)
 
 {/* diagram */}
-<Flow caption="The cache matches an exact prefix, in this order: stable first, changing last (Exam guide: Cost and Token Management)" steps={[
+<Flow caption="The cache matches an exact prefix, in this order: stable first, changing last" steps={[
   { title: 'tools', sub: 'stable' },
   { title: 'system', sub: 'stable: policy, documents' },
   { title: 'cache_control', sub: 'breakpoint: cache up to here' },
   { title: 'messages', sub: 'changes every call' },
 ]} />
 
-<Flow caption="How caching saves money across calls (Exam guide: Cost and Token Management)" steps={[
-  { title: 'Call 1', sub: 'prefix written to cache: 1.25× input price' },
-  { title: 'Call 2, within 5 min', sub: 'same prefix read: about 0.1× (less on the newest models)' },
-  { title: 'Prefix changes', sub: 'cache miss: written again at 1.25×' },
-  { title: 'Check usage', sub: 'cache_read_input_tokens > 0 = a hit' },
-]} />
 
 <RoleLens dev={"Put the stable part (system prompt, documents, tools) first with `cache_control`, and the changing part last. Check `cache_read_input_tokens` to prove it works."} test={"Assert on caching: call twice within 5 minutes, and the second response must show `cache_read_input_tokens > 0`. That's an automatable test."} data={"When you classify many rows against the same long instructions, caching the instructions cuts input cost massively. Keep per-row data out of the cached prefix."} ba={"Caching changes the business case: the same 50-page policy read for every query becomes much cheaper. Factor it into cost estimates."} />
 
@@ -240,21 +274,23 @@ Think of a barista who remembers your usual order: the first visit takes longer 
 
 <Imagine text={"Caching sounds like free money, but the first call costs more than normal. When does it actually save?"} />
 
-
 | Operation | Price vs base input |
 |---|---|
 | Cache write, 5-minute **TTL** (time to live: how long the entry lasts; the default) | 1.25× |
 | Cache write, 1-hour TTL | 2× |
 | Cache read | 0.1× on most models; **0.05× on Opus and Sonnet 5.5**; **0.025× on Fable** |
 
-Writes cost **more** than normal input, so caching pays only when reads outnumber writes. The 5-minute lifetime refreshes free on every hit. These multipliers stack with the Batch API discount. The minimum cacheable prefix is 512 tokens on the 5.x models; shorter prompts silently don't cache.
+Writes cost **more** than normal input, so caching pays only when reads outnumber writes. The 5-minute lifetime refreshes free on every hit. These multipliers stack with the Batch API discount.
 
 ### What breaks the cache
 
 <Imagine text={"Caching is switched on, but the bill hasn't dropped at all. Something at the top of the prompt changes on every call."} />
 
+The prefix must be **byte-identical**: the same characters, in the same order. It's built in this order: **tools → system → messages**. A change at one level breaks the cache for that level and everything after it:
 
-The prefix must be **byte-identical**. A change at one level invalidates that level and everything after it.
+- Edit a **tool definition** (the very first thing) → the **entire** cache is lost.
+- Edit the **system prompt** → the system prompt and messages are lost.
+- Add a new **user message** at the end → nothing before it is lost.
 
 <WhenThen whenLabel="If you change…" thenLabel="…this is invalidated" rows={[
   { when: 'tool definitions', then: 'Everything: tools, system and messages' },
@@ -267,61 +303,83 @@ The prefix must be **byte-identical**. A change at one level invalidates that le
 
 <Imagine text={"Your manager asks: \"Is caching actually working?\" You need numbers, not a hunch."} />
 
+Read the usage fields on each reply. Together they add up to the whole input: `cache_read_input_tokens + cache_creation_input_tokens + input_tokens`. (`input_tokens` is only the uncached part after the last breakpoint.)
 
-Read the usage fields: `total input = cache_read_input_tokens + cache_creation_input_tokens + input_tokens`. Note that `input_tokens` counts only the uncached tokens **after** the last breakpoint. If both cache fields are 0, the prefix was too short or not identical.
+| What `usage` shows | What it means | What to do |
+|---|---|---|
+| `cache_read_input_tokens` above 0 | **Working**: the prefix came from the cache | Nothing |
+| `cache_creation_input_tokens` above 0 on **every** call, reads always 0 | Something near the top changes every call, so every call writes a new entry and pays **more** | Move the changing part (time, user name) after the breakpoint |
+| Both are 0 | Nothing was cached. Usually the cached part is **too short**: under **512 tokens** on the current models (Opus, Sonnet and Haiku 5.5). No error is returned | Cache a longer block, or don't bother caching |
 
-<CodeSwitch title="Cache a long system prompt and check it worked">
+<Running thread="call" step={4} from={1} adds="Acme's long policy document in the system prompt, marked for caching, and a check that the cache was used." />
+
+<CodeSwitch title="Acme assistant, step 4: cache the policy document">
 
 ```java
-MessageCreateParams params = MessageCreateParams.builder()
-    .model(Model.CLAUDE_SONNET_5_5)
-    .maxTokens(1024L)
-    .systemOfTextBlockParams(List.of(
-        TextBlockParam.builder()
-            .text(LONG_POLICY_DOCUMENT)                               // stable, reused prefix
-            .cacheControl(CacheControlEphemeral.builder().build())    // 5-minute TTL
-            .build()))
-    .addUserMessage(userQuestion)                                     // changes every call
-    .build();
+// ── Setup: where the names below come from ──
+// Imports: com.anthropic.client.*, com.anthropic.client.okhttp.*, com.anthropic.models.messages.*, java.nio.file.*, java.util.*
+AnthropicClient client = AnthropicOkHttpClient.fromEnv();   // one per app; reads ANTHROPIC_API_KEY
+// ── The example ──
+String policy = Files.readString(Path.of("support-policy.md"));   // ← new: thousands of tokens, the same on every call
 
-Usage u = client.messages().create(params).usage();
-long read  = u.cacheReadInputTokens().orElse(0L);
-long write = u.cacheCreationInputTokens().orElse(0L);
-// first call: write > 0. Repeat within 5 minutes: read > 0. Both 0: not cached.
+Message msg = client.messages().create(MessageCreateParams.builder()
+    .model(Model.CLAUDE_SONNET_5_5).maxTokens(1024L)
+    .systemOfTextBlockParams(List.of(   // ← new: the system prompt as blocks
+        TextBlockParam.builder().text("You are Acme's support assistant. Answer briefly and politely.").build(),   // ← new
+        TextBlockParam.builder().text(policy)   // ← new
+            .cacheControl(CacheControlEphemeral.builder().build())   // ← new: cache everything up to here
+            .build()))   // ← new
+    .addUserMessage("Can I upgrade my plan mid-contract?")                // changes on every call, so it comes after the cached part
+    .build());
+
+long read  = msg.usage().cacheReadInputTokens().orElse(0L);   // ← new
+long write = msg.usage().cacheCreationInputTokens().orElse(0L);   // ← new
+// ← new: first call: write > 0. Same prefix again within 5 minutes: read > 0. Both 0: not cached
 ```
 
 ```python
+# ── Setup: where the names below come from ──
+from pathlib import Path
+import anthropic
+client = anthropic.Anthropic()            # one client per app; reads ANTHROPIC_API_KEY
+# ── The example ──
+policy = Path("support-policy.md").read_text()   # ← new: thousands of tokens, the same on every call
+
 msg = client.messages.create(
-    model="claude-sonnet-5-5",
-    max_tokens=1024,
-    system=[{
-        "type": "text",
-        "text": LONG_POLICY_DOCUMENT,                    # stable, reused prefix
-        "cache_control": {"type": "ephemeral"},         # 5-minute TTL
-    }],
-    messages=[{"role": "user", "content": user_question}],   # changes every call
+    model="claude-sonnet-5-5", max_tokens=1024,
+    system=[   # ← new: the system prompt as blocks
+        {"type": "text", "text": "You are Acme's support assistant. Answer briefly and politely."},   # ← new
+        {"type": "text", "text": policy,   # ← new
+         "cache_control": {"type": "ephemeral"}},   # ← new: cache everything up to here
+    ],   # ← new
+    messages=[{"role": "user", "content": "Can I upgrade my plan mid-contract?"}],   # changes on every call, so it comes after the cached part
 )
 
-read = msg.usage.cache_read_input_tokens or 0
-write = msg.usage.cache_creation_input_tokens or 0
-# first call: write > 0. Repeat within 5 minutes: read > 0. Both 0: not cached.
+read = msg.usage.cache_read_input_tokens or 0   # ← new
+write = msg.usage.cache_creation_input_tokens or 0   # ← new
+# ← new: first call: write > 0. Same prefix again within 5 minutes: read > 0. Both 0: not cached
 ```
 
 ```typescript
+// ── Setup: where the names below come from ──
+import Anthropic from '@anthropic-ai/sdk';
+const client = new Anthropic();             // one per app; reads ANTHROPIC_API_KEY
+// ── The example ──
+const policy = readFileSync('support-policy.md', 'utf8');   // ← new: thousands of tokens, the same on every call
+
 const msg = await client.messages.create({
-  model: 'claude-sonnet-5-5',
-  max_tokens: 1024,
-  system: [{
-    type: 'text',
-    text: LONG_POLICY_DOCUMENT,                      // stable, reused prefix
-    cache_control: { type: 'ephemeral' },           // 5-minute TTL
-  }],
-  messages: [{ role: 'user', content: userQuestion }],   // changes every call
+  model: 'claude-sonnet-5-5', max_tokens: 1024,
+  system: [   // ← new: the system prompt as blocks
+    { type: 'text', text: "You are Acme's support assistant. Answer briefly and politely." },   // ← new
+    { type: 'text', text: policy,   // ← new
+      cache_control: { type: 'ephemeral' } },   // ← new: cache everything up to here
+  ],   // ← new
+  messages: [{ role: 'user', content: 'Can I upgrade my plan mid-contract?' }],   // changes on every call, so it comes after the cached part
 });
 
-const read = msg.usage.cache_read_input_tokens ?? 0;
-const write = msg.usage.cache_creation_input_tokens ?? 0;
-// first call: write > 0. Repeat within 5 minutes: read > 0. Both 0: not cached.
+const read = msg.usage.cache_read_input_tokens ?? 0;   // ← new
+const write = msg.usage.cache_creation_input_tokens ?? 0;   // ← new
+// ← new: first call: write > 0. Same prefix again within 5 minutes: read > 0. Both 0: not cached
 ```
 
 </CodeSwitch>
@@ -334,121 +392,17 @@ Your system prompt is 6,000 tokens of policy text, marked with `cache_control`. 
 
 The first line changes on every call, so the prefix is never identical and every call writes a new cache entry (paying 1.25× instead of 0.1×). Move the stable policy text first, put the breakpoint after it, and put the date and user name in a later block or in the user message.
 
+What it costs: with a 20,000-token policy and 10,000 calls a day on Sonnet 5.5, writing the cache on every call costs about **$500 a day**. Once the fix makes calls read the cache instead, it's about **$20 a day**.
+
 </div>
 </Exercise>
 
-<PictureIt title="Caching gone wrong, then fixed">
-**The scenario:** the Acme support bot sends a 20,000-token policy document as its system prompt on every call, about 10,000 calls a day on Sonnet 5.5 ($2 per million input tokens). A developer turns on caching, but someone put the time and user ID at the top.
-
-#### Before: the buggy code
-
-<CodeSwitch title="Bug: a timestamp at the start breaks the cache">
-
-```java
-String system = "Time: " + Instant.now() + " | User: " + userId + "\n" + policy;   // changes every call
-
-client.messages().create(MessageCreateParams.builder()
-    .model(Model.CLAUDE_SONNET_5_5).maxTokens(1024L)
-    .systemOfTextBlockParams(List.of(TextBlockParam.builder()
-        .text(system)
-        .cacheControl(CacheControlEphemeral.builder().build())   // breakpoint AFTER the timestamp
-        .build()))
-    .addUserMessage(question)
-    .build());
-```
-
-```python
-system = f"Time: {datetime.now()} | User: {user_id}\n{policy}"     # changes every call
-
-client.messages.create(
-    model="claude-sonnet-5-5", max_tokens=1024,
-    system=[{"type": "text", "text": system,
-             "cache_control": {"type": "ephemeral"}}],              # breakpoint AFTER the timestamp
-    messages=[{"role": "user", "content": question}],
-)
-```
-
-```typescript
-const system = `Time: ${new Date().toISOString()} | User: ${userId}\n${policy}`;   // changes every call
-
-await client.messages.create({
-  model: 'claude-sonnet-5-5', max_tokens: 1024,
-  system: [{ type: 'text', text: system,
-             cache_control: { type: 'ephemeral' } }],                // breakpoint AFTER the timestamp
-  messages: [{ role: 'user', content: question }],
-});
-```
-
-</CodeSwitch>
-
-What `usage` shows on **every** call:
-
-```json
-"usage": { "cache_creation_input_tokens": 20012, "cache_read_input_tokens": 0, "input_tokens": 40 }
-```
-
-Every call **writes** a new cache entry (1.25× price) and none ever reads one: about **$0.050 per call, ≈ $500 a day**. Caching made it more expensive than not caching.
-
-#### After: the fix
-
-<CodeSwitch title="Fix: keep the cached part identical">
-
-```java
-client.messages().create(MessageCreateParams.builder()
-    .model(Model.CLAUDE_SONNET_5_5).maxTokens(1024L)
-    .systemOfTextBlockParams(List.of(TextBlockParam.builder()
-        .text(policy)                                            // identical every call
-        .cacheControl(CacheControlEphemeral.builder().build())
-        .build()))
-    .addUserMessage("Time: " + Instant.now() + " | User: " + userId + "\n" + question)   // dynamic part moved here
-    .build());
-```
-
-```python
-client.messages.create(
-    model="claude-sonnet-5-5", max_tokens=1024,
-    system=[{"type": "text", "text": policy,                         # identical every call
-             "cache_control": {"type": "ephemeral"}}],
-    messages=[{"role": "user",
-               "content": f"Time: {datetime.now()} | User: {user_id}\n{question}"}],   # dynamic part moved here
-)
-```
-
-```typescript
-await client.messages.create({
-  model: 'claude-sonnet-5-5', max_tokens: 1024,
-  system: [{ type: 'text', text: policy,                             // identical every call
-             cache_control: { type: 'ephemeral' } }],
-  messages: [{ role: 'user',
-               content: `Time: ${new Date().toISOString()} | User: ${userId}\n${question}` }],   // dynamic part moved here
-});
-```
-
-</CodeSwitch>
-
-```json
-// call 1 (writes the cache)
-"usage": { "cache_creation_input_tokens": 20000, "cache_read_input_tokens": 0, "input_tokens": 52 }
-// call 2, 3, 4 … within 5 minutes of the last hit
-"usage": { "cache_creation_input_tokens": 0, "cache_read_input_tokens": 20000, "input_tokens": 49 }
-```
-
-A cache hit costs 0.05× on Sonnet 5.5: about **$0.002 per call, ≈ $20 a day**. Same answers, same model, about 25× cheaper on the system prompt, and faster too.
-
-</PictureIt>
-
-<Gotcha
-  title={"The cache that never hit"}
-  scenario={"A 6,000-token policy prompt is marked with `cache_control`. Its first line is `Today is <timestamp>. User: <name>`."}
-  gotcha={"The prefix changes on every call, so every request pays the 1.25× WRITE price and `cache_read_input_tokens` stays 0. Caching made it MORE expensive."}
-  fix={"Put stable content first and variable content after the last breakpoint, then check the usage fields to prove hits."}
-/>
 
 <SectionSummary points={[
   "Caching reuses the processed prefix tools → system → messages, up to a `cache_control` breakpoint (automatic, or up to 4 explicit).",
   "Writes cost 1.25× (5 min) or 2× (1 h); reads cost a fraction (0.1×, 0.05× on Opus/Sonnet 5.5). It pays only when reads outnumber writes.",
   "The prefix must be byte-identical: changing tools invalidates everything; put variable content after the last breakpoint.",
-  "Prove it with `cache_read_input_tokens` and `cache_creation_input_tokens`; both 0 means no caching happened.",
+  "Prove it with `cache_read_input_tokens` and `cache_creation_input_tokens`. Both 0 means nothing was cached, often because the prefix is under the 512-token minimum.",
 ]} />
 
 ## 5.4 Batch processing
@@ -456,17 +410,11 @@ A cache hit costs 0.05× on Sonnet 5.5: about **$0.002 per call, ≈ $20 a day**
 <ExamRef section="5.4" />
 <Imagine text={"Every night, Acme wants yesterday's 50,000 tickets tagged by category for the morning dashboard. Nobody is waiting for any single answer, so why pay for instant ones?"} />
 
-
-
-
-
-
-
 ### The Message Batches API
 
 For work that doesn't need an answer now (overnight classification, dataset backfills, eval runs, scheduled reports), the **Message Batches API** (often just "the Batch API") processes requests **asynchronously**, meaning you hand over the work and collect the answers later instead of waiting, at **50% off** input and output.
 
-<Flow caption="A batch job: submit, poll, collect (Exam guide: Cost and Token Management)" steps={[
+<Flow caption="A batch job: submit, poll, collect" steps={[
   { title: 'Submit', sub: 'up to 100,000 requests or 256 MB' },
   { title: 'Get a batch ID', sub: 'returned immediately' },
   { title: 'Poll for status', sub: 'often < 1 h, up to 24 h' },
@@ -503,9 +451,16 @@ Claude never sends anything to customers: the batch results come back to **your 
 
 Acme wants urgent incidents handled straight away, but drafting replies to routine tickets can wait until the morning. If everything went into a batch, a P1 outage would sit unnoticed for hours. So each ticket gets one quick, cheap call as it arrives (**routing**, 1.2), and only the routine ones go into tonight's batch.
 
-<CodeSwitch title="Real-time triage plus an overnight batch">
+<CodeSwitch title="Real-time triage plus an overnight batch" fold>
 
 ```java
+// ── Setup: where the names below come from ──
+// Imports: com.anthropic.client.*, com.anthropic.client.okhttp.*, com.anthropic.models.messages.*, java.util.*
+String ticket = "I was charged twice for my March bill.";   // an example input
+List<String> tonightsBatch = new ArrayList<>();   // tickets to send to the Batch API tonight
+// classifyWithHaiku: a cheap routing call like the one in 1.2; returns "P1".."P4"
+// onCall: your paging service (PagerDuty, Opsgenie...)
+// ── The example ──
 // Runs the moment a ticket arrives: one fast, cheap Messages API call
 String priority = classifyWithHaiku(ticket);          // returns "P1".."P4"
 
@@ -518,6 +473,12 @@ if (priority.equals("P1") || priority.equals("P2")) {
 ```
 
 ```python
+# ── Setup: where the names below come from ──
+ticket = "I was charged twice for my March bill."   # an example input
+tonights_batch = []          # tickets to send to the Batch API tonight
+# classify_with_haiku: a cheap routing call like the one in 1.2; returns "P1".."P4"
+# on_call: your paging service (PagerDuty, Opsgenie...)
+# ── The example ──
 # Runs the moment a ticket arrives: one fast, cheap Messages API call
 priority = classify_with_haiku(ticket)                # returns "P1".."P4"
 
@@ -529,6 +490,12 @@ else:
 ```
 
 ```typescript
+// ── Setup: where the names below come from ──
+const ticket = 'I was charged twice for my March bill.';   // an example input
+const tonightsBatch: string[] = [];   // tickets to send to the Batch API tonight
+// classifyWithHaiku: a cheap routing call like the one in 1.2; returns "P1".."P4"
+// onCall: your paging service (PagerDuty, Opsgenie...)
+// ── The example ──
 // Runs the moment a ticket arrives: one fast, cheap Messages API call
 const priority = await classifyWithHaiku(ticket);    // returns 'P1'..'P4'
 
@@ -543,13 +510,18 @@ if (priority === 'P1' || priority === 'P2') {
 </CodeSwitch>
 {/* /more */}
 
-
 {/* code:5.4 */}
 **In code:** submit many requests in one batch, each with your own `custom_id`, then read the results when the batch has ended. Results can come back in any order, so match them by `custom_id`.
 
-<CodeSwitch title="Submit a batch, then read the results">
+<CodeSwitch title="Submit a batch, then read the results" fold>
 
 ```java
+// ── Setup: where the names below come from ──
+// Imports: com.anthropic.client.*, com.anthropic.client.okhttp.*, com.anthropic.models.messages.*
+AnthropicClient client = AnthropicOkHttpClient.fromEnv();   // one per app; reads ANTHROPIC_API_KEY
+// tickets: tonight's tickets from your database; each has an id and text
+// save: your own code to store a result, or queue the request to try again
+// ── The example ──
 BatchCreateParams.Builder batch = BatchCreateParams.builder();
 for (Ticket t : tickets) {
     batch.addRequest(BatchCreateParams.Request.builder()
@@ -573,6 +545,12 @@ try (var results = client.messages().batches().resultsStreaming(
 ```
 
 ```python
+# ── Setup: where the names below come from ──
+import anthropic
+client = anthropic.Anthropic()            # one client per app; reads ANTHROPIC_API_KEY
+# tickets: tonight's tickets from your database; each has an id and text
+# save, retry_later: your own code to store a result, or queue the request to try again
+# ── The example ──
 batch = client.messages.batches.create(requests=[
     {
         "custom_id": f"ticket-{t.id}",                        # your key for matching results
@@ -591,6 +569,12 @@ for r in client.messages.batches.results(batch.id):
 ```
 
 ```typescript
+// ── Setup: where the names below come from ──
+import Anthropic from '@anthropic-ai/sdk';
+const client = new Anthropic();             // one per app; reads ANTHROPIC_API_KEY
+// tickets: tonight's tickets from your database; each has an id and text
+// save, retryLater: your own code to store a result, or queue the request to try again
+// ── The example ──
 const batch = await client.messages.batches.create({
   requests: tickets.map((t) => ({
     custom_id: `ticket-${t.id}`,                              // your key for matching results
@@ -629,31 +613,37 @@ for await (const r of await client.messages.batches.results(batch.id)) {
 <ExamRef section="5.5" />
 <Imagine text={"In testing, conversations were short. In production, customers paste whole email threads, chats run to 60 turns, and requests start failing or getting cut off."} />
 
-
-
-
-
-
-
 ### Everything is tokens
 
-The context window holds the system prompt, the whole conversation, injected documents, tool definitions, every tool result and the model's output. Two edge behaviours: an input larger than the window is **rejected** with a validation error; a reply that runs out of room **stops early** with a stop reason telling you so.
-
-In development the window rarely fills because test inputs are short. In production, longer inputs and more turns fill it fast, so measure real traffic.
+This section is about the **cost** side of tokens: where the tokens in each call come from, how to count them before sending, what a feature will cost, and how to bring the bill down. (The other side, fitting everything into the model's size limit, the **context window**, is in 6.5. Reading the token counts in a reply is in 2.1.)
 
 - **Count before sending** - the token counting endpoint measures a request before you send it, so you can gate or trim instead of failing
 - **Images cost tokens** - roughly (width × height) / 784: a 1,000 × 1,000 px image ≈ 1,296 tokens
 - **Tool definitions cost tokens** - on every call, so register only the tools the task needs
 
 {/* diagram */}
-<Hub center="Tokens per call" caption="Where the tokens in one call come from: every item counts against cost and the window (Exam guide: Cost and Token Management)" items={['System prompt', 'Conversation history', 'Tool definitions', 'Documents and images', 'Tool results', 'Output (max_tokens)']} />
+<Hub center="Tokens per call" caption="Where the tokens in one call come from: every item counts against cost and the window" items={['System prompt', 'Conversation history', 'Tool definitions', 'Documents and images', 'Tool results', 'Output (max_tokens)']} />
 
 <RoleLens dev={"Count tokens before sending, trim history, cap `max_tokens`, and log usage. Tokens are your cost and latency drivers."} test={"Add a budget assertion: this flow must stay under N input tokens. That catches prompt bloat before it hits the bill."} data={"Model cost as tokens × price × volume, per pipeline. It's a simple fact table with a big impact on the forecast."} ba={"Put a cost ceiling in the requirements, e.g. \"under 1p per ticket\". It forces the right model and prompt choices early."} />
+
+### Working out what a feature will cost
+
+<Imagine text={"The chatbot will handle 100,000 conversations a day. Before launch, finance wants the daily cost on one page."} />
+
+Turn token counts into money before you launch. Prices are per million tokens and differ by model (5.1); Sonnet 5.5 costs $2 per million input tokens and $10 per million output tokens. A support-bot call with a 3,000-token system prompt, 1,500 tokens of history and a 400-token answer:
+
+| Item | Tokens | Rate | Cost |
+|---|---|---|---|
+| Input | 4,500 | $2 / 1M | $0.0090 |
+| Output | 400 | $10 / 1M | $0.0040 |
+| **Per call** | | | **$0.0130** |
+| **100,000 calls a day** | | | **≈ $1,300 a day** |
+
+**Prompt caching**, which lets Claude reuse the processed system prompt instead of reading it again on every call (cache reads cost 0.05× base on Sonnet 5.5), cuts that slice from $0.006 to $0.0003 per call, saving about $570 a day. 5.3 covers how.
 
 ### Cost levers, in the order to reach for them
 
 <Imagine text={"Finance asks you to halve the AI bill without making the answers worse. Where do you start?"} />
-
 
 1. **Right-size the model**, with routing for mixed traffic.
 2. **Cache** stable prefixes: long system prompts, tool sets, reference documents.
@@ -661,12 +651,52 @@ In development the window rarely fills because test inputs are short. In product
 4. **Tune effort** down for simple work.
 5. **Shrink the context**: fewer tools, trimmed history, **compaction** (summarising older history, 6.5).
 
+{/* more:5-levers-table */}
+| Lever | Saves | Best for | Trade-off |
+|---|---|---|---|
+| **Smaller model** | Up to ~40× on price | Simple, high-volume jobs (tagging, routing) | Must pass your eval first |
+| **Prompt caching** | Up to ~95% on the repeated part | A long system prompt, documents or tools sent every call | First call costs more; the cached part must not change |
+| **Batch API** | 50% on everything | Work nobody is waiting for | Results take up to 24 hours |
+| **Lower effort** | Output (thinking) tokens | Simple questions | Less depth on hard ones |
+| **Smaller context** | Input tokens on every call | Long chats, many tools | Risk of dropping something needed |
+
+They stack: a batch job on Haiku with a cached prompt gets all three discounts.
+{/* /more */}
+
+### Latency levers: making replies feel faster
+
+<Imagine text={"Users say the support bot \"feels slow\". Before changing anything, you need to know which kind of slow: waiting for the first word, or waiting for the whole answer?"} />
+
+There are two different waits:
+
+- **Time to first token (TTFT):** how long before *anything* appears.
+- **Total time:** how long until the reply is finished. This depends mostly on how many tokens Claude writes, and how fast.
+
+| Lever | Helps | Notes |
+|---|---|---|
+| **Streaming** (2.3) | How fast it *feels* | Words appear straight away; the total time doesn't change |
+| **Shorter output** | Total time | Ask for brevity, set a sensible `max_tokens`; output is the slow part |
+| **Lower effort** (5.2) | Total time | Less thinking before the answer |
+| **Smaller model** (5.1) | Both | If it still passes your evals |
+| **Prompt caching** (5.3) | TTFT | A cached prefix doesn't have to be processed again |
+| **Smaller context** (6.5) | TTFT | Fewer input tokens to read |
+| **Fast mode** (5.2) | Total time on supported Opus models | Same quality, higher price |
+| **Batch API** (5.4) | Nothing: it's *slower* (up to 24 h) | Only for work nobody is waiting for |
+
 {/* code:5.5 */}
 **In code:** count tokens before you send. It's free, and uses the same inputs as a real request.
 
-<CodeSwitch title="Count tokens before sending">
+<CodeSwitch title="Count tokens before sending" fold>
 
 ```java
+// ── Setup: where the names below come from ──
+// Imports: com.anthropic.client.*, com.anthropic.client.okhttp.*, com.anthropic.models.messages.*, java.nio.file.*
+AnthropicClient client = AnthropicOkHttpClient.fromEnv();   // one per app; reads ANTHROPIC_API_KEY
+String systemPrompt = "You are a concise summariser.";
+final long BUDGET = 50000;   // most input tokens you are willing to send
+String longDocument = Files.readString(Path.of("contract.txt"));   // possibly very long
+// summarise: e.g. a cheap Haiku call that shortens the document
+// ── The example ──
 MessageTokensCount count = client.messages().countTokens(MessageCountTokensParams.builder()
     .model(Model.CLAUDE_SONNET_5_5)
     .system(systemPrompt)
@@ -678,6 +708,15 @@ if (count.inputTokens() > BUDGET) {
 ```
 
 ```python
+# ── Setup: where the names below come from ──
+import anthropic
+from pathlib import Path
+client = anthropic.Anthropic()            # one client per app; reads ANTHROPIC_API_KEY
+system_prompt = "You are a concise summariser."
+BUDGET = 50_000   # most input tokens you are willing to send
+long_document = Path("contract.txt").read_text()   # possibly very long
+# summarise: e.g. a cheap Haiku call that shortens the document
+# ── The example ──
 count = client.messages.count_tokens(
     model="claude-sonnet-5-5",
     system=system_prompt,
@@ -688,6 +727,15 @@ if count.input_tokens > BUDGET:
 ```
 
 ```typescript
+// ── Setup: where the names below come from ──
+import Anthropic from '@anthropic-ai/sdk';
+import { readFileSync } from 'node:fs';
+const client = new Anthropic();             // one per app; reads ANTHROPIC_API_KEY
+const systemPrompt = 'You are a concise summariser.';
+const BUDGET = 50_000;   // most input tokens you are willing to send
+const longDocument = readFileSync('contract.txt', 'utf8');   // possibly very long
+// summarise: e.g. a cheap Haiku call that shortens the document
+// ── The example ──
 const count = await client.messages.countTokens({
   model: 'claude-sonnet-5-5',
   system: systemPrompt,

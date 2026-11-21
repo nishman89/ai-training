@@ -1,0 +1,31 @@
+// ── Setup: where the names below come from ──
+import Anthropic from '@anthropic-ai/sdk';
+const client = new Anthropic();                           // one per app; reads ANTHROPIC_API_KEY
+const MODEL = process.env.CLAUDE_MODEL!;                  // ⑤ the pinned, full model ID, from config (2.5)
+const SYSTEM_PROMPT = "You are Acme Broadband's support assistant. Be brief.";
+// chatStore: your storage for each chat's history; log: your logger
+// ── The example ──
+async function ask(chatId: string, text: string): Promise<string> {
+  const history: Anthropic.MessageParam[] = [
+    ...(await chatStore.load(chatId)), { role: 'user', content: text }];          // ① build the request (2.1, 2.2)
+  let msg: Anthropic.Message;
+  try {
+    msg = await client.messages.create({ model: MODEL, max_tokens: 1024,         // ② send it: one stateless call
+                                         system: SYSTEM_PROMPT, messages: history });
+    // ③ someone watching? use client.messages.stream(...) instead (2.3)
+  } catch (err) {
+    if (err instanceof Anthropic.RateLimitError)                                  // ④ outcome 1: an error (2.4)
+      return "We're busy right now. Please try again in a minute.";              //    (the SDK already retried)
+    throw err;
+  }
+
+  log.info('usage', msg.usage);                                                   // ④ the itemised bill (2.1)
+  if (msg.stop_reason !== 'end_turn' && msg.stop_reason !== 'stop_sequence') {    // ④ outcome 2: not finished
+    log.warn(`Unfinished reply ${msg.id}: ${msg.stop_reason}`);
+    return "Sorry, I couldn't finish that answer. Could you ask something shorter?";
+  }
+
+  const answer = msg.content.map((b) => (b.type === 'text' ? b.text : '')).join('');   // ④ outcome 3: finished
+  await chatStore.save(chatId, [...history, { role: 'assistant', content: answer }]);
+  return answer;
+}

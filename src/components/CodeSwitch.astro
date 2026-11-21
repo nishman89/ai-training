@@ -12,11 +12,24 @@
  *   ```
  *   </CodeSwitch>
  */
-interface Props { title?: string; }
+interface Props { title?: string; explain?: string[]; fold?: boolean; }
 import { anchor } from '../lib/anchors';
-const { title } = Astro.props;
+import { CODE_EXPLANATIONS } from '../data/code-explanations';
+const { title, fold = false } = Astro.props;
+const steps = Astro.props.explain ?? (title ? CODE_EXPLANATIONS[title] : undefined);
+const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const fmt = (t: string) => esc(t).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/`([^`]+)`/g, '<code>$1</code>');
 ---
-<div class="code-switch" data-code-switch data-active="java" id={title ? anchor('code', title) : undefined}>
+<div class={`code-switch${fold ? ' code-switch--fold' : ''}`} data-code-switch data-active="java" id={title ? anchor('code', title) : undefined}>
+  {fold && title && <p class="code-switch__fold-title">{title}</p>}
+  {fold && steps && (
+    <div class="code-explain code-explain--top">
+      <p class="code-explain__h">What this code does</p>
+      <ol>{steps.map((t) => <li set:html={fmt(t)} />)}</ol>
+    </div>
+  )}
+  <details class="code-fold" open={!fold}>
+  <summary class="code-fold__summary">Show the code (Java · Python · TypeScript)</summary>
   <div class="code-switch__bar no-print">
     {title && <span class="code-switch__title">{title}</span>}
     <div class="code-switch__tabs" role="group" aria-label="Code language">
@@ -26,9 +39,23 @@ const { title } = Astro.props;
     </div>
   </div>
   <slot />
+  </details>
+  {!fold && steps && (
+    <div class="code-explain">
+      <p class="code-explain__h">What this code does</p>
+      <ol>{steps.map((t) => <li set:html={fmt(t)} />)}</ol>
+    </div>
+  )}
 </div>
 
 <script>
+  const openHashed = () => {
+    const el = location.hash ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null;
+    const d = el?.querySelector<HTMLDetailsElement>(':scope > details.code-fold');
+    if (d) d.open = true;
+  };
+  openHashed();
+  window.addEventListener('hashchange', openHashed);
   const KEY = 'ccdvf-code-lang';
   const read = () => { try { return localStorage.getItem(KEY) ?? 'java'; } catch { return 'java'; } };
   const apply = (lang: string) => {
@@ -52,6 +79,21 @@ const { title } = Astro.props;
 
 <style>
   .code-switch { margin: 1rem 0; }
+  .code-switch:not(.code-switch--fold) > .code-fold > summary { display: none; }
+  .code-switch__fold-title { margin: 0; padding: 0.55rem 1rem 0; font-weight: 700; font-size: 0.9rem; color: var(--grey); background: #eef2f7; border-radius: 12px 12px 0 0; border-left: 6px solid #5b6b80; }
+  .code-switch--fold .code-explain--top { border-radius: 0; }
+  .code-switch--fold .code-switch__title { display: none; }
+  .code-fold__summary { cursor: pointer; padding: 0.5rem 1rem; background: #e3e8ef; border-left: 6px solid #5b6b80; border-radius: 0 0 12px 12px; font-weight: 700; font-size: 0.85rem; color: #3c4a5c; list-style: none; }
+  .code-fold__summary::-webkit-details-marker { display: none; }
+  .code-fold__summary::before { content: '▸ '; }
+  .code-fold[open] > .code-fold__summary { border-radius: 0; margin-bottom: 0.6rem; }
+  .code-fold[open] > .code-fold__summary::before { content: '▾ '; }
+  .code-fold[open] > .code-fold__summary::after { content: ' (hide)'; font-weight: 400; }
+  .code-explain { margin: 0; padding: 0.75rem 1rem 0.8rem; background: #eef2f7; border-radius: 0 0 12px 12px; border-left: 6px solid #5b6b80; font-size: 0.93rem; }
+  .code-explain__h { margin: 0 0 0.3rem; font-weight: 800; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: #3c4a5c; }
+  .code-explain ol { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.25rem; line-height: 1.5; }
+  .code-explain :global(code) { font-size: 0.85em; }
+  .code-switch :global(pre.astro-code) { margin-bottom: 0; }
   .code-switch__bar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; margin-bottom: -0.35rem; }
   .code-switch__title { font-weight: 700; font-size: 0.9rem; color: var(--grey); }
   .code-switch__tabs { display: inline-flex; margin-left: auto; background: var(--charcoal); border-radius: 10px 10px 0 0; padding: 0.25rem 0.25rem 0; gap: 0.2rem; }

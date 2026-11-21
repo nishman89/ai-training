@@ -14,10 +14,12 @@ import Tiles from '../../components/diagrams/Tiles.astro';
 import Compare from '../../components/diagrams/Compare.astro';
 import Imagine from '../../components/Imagine.astro';
 import ExamRef from '../../components/ExamRef.astro';
+import Explain from '../../components/Explain.astro';
 import RoleLens from '../../components/RoleLens.astro';
 import PictureIt from '../../components/PictureIt.astro';
 import Gotcha from '../../components/Gotcha.astro';
 import SectionSummary from '../../components/SectionSummary.astro';
+import Running from '../../components/Running.astro';
 import CodeSwitch from '../../components/CodeSwitch.astro';
 import Flow from '../../components/diagrams/Flow.astro';
 import Hub from '../../components/diagrams/Hub.astro';
@@ -30,15 +32,12 @@ import Resource from '../../components/Resource.astro';
 
 <ExamRef section="8.1" />
 
-
-
-
-
-
-
 ### In plain English
 
-This domain is about letting Claude **do** things, not just talk, through **tool use** (also called function calling). You describe a function ("get_order_status takes an order ID"). Claude replies "please run get_order_status with A-1234", **your** code runs it and sends back the answer, and Claude continues. **MCP** (the **Model Context Protocol**) is an open standard for packaging tools so they plug into any Claude app, like USB for tools. A program that offers tools this way is an **MCP server**; an app that connects to it is an **MCP client**.
+This domain is about letting Claude **do** things, not just talk:
+
+- **Tool use** (also called function calling): you describe a function ("get_order_status takes an order ID"). Claude replies "please run get_order_status with A-1234". **Your** code runs it and sends back the answer, and Claude continues.
+- **MCP** (the **Model Context Protocol**): an open standard for packaging tools so they plug into any Claude app, like USB for tools. A program that offers tools this way is an **MCP server**; an app that connects to it is an **MCP client**.
 
 **Real-life example:** connect the GitHub MCP server once, and Claude can search code and open issues in any app that supports MCP.
 
@@ -46,7 +45,20 @@ This domain is about letting Claude **do** things, not just talk, through **tool
 
 ### The round trip
 
-<Flow caption="Claude never runs your tools: it asks, your code runs them (Exam guide: Tool Implementation)" steps={[
+First, the words you'll see in this chapter. They're all parts of Claude's reply (2.1 shows a full one):
+
+| Word | What it means | Example |
+|---|---|---|
+| **Content block** | Claude's reply is a list of pieces called blocks, each with a `type` | A `text` block, then a `tool_use` block |
+| `text` block | Words for the user | "Let me check that order." |
+| `tool_use` block | Claude asking you to run a tool: the tool's `name`, the `input` it chose, and an `id` | `get_order_status`, `{"order_id": "A-1234"}`, `toolu_01A...` |
+| `tool_result` block | What **you** send back after running it, quoting the same `id` | "Out for delivery, arriving today" |
+| `stop_reason` | A field on every reply saying **why Claude stopped**. Your code checks it to know what to do next | `end_turn`: finished, show the answer. `tool_use`: it wants a tool, so run it and reply |
+| **Tool definition** | What you send in the `tools` field of **every** request: a `name`, a `description`, and an `input_schema`. If a tool isn't listed, Claude doesn't know it exists | Step 1 below |
+| **JSON schema** | A standard way to describe the shape of some data: which fields, what type, which are required | `order_id` must be a string |
+
+
+<Flow caption="Claude never runs your tools: it asks, your code runs them" steps={[
   { title: 'Send tools + question', sub: 'name, description, input_schema' },
   { title: 'stop_reason: tool_use', sub: 'tool_use block: name, id, input' },
   { title: 'Your code runs it', sub: 'Claude is not connected meanwhile' },
@@ -54,72 +66,170 @@ This domain is about letting Claude **do** things, not just talk, through **tool
   { title: 'Claude continues', sub: 'answer or another tool' },
 ]} />
 
-Each tool is defined by a name, a description, and an `input_schema` (a JSON schema listing its parameters and their types). A tool conversation is built from typed blocks: `text`, `tool_use`, `tool_result` and (with thinking) `thinking`. The API enforces the pairing: each `tool_use` must be answered by a `tool_result` with the matching ID in the next user turn. Most bugs sit on that boundary between what Claude owns and what your code owns.
+**Claude never runs your code.** It only sees a description of each tool, and asks *you* to run it. Then you repeat until Claude stops asking: that's the **agent loop** (1.3).
 
-<CodeSwitch title="One tool call, answered">
+**Where it usually goes wrong:** a `tool_use` with no `tool_result`, the wrong ID, or a failure your code hid instead of reporting it to Claude.
+
+<Running thread="tool" step={1} adds="an ordinary method that looks up an order, and the description Claude will see." />
+
+<CodeSwitch title="Order tool, step 1: your method and its description">
 
 ```java
-// Claude asked for a tool: echo its turn, then answer every tool_use with a tool_result
-history.add(reply.toParam());
-List<ContentBlockParam> results = new ArrayList<>();
-for (ContentBlock block : reply.content()) {
-    block.toolUse().ifPresent(use -> {
-        try {
-            String out = orders.status(use.input().toString());
-            results.add(ContentBlockParam.ofToolResult(ToolResultBlockParam.builder()
-                .toolUseId(use.id()).content(out).build()));
-        } catch (Exception e) {
-            results.add(ContentBlockParam.ofToolResult(ToolResultBlockParam.builder()
-                .toolUseId(use.id())
-                .content("Order service unavailable: " + e.getMessage())
-                .isError(true)                          // tell Claude it failed
-                .build()));
-        }
-    });
+// ── Setup: where the names below come from ──
+// Imports: com.anthropic.client.*, com.anthropic.client.okhttp.*, com.anthropic.models.messages.*, com.anthropic.core.JsonValue, java.util.*
+// orderDb: your own database code: find_status(order_id) returns the order's status as text
+// ── The example ──
+// THE METHOD: ordinary Java. Claude never sees this code
+String getOrderStatus(String orderId) {
+    return orderDb.findStatus(orderId);          // e.g. "Out for delivery, arriving today"
 }
-history.add(MessageParam.builder().role(MessageParam.Role.USER).contentOfBlockParams(results).build());
+
+// THE DESCRIPTION: this is all Claude ever sees
+Tool orderTool = Tool.builder()
+    .name("get_order_status")                    // the name Claude uses to ask for it
+    .description("Looks up an order's delivery status. Use when a customer asks where their order is.")
+    .inputSchema(Tool.InputSchema.builder()      // the inputs it needs: one text field, order_id
+        .properties(JsonValue.from(Map.of("order_id", Map.of("type", "string"))))
+        .putAdditionalProperty("required", JsonValue.from(List.of("order_id")))
+        .build())
+    .build();
 ```
 
 ```python
-# Claude asked for a tool: echo its turn, then answer every tool_use with a tool_result
-history.append({"role": "assistant", "content": reply.content})
-results = []
-for block in reply.content:
-    if block.type != "tool_use":
-        continue
-    try:
-        out = orders.status(**block.input)
-        results.append({"type": "tool_result", "tool_use_id": block.id, "content": out})
-    except Exception as e:
-        results.append({
-            "type": "tool_result", "tool_use_id": block.id,
-            "content": f"Order service unavailable: {e}",
-            "is_error": True,                           # tell Claude it failed
-        })
-history.append({"role": "user", "content": results})
+# ── Setup: where the names below come from ──
+# order_db: your own database code: find_status(order_id) returns the order's status as text
+# ── The example ──
+# THE METHOD: ordinary Python. Claude never sees this code
+def get_order_status(order_id: str) -> str:
+    return order_db.find_status(order_id)       # e.g. "Out for delivery, arriving today"
+
+# THE DESCRIPTION: this is all Claude ever sees
+order_tool = {
+    "name": "get_order_status",                 # the name Claude uses to ask for it
+    "description": "Looks up an order's delivery status. Use when a customer asks where their order is.",
+    "input_schema": {                           # the inputs it needs: one text field, order_id
+        "type": "object",
+        "properties": {"order_id": {"type": "string"}},
+        "required": ["order_id"],
+    },
+}
 ```
 
 ```typescript
-// Claude asked for a tool: echo its turn, then answer every tool_use with a tool_result
-history.push({ role: 'assistant', content: reply.content });
-const results: Anthropic.ToolResultBlockParam[] = [];
-for (const block of reply.content) {
-  if (block.type !== 'tool_use') continue;
-  try {
-    const out = await orders.status(block.input as { order_id: string });
-    results.push({ type: 'tool_result', tool_use_id: block.id, content: out });
-  } catch (e) {
-    results.push({
-      type: 'tool_result', tool_use_id: block.id,
-      content: `Order service unavailable: ${(e as Error).message}`,
-      is_error: true,                             // tell Claude it failed
-    });
-  }
+// ── Setup: where the names below come from ──
+import Anthropic from '@anthropic-ai/sdk';
+// orderDb: your own database code: find_status(order_id) returns the order's status as text
+// ── The example ──
+// THE METHOD: ordinary TypeScript. Claude never sees this code
+async function getOrderStatus(orderId: string): Promise<string> {
+  return orderDb.findStatus(orderId);           // e.g. "Out for delivery, arriving today"
 }
-history.push({ role: 'user', content: results });
+
+// THE DESCRIPTION: this is all Claude ever sees
+const orderTool: Anthropic.Tool = {
+  name: 'get_order_status',                     // the name Claude uses to ask for it
+  description: "Looks up an order's delivery status. Use when a customer asks where their order is.",
+  input_schema: {                               // the inputs it needs: one text field, order_id
+    type: 'object',
+    properties: { order_id: { type: 'string' } },
+    required: ['order_id'],
+  },
+};
 ```
 
 </CodeSwitch>
+
+The two halves are linked only by the **name**. When Claude asks for `get_order_status`, your code calls `getOrderStatus`. Nothing connects them automatically: that's step 2.
+
+<Running thread="tool" step={2} adds="the round trip that connects them: ask, run your method, send the answer back." marks={false} />
+
+<CodeSwitch title="Order tool, step 2: the round trip">
+
+```java
+// ── Setup: where the names below come from ──
+// Imports: com.anthropic.client.*, com.anthropic.client.okhttp.*, com.anthropic.models.messages.*, java.util.*
+AnthropicClient client = AnthropicOkHttpClient.fromEnv();   // one per app; reads ANTHROPIC_API_KEY
+// orderTool: step 1's tool description (8.1)
+// getOrderStatus: your own function, e.g. a database lookup: takes an order ID, returns its status as text
+// ── The example ──
+// 1. Ask the question, sending the description from step 1
+MessageCreateParams.Builder request = MessageCreateParams.builder()
+    .model("claude-sonnet-5-5").maxTokens(1024)
+    .addTool(orderTool)
+    .addUserMessage("Where's order A-1234?");
+Message reply = client.messages().create(request.build());   // stop_reason: tool_use
+
+// 2. Claude asked for the tool: call YOUR method with the input Claude chose
+ToolUseBlock use = reply.content().get(0).toolUse().orElseThrow();   // simplified: assumes it's the first block
+String orderId = use._input().asObject().orElseThrow().get("order_id").asString().orElseThrow();
+String status = getOrderStatus(orderId);                             // your method from step 1
+
+// 3. Send the answer back as a tool_result with the same ID
+request.addMessage(reply)
+       .addUserMessageOfBlockParams(List.of(ContentBlockParam.ofToolResult(
+           ToolResultBlockParam.builder().toolUseId(use.id()).content(status).build())));
+
+// 4. Claude now writes the reply for the customer
+Message answer = client.messages().create(request.build());          // stop_reason: end_turn
+System.out.println(answer.content().get(0).text().get().text());     // "Your order A-1234 is out for delivery..."
+```
+
+```python
+# ── Setup: where the names below come from ──
+import anthropic
+client = anthropic.Anthropic()            # one client per app; reads ANTHROPIC_API_KEY
+# order_tool: step 1's tool description (8.1)
+# get_order_status: your own function, e.g. a database lookup: takes an order ID, returns its status as text
+# ── The example ──
+# 1. Ask the question, sending the description from step 1
+messages = [{"role": "user", "content": "Where's order A-1234?"}]
+reply = client.messages.create(model="claude-sonnet-5-5", max_tokens=1024,
+                               tools=[order_tool], messages=messages)   # stop_reason: tool_use
+
+# 2. Claude asked for the tool: call YOUR method with the input Claude chose
+use = next(b for b in reply.content if b.type == "tool_use")
+status = get_order_status(use.input["order_id"])                       # your method from step 1
+
+# 3. Send the answer back as a tool_result with the same ID
+messages.append({"role": "assistant", "content": reply.content})
+messages.append({"role": "user", "content": [
+    {"type": "tool_result", "tool_use_id": use.id, "content": status}]})
+
+# 4. Claude now writes the reply for the customer
+answer = client.messages.create(model="claude-sonnet-5-5", max_tokens=1024,
+                                tools=[order_tool], messages=messages)  # stop_reason: end_turn
+print(answer.content[0].text)   # "Your order A-1234 is out for delivery..."
+```
+
+```typescript
+// ── Setup: where the names below come from ──
+import Anthropic from '@anthropic-ai/sdk';
+const client = new Anthropic();             // one per app; reads ANTHROPIC_API_KEY
+// orderTool: step 1's tool description (8.1)
+// getOrderStatus: your own function, e.g. a database lookup: takes an order ID, returns its status as text
+// ── The example ──
+// 1. Ask the question, sending the description from step 1
+const messages: Anthropic.MessageParam[] = [{ role: 'user', content: "Where's order A-1234?" }];
+const reply = await client.messages.create({ model: 'claude-sonnet-5-5', max_tokens: 1024,
+                                             tools: [orderTool], messages });   // stop_reason: tool_use
+
+// 2. Claude asked for the tool: call YOUR method with the input Claude chose
+const use = reply.content.find((b) => b.type === 'tool_use') as Anthropic.ToolUseBlock;
+const status = await getOrderStatus((use.input as { order_id: string }).order_id);   // step 1's method
+
+// 3. Send the answer back as a tool_result with the same ID
+messages.push({ role: 'assistant', content: reply.content });
+messages.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: use.id, content: status }] });
+
+// 4. Claude now writes the reply for the customer
+const answer = await client.messages.create({ model: 'claude-sonnet-5-5', max_tokens: 1024,
+                                              tools: [orderTool], messages });   // stop_reason: end_turn
+console.log((answer.content[0] as Anthropic.TextBlock).text);   // "Your order A-1234 is out for delivery..."
+```
+
+</CodeSwitch>
+
+This is the simplest version: it assumes your method always works and Claude's input is always right. Steps 3 and 4 (in 8.2) fix both, step 5 (8.4) shares the tool with other apps, and step 6 (1.3) wraps it in a loop so Claude can call tools several times.
 
 <PictureIt title="One tool call, as the actual messages">
 **The scenario:** the customer asks "Where's order A-1234?". Your app has registered one tool, `get_order_status`. These are the real messages, in order.
@@ -185,7 +295,7 @@ Two HTTP calls, one tool run by **your** code, and the IDs tie them together.
 <SectionSummary points={[
   "Claude only requests a tool call; your code runs it and returns a `tool_result` with the matching `tool_use_id`.",
   "Conversations are typed blocks (text, tool_use, tool_result, thinking), and the API enforces the pairing.",
-  "Most bugs sit on the boundary between what Claude owns and what your code owns.",
+  "Most bugs happen at the hand-over: a missing tool_result, a mismatched ID, or a hidden failure.",
 ]} />
 
 ## 8.2 Designing tools Claude picks correctly
@@ -193,20 +303,14 @@ Two HTTP calls, one tool run by **your** code, and the IDs tie them together.
 <ExamRef section="8.2" />
 <Imagine text={"Claude keeps calling the refund tool when customers ask where their order is. Both tools have one-line descriptions, so Claude is guessing."} />
 
-
-
-
-
-
-
 ### Claude picks tools by their description
 
-Claude picks a tool by reasoning over every registered description in the context of the conversation. When two descriptions look alike, it has no reliable signal and picks on surface details.
+Claude decides which tool to use by reading the name and description of every tool you've given it, and comparing them with what the user asked. If two descriptions sound alike, it has nothing reliable to go on, so it guesses.
 
-- **Say when NOT to use it** - one sentence of exclusion gives a decision boundary · "Look up an order's status. Do not use for refunds."
-- **Merge what you can't separate** - two overlapping tools → one tool with a type parameter
-- **Use the schema** - an enum (a fixed list of allowed values) for fixed values, required only for truly required fields, clear parameter descriptions
-- **Don't over-tool** - every definition costs tokens on every call, and overlap makes selection erratic · start minimal
+- **Say when NOT to use it** - one sentence saying when not to use a tool shows Claude exactly where the line is · "Look up an order's status. Do not use for refunds."
+- **Merge what you can't separate** - if two tools overlap and you can't describe the difference clearly, make them one tool with a parameter for the type
+- **Use the schema** - an enum (a fixed list of allowed values) wherever only certain values are valid · mark a field required only if it truly is · describe every parameter
+- **Don't give it too many tools** - every definition costs tokens on every call, and overlapping tools make Claude's choices unreliable · start with the fewest that do the job
 
 {/* more:8-describe */}
 **Example:** two definitions of the same tool. Claude reads only the name, description and schema, so the second one gets picked correctly far more often.
@@ -214,6 +318,9 @@ Claude picks a tool by reasoning over every registered description in the contex
 <CodeSwitch title="A tool description that says when, and when not">
 
 ```java
+// ── Setup: where the names below come from ──
+// Imports: com.anthropic.client.*, com.anthropic.client.okhttp.*, com.anthropic.models.messages.*, com.anthropic.core.JsonValue, java.util.*
+// ── The example ──
 // Weak: Tool.builder().name("orders").description("Order tool.")...
 Tool getOrderStatus = Tool.builder()
     .name("get_order_status")
@@ -246,6 +353,9 @@ get_order_status = {
 ```
 
 ```typescript
+// ── Setup: where the names below come from ──
+import Anthropic from '@anthropic-ai/sdk';
+// ── The example ──
 // Weak: { name: 'orders', description: 'Order tool.', ... }
 const getOrderStatus: Anthropic.Tool = {
   name: 'get_order_status',
@@ -265,15 +375,8 @@ const getOrderStatus: Anthropic.Tool = {
 </CodeSwitch>
 {/* /more */}
 
-
-
-
-
-
-
-
 {/* diagram */}
-<Compare caption="A tool Claude struggles with, and one it picks correctly (Exam guide: Tool Implementation)" columns={[
+<Compare caption="A tool Claude struggles with, and one it picks correctly" columns={[
   { title: 'Vague tool', sub: 'run_sql(query)', points: ['One-line description', 'Free-text parameter', 'Overlaps other tools'] },
   { title: 'Clear tool', sub: 'get_daily_sales(region, date)', points: ['Says when to use it and when not', 'Typed params, enums, required', 'One clear job'] },
 ]} />
@@ -284,8 +387,22 @@ const getOrderStatus: Anthropic.Tool = {
 
 <Imagine text={"The stock system times out, your tool quietly returns an empty list, and Claude tells a customer the router is out of stock. It isn't."} />
 
-
 Return failures as a `tool_result` with `is_error: true` and a useful message, so the model can retry, try another approach, ask the user or stop. An empty result is read as valid data ("no orders found"), and the model carries on confidently.
+
+```json
+{ "type": "tool_result", "tool_use_id": "toolu_01A",
+  "content": "Inventory service timed out after 5s. Stock level unknown.",
+  "is_error": true }
+```
+
+**Don't confuse this with an API error (2.4).** They happen at different points and are handled by different code:
+
+| | **API error** (2.4) | **Tool error** (this section) |
+|---|---|---|
+| What failed | Your call **to Claude** | **Your own** function that Claude asked you to run |
+| What you see | HTTP 4xx/5xx and an exception; no reply | A normal reply with `stop_reason: tool_use`; then *your* tool throws |
+| Who deals with it | Your code: retry or give up | **Claude**: you tell it with `is_error: true`, and it decides what to do next |
+| Example | 429 rate limited | The stock API timed out |
 
 <Gotcha
   title={"\"Sorry, that item is out of stock\""}
@@ -294,11 +411,207 @@ Return failures as a `tool_result` with `is_error: true` and a useful message, s
   fix={"Return `is_error: true` with a message (\"inventory service timed out\") so Claude can retry, apologise, or hand off."}
 />
 
+<Running thread="tool" step={3} adds="a `try`/`catch` around your method. If it fails, the `tool_result` says so, with `is_error: true`." />
+
+<CodeSwitch title="Order tool, step 3: when your method fails">
+
+```java
+// ── Setup: where the names below come from ──
+// Imports: com.anthropic.client.*, com.anthropic.client.okhttp.*, com.anthropic.models.messages.*, java.util.*
+// reply: the Message Claude just returned (its stop_reason is "tool_use")
+// getOrderStatus: your own function, e.g. a database lookup: takes an order ID, returns its status as text
+// ── The example ──
+// Part 2 of step 2, now with a try/catch. The rest of step 2 is unchanged
+// request: the request builder from step 2
+ToolUseBlock use = reply.content().get(0).toolUse().orElseThrow();
+String orderId = use._input().asObject().orElseThrow().get("order_id").asString().orElseThrow();
+ToolResultBlockParam result;   // ← new
+try {   // ← new
+    result = ToolResultBlockParam.builder().toolUseId(use.id())   // ← new
+        .content(getOrderStatus(orderId)).build();   // ← new: worked: send the status
+} catch (Exception e) {   // ← new
+    result = ToolResultBlockParam.builder().toolUseId(use.id())   // ← new
+        .content("Order lookup failed: " + e.getMessage() + ". Status unknown.")   // ← new: say what went wrong
+        .isError(true)   // ← new: flag it as a failure
+        .build();   // ← new
+}   // ← new
+request.addMessage(reply)
+       .addUserMessageOfBlockParams(List.of(ContentBlockParam.ofToolResult(result)));   // ← new: send whichever we got
+```
+
+```python
+# ── Setup: where the names below come from ──
+# reply: the Message Claude just returned (its stop_reason is "tool_use")
+# get_order_status: your own function, e.g. a database lookup: takes an order ID, returns its status as text
+# ── The example ──
+# Part 2 of step 2, now with a try/except. The rest of step 2 is unchanged
+# messages: the conversation list from step 2
+use = next(b for b in reply.content if b.type == "tool_use")
+try:   # ← new
+    status = get_order_status(use.input["order_id"])
+    result = {"type": "tool_result", "tool_use_id": use.id,   # ← new: worked: send the status
+              "content": status}   # ← new
+except Exception as e:   # ← new
+    result = {"type": "tool_result", "tool_use_id": use.id,   # ← new
+              "content": f"Order lookup failed: {e}. Status unknown.",   # ← new: say what went wrong
+              "is_error": True}   # ← new: flag it as a failure
+
+messages.append({"role": "assistant", "content": reply.content})
+messages.append({"role": "user", "content": [result]})   # ← new: send whichever we got
+```
+
+```typescript
+// ── Setup: where the names below come from ──
+import Anthropic from '@anthropic-ai/sdk';
+// reply: the Message Claude just returned (its stop_reason is "tool_use")
+// getOrderStatus: your own function, e.g. a database lookup: takes an order ID, returns its status as text
+// ── The example ──
+// Part 2 of step 2, now with a try/catch. The rest of step 2 is unchanged
+// messages: the conversation list from step 2
+const use = reply.content.find((b) => b.type === 'tool_use') as Anthropic.ToolUseBlock;
+let result: Anthropic.ToolResultBlockParam;   // ← new
+try {   // ← new
+  const status = await getOrderStatus((use.input as { order_id: string }).order_id);
+  result = { type: 'tool_result', tool_use_id: use.id, content: status };   // ← new: worked: send the status
+} catch (e) {   // ← new
+  result = { type: 'tool_result', tool_use_id: use.id,   // ← new
+             content: `Order lookup failed: ${(e as Error).message}. Status unknown.`,   // ← new: say what went wrong
+             is_error: true };   // ← new: flag it as a failure
+}   // ← new
+
+messages.push({ role: 'assistant', content: reply.content });
+messages.push({ role: 'user', content: [result] });   // ← new: send whichever we got
+```
+
+</CodeSwitch>
+
+Your method doesn't change: it still just throws when something goes wrong. The code that **calls** it catches the failure and turns it into a `tool_result` Claude can understand.
+
+### Validate the tool's input, and send problems back to Claude
+
+<Imagine text={"A customer types \"my order is 1234\". Claude calls `get_order_status` with `1234`, without the `A-` prefix. Your database finds nothing and says \"no such order\", and Claude tells the customer their order doesn't exist."} />
+
+The arguments in a `tool_use` block are **untrusted input**, just like a form a user filled in. Usually they match your schema; sometimes a field is missing, has the wrong type or an extra key. (A **strict** tool, 6.3, enforces the schema shape, but you still need to check your business rules.) So every tool should:
+
+1. **Validate the input** against a schema in your code: Zod in TypeScript, Pydantic in Python, Bean Validation or Jackson in Java. Apply defaults for optional fields.
+2. **If it's invalid, don't crash and don't guess.** Return a `tool_result` with `is_error: true` and a message saying exactly what was wrong.
+3. **Let Claude retry.** It reads the error and calls the tool again with corrected arguments.
+
+<Running thread="tool" step={4} adds="a check on Claude's input before your method runs. Bad input gets a clear error back, so Claude can fix it or ask the customer." />
+
+<CodeSwitch title="Order tool, step 4: check Claude's input">
+
+```java
+// ── Setup: where the names below come from ──
+// Imports: com.anthropic.client.*, com.anthropic.client.okhttp.*, com.anthropic.models.messages.*, com.anthropic.core.JsonValue, java.util.*
+// reply: the Message Claude just returned (its stop_reason is "tool_use")
+// runSafely: step 3's try/catch moved into a method: calls getOrderStatus and returns the tool_result
+// ── The example ──
+// Step 3's code, with a check before the method runs
+ToolUseBlock use = reply.content().get(0).toolUse().orElseThrow();
+String orderId = readOrderId(use);   // ← new: null if missing or not text
+ToolResultBlockParam result;
+if (!isValidOrderId(orderId)) {   // ← new
+    result = ToolResultBlockParam.builder().toolUseId(use.id()).isError(true)   // ← new
+        .content("Invalid input: order_id must look like A-1234. Ask the customer for it.").build();   // ← new
+} else {   // ← new
+    result = runSafely(use, orderId);                                // step 3's try/catch, now a method
+}   // ← new
+
+// ← new: two small helpers
+static String readOrderId(ToolUseBlock use) {   // ← new
+    JsonValue raw = use._input().asObject().orElse(Map.of()).get("order_id");   // ← new
+    return raw == null ? null : raw.asString().orElse(null);   // ← new
+}   // ← new
+static boolean isValidOrderId(String id) {   // ← new
+    return id != null && id.matches("A-\\d{4}");   // ← new: our business rule
+}   // ← new
+```
+
+```python
+# ── Setup: where the names below come from ──
+# reply: the Message Claude just returned (its stop_reason is "tool_use")
+# get_order_status: your own function, e.g. a database lookup: takes an order ID, returns its status as text
+# ── The example ──
+# Step 3's code, with a check before the method runs
+from pydantic import BaseModel, Field, ValidationError   # ← new
+
+class OrderArgs(BaseModel):   # ← new: the input's rules
+    order_id: str = Field(pattern=r"^A-\d{4}$")   # ← new: e.g. A-1234
+
+use = next(b for b in reply.content if b.type == "tool_use")
+try:
+    args = OrderArgs.model_validate(use.input)   # ← new: missing, wrong type or wrong format fails here
+    status = get_order_status(args.order_id)
+    result = {"type": "tool_result", "tool_use_id": use.id, "content": status}
+except ValidationError:   # ← new
+    result = {"type": "tool_result", "tool_use_id": use.id, "is_error": True,   # ← new
+              "content": "Invalid input: order_id must look like A-1234. Ask the customer for it."}   # ← new
+except Exception as e:
+    result = {"type": "tool_result", "tool_use_id": use.id,
+              "content": f"Order lookup failed: {e}. Status unknown.", "is_error": True}
+```
+
+```typescript
+// ── Setup: where the names below come from ──
+import Anthropic from '@anthropic-ai/sdk';
+// reply: the Message Claude just returned (its stop_reason is "tool_use")
+// getOrderStatus: your own function, e.g. a database lookup: takes an order ID, returns its status as text
+// ── The example ──
+// Step 3's code, with a check before the method runs
+import { z } from 'zod';   // ← new
+
+const OrderArgs = z.object({ order_id: z.string().regex(/^A-\d{4}$/) }).strict();   // ← new: the input's rules
+
+const use = reply.content.find((b) => b.type === 'tool_use') as Anthropic.ToolUseBlock;
+const parsed = OrderArgs.safeParse(use.input);   // ← new: never throws
+let result: Anthropic.ToolResultBlockParam;
+if (!parsed.success) {   // ← new
+  result = { type: 'tool_result', tool_use_id: use.id, is_error: true,   // ← new
+             content: 'Invalid input: order_id must look like A-1234. Ask the customer for it.' };   // ← new
+} else {   // ← new
+  try {
+    result = { type: 'tool_result', tool_use_id: use.id,
+               content: await getOrderStatus(parsed.data.order_id) };
+  } catch (e) {
+    result = { type: 'tool_result', tool_use_id: use.id, is_error: true,
+               content: `Order lookup failed: ${(e as Error).message}. Status unknown.` };
+  }
+}   // ← new
+```
+
+</CodeSwitch>
+
+### Keep tool results small, and safe to repeat
+
+<Imagine text={"A search_orders tool returns all 4,000 of a customer's orders as raw JSON. One call fills a third of the context window, and Claude still can't find the order it needs."} />
+
+Every tool result goes into the context window and is resent on every later call (6.5). Design tools to return **only what Claude needs**:
+
+| Do | Example |
+|---|---|
+| **Filter and limit** in the tool | `search_orders(customer_id, status="open", limit=10)` |
+| **Paginate** big result sets | Return 10 results plus a `next_cursor`; Claude asks for more only if it needs them |
+| **Return the useful fields**, not the raw record | `{"order_id", "status", "eta"}`, not 80 database columns |
+| **Summarise or truncate** long text, and say so | `"...first 2,000 characters of 48,000; call get_page for more"` |
+
+```json
+{ "orders": [ {"order_id": "A-1234", "status": "in_transit", "eta": "2026-11-24"} ],
+  "returned": 1, "total_matching": 37, "next_cursor": "c_9f2" }
+```
+
+**Make write tools safe to repeat (idempotent).** An agent may call a tool twice: after a timeout, after a retry, or because it lost track. For a tool that changes something (a refund, an email, a new ticket), a second identical call must not do it twice.
+
+- Give each action an **idempotency key**, for example the order ID plus the action.
+- Have your tool ignore a repeat of a key it has already processed.
+
 <SectionSummary points={[
-  "The description is the interface: say what the tool does AND when not to use it.",
+  "Claude chooses a tool by its description: say what the tool does AND when not to use it.",
   "Merge tools you can't separate; use enums and only truly required fields.",
   "Return failures with `is_error: true`: an empty result reads as valid data.",
-  "Start with the fewest tools: each costs tokens every call and overlap makes selection erratic.",
+  "Keep results small (filter, paginate, return only needed fields) and make write tools idempotent, so a repeated call does no harm.",
+  "Start with the fewest tools: each costs tokens on every call, and overlapping tools confuse Claude's choice.",
+  "Treat tool arguments as untrusted input: validate with a schema (Zod, Pydantic, Bean Validation), apply defaults, and return an is_error tool_result so Claude can correct itself.",
 ]} />
 
 ## 8.3 Client tools, server tools and tool_choice
@@ -306,15 +619,19 @@ Return failures as a `tool_result` with `is_error: true` and a useful message, s
 <ExamRef section="8.3" />
 <Imagine text={"Some questions need live information Acme doesn't hold, like \"is there a national outage on other networks?\". You don't want to build and maintain a web-search tool yourself."} />
 
-
-
-
-
-
-
 ### Client tools vs server tools: where the tool runs
 
 Tools differ in *who runs them*. Most are yours, but Anthropic also runs some tools for you on its own servers.
+
+{/* more:8-clientserver-table */}
+| | Client tools | Server tools |
+|---|---|---|
+| **Who runs it** | Your code | Anthropic |
+| **Who writes it** | You (or you use a definition Anthropic provides, like bash) | Anthropic; you just switch it on |
+| **Examples** | `get_order_status`, `issue_refund`, bash, text editor | Web search, web fetch, code execution |
+| **What you get back** | `stop_reason: tool_use`; you run it and send a `tool_result` | The results are already in the reply |
+| **Cost** | Just tokens | Tokens, and some charge per use |
+{/* /more */}
 
 <VsPair
   left={{ title: 'Client tools', meaning: 'Defined by you (or tools whose definition Anthropic provides, like bash and text_editor) and run in YOUR application.', example: 'Response stops with stop_reason tool_use; you run it and send tool_result.' }}
@@ -332,7 +649,9 @@ Tools differ in *who runs them*. Most are yours, but Anthropic also runs some to
 
 **Model check:** Claude Opus 5.5 rejects the forcing options (`any` and `tool`) with a 400 error, so code that forced a tool breaks when you upgrade. On that model, keep `auto`, make the tool `strict`, and say in the prompt when it applies. For a guaranteed JSON shape, use structured outputs (`output_config.format`).
 
-Claude can ask for several tools in one reply (**parallel tool use**). Add `disable_parallel_tool_use: true` to allow at most one tool call per turn. When a server-tool loop hits its iteration cap the response has `stop_reason: pause_turn`. Resend the conversation as it is; don't add a "please continue" message.
+Claude can ask for several tools in one reply (**parallel tool use**). Add `disable_parallel_tool_use: true` if you want at most one tool call per reply.
+
+Server tools such as web search can run several times in a row on Anthropic's side. If that goes on for too long, the API pauses and returns `stop_reason: pause_turn`. To let it carry on, send the conversation back exactly as it is; don't add a "please continue" message.
 
 {/* more:8-parallel */}
 **Example of parallel tool use:** the customer asks *"Where are orders A-1 and A-2?"*. Claude can ask for both lookups in one reply, and you answer both in **one** user message, each `tool_result` with its own matching ID:
@@ -349,21 +668,19 @@ Claude can ask for several tools in one reply (**parallel tool use**). Add `disa
   { "type": "tool_result", "tool_use_id": "toolu_02", "content": "Out for delivery" }
 ]}
 ```
+<Explain steps={["Claude's reply contains **two** `tool_use` blocks, each with its own ID.", "Your code runs both lookups.", "Your next message sends **both** results together, each `tool_result` pointing at its request by `tool_use_id`."]} />
 {/* /more */}
-
-
-
-
-
-
-
 
 {/* code:8.3 */}
 **In code:** a server tool is declared, not implemented. Claude runs the search on Anthropic's side and the reply comes back with `server_tool_use` and `web_search_tool_result` blocks, plus a cited answer.
 
-<CodeSwitch title="Add the web search server tool">
+<CodeSwitch title="Add the web search server tool" fold>
 
 ```java
+// ── Setup: where the names below come from ──
+// Imports: com.anthropic.client.*, com.anthropic.client.okhttp.*, com.anthropic.models.messages.*
+AnthropicClient client = AnthropicOkHttpClient.fromEnv();   // one per app; reads ANTHROPIC_API_KEY
+// ── The example ──
 Message msg = client.messages().create(MessageCreateParams.builder()
     .model(Model.CLAUDE_SONNET_5_5).maxTokens(2048L)
     .addTool(WebSearchTool20250305.builder().maxUses(3L).build())   // no code to write: Anthropic runs it
@@ -373,6 +690,10 @@ Message msg = client.messages().create(MessageCreateParams.builder()
 ```
 
 ```python
+# ── Setup: where the names below come from ──
+import anthropic
+client = anthropic.Anthropic()            # one client per app; reads ANTHROPIC_API_KEY
+# ── The example ──
 msg = client.messages.create(
     model="claude-sonnet-5-5", max_tokens=2048,
     tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}],  # Anthropic runs it
@@ -382,6 +703,10 @@ msg = client.messages.create(
 ```
 
 ```typescript
+// ── Setup: where the names below come from ──
+import Anthropic from '@anthropic-ai/sdk';
+const client = new Anthropic();             // one per app; reads ANTHROPIC_API_KEY
+// ── The example ──
 const msg = await client.messages.create({
   model: 'claude-sonnet-5-5', max_tokens: 2048,
   tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],  // Anthropic runs it
@@ -393,10 +718,24 @@ const msg = await client.messages.create({
 </CodeSwitch>
 {/* /code */}
 
+### Other Anthropic-defined tools: computer use, and the "batch tool" pattern
+
+**Computer use** lets Claude operate a desktop through screenshots.
+
+- **How:** Claude looks at a screenshot and replies with actions ("click at 420, 310", "type 'refund'"). **Your code** performs them in a sandboxed virtual machine and sends back a new screenshot.
+- **Who runs it:** Anthropic defines the tool but you run it, so it's a client tool (like the text editor and bash tools).
+- **Use it for:** systems with no API.
+- **Be careful:** it's slower and less reliable than a real API. Run it isolated, with limited permissions, and have a person approve anything risky.
+
+**Check the result, don't assume it.** An agent that acted should **inspect the environment** afterwards: take a new screenshot, re-read the file, run the tests, query the record. Then it knows the action worked, rather than trusting its own report.
+
+**The "batch tool" pattern.** When Claude needs several independent lookups, it can ask for them in one turn as several `tool_use` blocks (8.1). Some older models were reluctant to do that, so one workaround is a single `batch` tool whose input is a *list* of tool calls, which your code runs together. Either way the aim is the same: fewer round trips, so the job finishes faster.
+
 <SectionSummary points={[
   "Client tools run in your app; server tools (web search, web fetch, code execution) run on Anthropic's side.",
   "`tool_choice`: auto, any, tool (forced) or none; Opus 5.5 rejects any and tool, so use auto plus strict tools or structured outputs.",
   "`pause_turn` means a server-tool loop paused: resend as it is, no \"continue\" message.",
+  "Computer use: Claude sends actions from screenshots, your code runs them in a sandbox. Agents should inspect the result after acting.",
 ]} />
 
 <RoleLens dev={"Client tools run in your code; server tools (such as web search) run on Anthropic's side. `tool_choice` can force a specific tool, any tool, or none."} test={"For structured-output tests, assert the reply matches the schema. Note that Opus 5.5 rejects forced `tool_choice`, so don't build tests that rely on forcing."} data={"Structured outputs (`output_config.format`) give you schema-shaped extraction for every row, every time."} ba={"Ask which actions the AI must always take and which are optional. \"Always\" means a rule enforced in code or a fixed workflow step, not a prompt instruction."} />
@@ -406,35 +745,27 @@ const msg = await client.messages.create({
 <ExamRef section="8.4" />
 <Imagine text={"Three Acme apps (the chatbot, the staff dashboard and Claude Code) all need to check stock levels. Writing the same integration three times, and keeping three copies in sync, is wasted effort."} />
 
-
-
-
-
-
-
 ### Why MCP
 
 Wiring a tool straight into each app means three apps need three integrations. MCP moves the tool into a **server** that any **MCP client**, meaning any app that speaks MCP (Claude Code, Claude apps, your own app), can attach to, so you build the integration once. Think JDBC: one driver standard, many databases and clients.
 
-{/* more:8-mcpcaps */}
-**Example, for an inventory MCP server:** a **tool** `get_stock(sku)` that Claude decides to call; a **resource** `inventory://warehouses`, a read-only list of warehouses the app can attach to the conversation; and a **prompt** `restock-report`, a ready-made template a user picks from a menu (in Claude Code, prompts appear as slash commands).
+{/* more:8-mcpcaps-table */}
+An MCP server can offer three kinds of thing. The difference is **who decides to use it**:
+
+| Capability | Who uses it | What it is | Example (an inventory server) |
+|---|---|---|---|
+| **Tool** | Claude decides to call it | An action with parameters | `get_stock(sku)` |
+| **Resource** | The app attaches it to the conversation | Read-only data | `inventory://warehouses`, a list of warehouses |
+| **Prompt** | The user picks it from a menu | A ready-made template | `restock-report` (in Claude Code it appears as a slash command) |
 {/* /more */}
 
-
-
-
-
-
-
-
-<Hub center="MCP server" caption="An MCP server exposes three kinds of capability (Exam guide: MCP Server Development)" items={['Tools: actions the model calls', 'Resources: read-only data the client fetches', 'Prompts: templates the user invokes']} />
+<Hub center="MCP server" caption="An MCP server exposes three kinds of capability" items={['Tools: actions the model calls', 'Resources: read-only data the client fetches', 'Prompts: templates the user invokes']} />
 
 <RoleLens dev={"MCP is a standard way to expose tools and data to Claude: build one MCP server, and every MCP-capable client can use it."} test={"MCP servers for Jira or your test management tool let an agent read requirements and log defects directly."} data={"An MCP server in front of the warehouse gives Claude governed, read-only access to agreed views."} ba={"With MCP, Claude can read Confluence or Jira directly, so it can draft stories from real context. Agree what it's allowed to see."} />
 
 ### Transports: how Claude connects to an MCP server
 
 <Imagine text={"One MCP server is a script on a developer's laptop; another is a shared service the whole company uses. They can't connect the same way."} />
-
 
 A **transport** is the channel the client and server use to exchange messages. There are two.
 
@@ -446,74 +777,166 @@ A **transport** is the channel the client and server use to exchange messages. T
 SSE (Server-Sent Events) is the older remote transport and isn't recommended for new servers. Each connected server's tool definitions cost context, so connect only the servers a task needs. Claude Code defers loading tool definitions until they're needed.
 
 {/* code:8.4 */}
-**In code:** an MCP server is a small program that registers tools. These follow the official MCP quickstart: Python's `MCPServer`, TypeScript's `@modelcontextprotocol/server`, and Spring AI for Java.
+**In code:** an MCP server is a small program that registers tools. These follow the official MCP quickstart: Python's `MCPServer`, TypeScript's `@modelcontextprotocol/server`, and Spring AI for Java. Here it's the same order tool from 8.1, now shared.
 
-<CodeSwitch title="A minimal MCP server with one tool">
+<Running thread="tool" step={5} adds="packaging: the same method becomes an MCP server. The description now sits next to the method, and any MCP app (Claude Code, Claude Desktop, your own agent) can use it without copying code." />
+
+<CodeSwitch title="Order tool, step 5: share it as an MCP server">
 
 ```java
-// Spring AI MCP server (spring-ai-starter-mcp-server): annotate a service, register it as tools
+// ── Setup: where the names below come from ──
+// Imports: com.anthropic.client.*, com.anthropic.client.okhttp.*, com.anthropic.models.messages.*
+// orderDb: your own database code: find_status(order_id) returns the order's status as text
+// ── The example ──
+// Spring AI MCP server (spring-ai-starter-mcp-server)
 @Service
-public class InventoryService {
-    @Tool(description = "Get the stock level for a product SKU")
-    public String getStock(@ToolParam(description = "Product SKU, e.g. AB-123") String sku) {
-        return inventoryApi.stockFor(sku);           // call your real REST service here
+public class OrderTools {   // ← new
+    @Tool(description = "Looks up an order's delivery status. Use when a customer asks where their order is.")   // ← new: step 1's description
+    public String getOrderStatus(@ToolParam(description = "The order ID, e.g. A-1234") String orderId) {   // ← new
+        return orderDb.findStatus(orderId);                                         // same body as step 1
     }
 }
 
-@SpringBootApplication
-public class InventoryMcpServer {
-    public static void main(String[] args) { SpringApplication.run(InventoryMcpServer.class, args); }
+@SpringBootApplication   // ← new
+public class OrderMcpServer {   // ← new
+    public static void main(String[] args) { SpringApplication.run(OrderMcpServer.class, args); }   // ← new
 
-    @Bean
-    public ToolCallbackProvider inventoryTools(InventoryService service) {
-        return MethodToolCallbackProvider.builder().toolObjects(service).build();
+    @Bean   // ← new: publish the methods as MCP tools
+    public ToolCallbackProvider orderToolsProvider(OrderTools tools) {   // ← new
+        return MethodToolCallbackProvider.builder().toolObjects(tools).build();   // ← new
     }
 }
 ```
 
 ```python
-from mcp.server import MCPServer
+# ── Setup: where the names below come from ──
+# order_db: your own database code: find_status(order_id) returns the order's status as text
+# ── The example ──
+from mcp.server import MCPServer   # ← new
 
-mcp = MCPServer("inventory")
+mcp = MCPServer("orders")   # ← new: the server
 
-@mcp.tool()
-async def get_stock(sku: str) -> str:
-    """Get the stock level for a product SKU.
+@mcp.tool()   # ← new: publish this function as a tool
+def get_order_status(order_id: str) -> str:
+    """Looks up an order's delivery status. Use when a customer asks where their order is.
 
     Args:
-        sku: Product SKU, e.g. AB-123
-    """
-    return await inventory_api.stock_for(sku)        # call your real REST service here
+        order_id: The order ID, e.g. A-1234
+    """   # ← new: the docstring becomes step 1's description
+    return order_db.find_status(order_id)               # same body as step 1
 
 if __name__ == "__main__":
-    mcp.run(transport="stdio")
+    mcp.run(transport="stdio")   # ← new: run it for a local client
 ```
 
 ```typescript
-import { McpServer } from '@modelcontextprotocol/server';
-import { serveStdio } from '@modelcontextprotocol/server/stdio';
+// ── Setup: where the names below come from ──
+// orderDb: your own database code: find_status(order_id) returns the order's status as text
+// ── The example ──
+import { McpServer } from '@modelcontextprotocol/server';   // ← new
+import { serveStdio } from '@modelcontextprotocol/server/stdio';   // ← new
 import { z } from 'zod';
 
-function createServer() {
-  const server = new McpServer({ name: 'inventory', version: '1.0.0' });
-  server.registerTool(
-    'get_stock',
+function createServer() {   // ← new
+  const server = new McpServer({ name: 'orders', version: '1.0.0' });   // ← new: the server
+  server.registerTool(   // ← new: publish a tool
+    'get_order_status',
     {
-      description: 'Get the stock level for a product SKU',
-      inputSchema: z.object({ sku: z.string().describe('Product SKU, e.g. AB-123') }),
+      description: "Looks up an order's delivery status. Use when a customer asks where their order is.",
+      inputSchema: z.object({ order_id: z.string().describe('The order ID, e.g. A-1234') }),
     },
-    async ({ sku }) => ({
-      content: [{ type: 'text', text: await inventoryApi.stockFor(sku) }],  // call your real REST service
+    async ({ order_id }) => ({
+      content: [{ type: 'text', text: await orderDb.findStatus(order_id) }],   // same body as step 1
     }),
   );
   return server;
 }
 
-serveStdio(createServer);
+serveStdio(createServer);   // ← new: run it for a local client
 ```
 
 </CodeSwitch>
+
+**What changed:** with plain tool use (steps 1–4), the description and the round trip live in **your app**. With MCP, they live in **the server**: an MCP client lists the server's tools, sends their descriptions to Claude, and calls the server when Claude asks. You still add the error handling and input checks from steps 3 and 4 inside the tool function.
 {/* /code */}
+
+### Who controls each primitive, and resources in detail
+
+The three things a server offers (tools, resources and prompts) are called its **primitives**. The table above shows who uses each one. Put another way, each is **controlled** by a different party, and that decides which one to build:
+
+| Primitive | Controlled by | Build one when… |
+|---|---|---|
+| **Tool** | the **model**: Claude decides to call it | Claude should decide *when* to act or fetch something |
+| **Resource** | the **application**: your app decides what to attach | Your app already knows which data is relevant (for example, the document the user opened) |
+| **Prompt** | the **user**: they pick it, often as a slash command | Users run a well-tested workflow on purpose ("/restock-report") |
+
+A resource has a **URI** (an address) and a **MIME type** that says what kind of content it is (`application/json`, `text/plain`), so the client knows how to read it. There are two kinds:
+
+- **Direct (fixed) resources** have a fixed URI: `inventory://warehouses`.
+- **Templated resources** have a parameter in the URI: `inventory://products/{sku}`. One definition serves every product.
+
+```python
+@mcp.resource("inventory://products/{sku}", mime_type="application/json")
+def product(sku: str) -> str:
+    """Stock and price for one product."""                  # templated: {sku} comes from the URI
+    return json.dumps(inventory_api.product(sku))
+
+@mcp.prompt()
+def restock_report(warehouse: str) -> str:
+    """Weekly restock report for one warehouse."""          # the user picks this from a menu
+    return f"Using the inventory tools, list every SKU in {warehouse} below its reorder level..."
+```
+
+<Explain title="Reading it" steps={["`@mcp.resource` with `{sku}` in the URI is a **templated** resource: the client asks for `inventory://products/RTR-500` and `sku` becomes `RTR-500`.", "`mime_type` tells the client the content is JSON.", "`@mcp.prompt` defines a ready-made prompt the **user** chooses. In Claude Code it appears as a slash command.", "Docstrings and parameter descriptions become the descriptions clients see, so write them as carefully as tool descriptions (8.2)."]} />
+
+### Testing a server: the MCP Inspector
+
+<Imagine text={"Your new MCP server starts without errors, but Claude never calls its tool. Is the tool even being listed, and does it return what you expect?"} />
+
+The **MCP Inspector** is a browser-based test tool from the MCP project. Point it at your server and you can see the tools, resources and prompts it lists, call any tool with your own inputs, and read the raw messages. You don't need Claude or an API key.
+
+```bash
+npx @modelcontextprotocol/inspector python inventory_server.py
+```
+
+Check it in this order: is the tool listed? Is its description clear? Does it return the right result for a good input, and a clear error for a bad one? Only then connect it to Claude.
+
+### Under the hood: messages, the handshake and sessions
+
+<Imagine text={"A remote MCP server works with one instance, then fails randomly once it's behind a load balancer with three instances."} />
+
+MCP messages are **JSON-RPC 2.0**: small JSON objects of three kinds:
+
+| Message | Has an `id`? | Expects a reply? | Example |
+|---|---|---|---|
+| **Request** | Yes | Yes | `tools/call`, `resources/read` |
+| **Result** (response) | Yes, the same `id` as its request | No | The tool's output |
+| **Notification** | **No** | **No** | `notifications/progress`, `notifications/initialized` |
+
+Every connection starts with a **handshake**: the client sends an `initialize` request (its version and capabilities), the server replies with its own, and the client sends an `initialized` notification. Only then can tools be listed and called.
+
+```json
+{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "...", "capabilities": {}, "clientInfo": {"name": "claude-code"}}}
+{"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "...", "capabilities": {"tools": {}}, "serverInfo": {"name": "inventory"}}}
+{"jsonrpc": "2.0", "method": "notifications/initialized"}
+{"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "get_stock", "arguments": {"sku": "RTR-500"}}}
+```
+
+<Explain title="Reading it" steps={["Line 1 is a request (it has `id: 1`): the client introduces itself.", "Line 2 is the result for request 1: the server says it offers tools.", "Line 3 has no `id`: it's a notification that the handshake is done. No reply is expected.", "Line 4 is a normal request to call a tool. Its result will come back with `id: 2`."]} />
+
+**Transports.** Over **stdio**, these messages travel through the server process's standard input and output on one machine. Over **Streamable HTTP**, the client POSTs messages to one URL, and the server can stream messages back using **server-sent events (SSE)**. The server may give the client an `Mcp-Session-Id` header during the handshake, and the client sends it on every later request.
+
+That session is what broke behind the load balancer: a **stateful** server remembers each session in one instance's memory, so a request routed to another instance doesn't recognise the session. The fixes are to route each session to the same instance ("sticky sessions"), keep session state in a shared store, or run the server in **stateless** mode where every request stands alone.
+
+MCP doesn't use **websockets**. Remote MCP is plain HTTP plus SSE, and so is Claude's own API streaming (2.3). Your app may still use websockets between its server and the browser, but that's your choice, not part of either protocol.
+
+### Advanced server features: sampling, notifications and roots
+
+| Feature | What it does | Why it matters |
+|---|---|---|
+| **Sampling** | The server asks the **client** to run a Claude call for it and send back the result | The server needs no API key or AI bill of its own; the client keeps control of which model is used and what's sent |
+| **Progress and log notifications** | During a slow tool call, the server sends `notifications/progress` ("40% done") and log messages | Users see that a 30-second job is working, not frozen |
+| **Roots** | The client tells the server which folders it may use ("only `/projects/acme`") | A file-handling server stays inside the folders it was given. Your server code must still check every path against the roots |
 
 <Gotcha
   title={"The shared server only one person could use"}
@@ -525,19 +948,16 @@ serveStdio(createServer);
 <SectionSummary points={[
   "MCP turns integrations into reusable servers any MCP client can attach to: build once, use everywhere.",
   "A server exposes tools (actions), resources (read-only data) and prompts (templates).",
-  "stdio = local subprocess on one machine; Streamable HTTP = remote and shared. SSE is legacy.",
+  "stdio = local subprocess on one machine; Streamable HTTP = remote and shared (it can stream replies with SSE). The old separate HTTP+SSE transport is legacy.",
+  "Tools are model-controlled, resources app-controlled, prompts user-controlled. Resources can be fixed or templated (`inventory://products/{sku}`), with a MIME type.",
+  "Messages are JSON-RPC: requests and results share an `id`; notifications have none. Every connection starts with the initialize handshake.",
+  "Sampling lets a server borrow the client's model; progress/log notifications report on slow tools; roots limit which folders a server may use. Test servers with the MCP Inspector.",
 ]} />
 
 ## 8.5 MCP scope, permissions and auth
 
 <ExamRef section="8.5" />
 <Imagine text={"The team shares a Jira MCP server. Everyone should be able to read and create issues, nobody should be able to delete them, and the password must never end up in Git."} />
-
-
-
-
-
-
 
 ### MCP server scopes in Claude Code
 
@@ -550,10 +970,10 @@ In Claude Code, an MCP server's **scope** is where its configuration is saved, a
 | Project | `.mcp.json` at the repo root (committed) | Everyone who clones the repo | Team-wide servers |
 | Enterprise | Managed settings, set by an admin | Everyone in the organisation | Internal services, security tooling |
 
-Transport and scope are separate decisions with linked consequences: a **stdio server in `.mcp.json` looks shared but isn't**, because it only runs where it's installed. A shared team server needs HTTP plus project or enterprise scope.
+**Transport** (how Claude connects to the server) and **scope** (who gets the configuration) are separate choices, but they affect each other. A stdio server listed in the committed `.mcp.json` **looks shared but isn't**: every teammate gets the entry, but it only works on machines where the script and its runtime are installed. A server the whole team relies on should run over HTTP, in project or enterprise scope.
 
 {/* diagram */}
-<Tiles cols={3} caption="Where an MCP server is configured in Claude Code decides who gets it (Exam guide: MCP Server Development)" tiles={[
+<Tiles cols={3} caption="Where an MCP server is configured in Claude Code decides who gets it" tiles={[
   { label: 'Local', title: 'Just you, this project', sub: 'Private to your machine' },
   { label: 'Project', title: 'Everyone on the repo', sub: '.mcp.json, committed' },
   { label: 'User', title: 'You, every project', sub: 'Your user config' },
@@ -565,8 +985,13 @@ Transport and scope are separate decisions with linked consequences: a **stdio s
 
 <Imagine text={"The GitHub MCP server offers 40 tools. You want Claude to open issues freely but never merge a pull request."} />
 
+Connecting a server gives Claude its whole list of tools. Permission rules can target a single tool by its full name, `mcp__<server>__<tool>`:
 
-Connecting a server exposes its whole tool list. Permission rules can target one tool by name: `mcp__server__tool`. For example, allow `mcp__github__create_issue` without a prompt while other GitHub tools still prompt, or deny a write tool while read tools stay available. **A deny on one tool beats an allow on the server.** Through the API's **MCP connector** (remote servers called straight from the Messages API), an `mcp_toolset` can enable or disable each tool: a permission rule decides "can it run", enabling decides "can the model see it".
+- **Allow one, ask for the rest:** allow `mcp__github__create_issue` without asking; every other GitHub tool still asks.
+- **Block the risky one:** deny a tool that writes; the read tools stay available.
+- **A deny on one tool beats an allow on the whole server.**
+
+These are the same allow and deny rules as for any Claude Code tool (3.2). Only the naming is specific to MCP.
 
 {/* more:8-pertool */}
 ```json
@@ -578,19 +1003,14 @@ Connecting a server exposes its whole tool list. Permission rules can target one
   }
 }
 ```
+<Explain steps={["`allow` lets Claude create GitHub issues without asking each time.", "`deny` blocks merging pull requests completely, even though the rest of the GitHub server is connected.", "MCP tool names follow the pattern `mcp__<server>__<tool>`."]} />
 {/* /more */}
 
-
-
-
-
-
-
+Outside Claude Code, the Messages API can call remote MCP servers directly through the **MCP connector**. There, an `mcp_toolset` setting switches each tool on or off. The difference: a permission rule decides whether a tool may **run**; switching it off means the model never even **sees** it.
 
 ### Authentication
 
 <Imagine text={"The Jira MCP server needs credentials. A password typed into the shared config file would leak to everyone who clones the repo."} />
-
 
 <MythReality rows={[
   { myth: 'Put the API key in .mcp.json so teammates can connect', reality: 'The key goes into git history for good: rotate it. Reference an environment variable; the file holds only the server address' },
@@ -607,7 +1027,10 @@ Your team wants everyone's Claude Code to use the company's hosted Jira MCP serv
 
 <div slot="answer">
 
-**HTTP** transport (it's hosted), **project scope** in a committed `.mcp.json` (or enterprise managed settings for the whole org), a **deny rule** on the delete tool (`mcp__jira__delete_issue`), and the credential via **OAuth** per user or an environment variable, never in the file.
+- **Transport: HTTP**, because the server is hosted, not running on each laptop.
+- **Scope: project**, in a `.mcp.json` file committed to the repo, so everyone gets it. (Enterprise managed settings can do the same for the whole organisation.)
+- **Permission: a deny rule** on the delete tool, `mcp__jira__delete_issue`, so it's blocked whatever anyone approves.
+- **Credential:** each user signs in with **OAuth**, or it comes from an environment variable. Never put it in the file.
 
 </div>
 </Exercise>
@@ -630,9 +1053,22 @@ Your team wants everyone's Claude Code to use the company's hosted Jira MCP serv
   }
 }
 ```
+<Explain steps={["Defines one MCP server, `inventory`, that Claude Code starts locally by running `python inventory_server.py` (the stdio transport).", "`env` passes the API key through from the `INVENTORY_API_KEY` environment variable: the file holds only a reference, never the secret itself.", "The file is committed at the repo root (project scope), and the script is in the repo too, so it works on every teammate's machine."]} />
 
 </div>
 {/* /code */}
+
+### Putting it together: which mechanism when?
+
+<Imagine text={"Acme wants Claude to search the web, look up orders in its own database, follow the company's 12-step refund procedure, and reach the same stock system from three different apps. That's four different needs."} />
+
+| You need… | Use | Why |
+|---|---|---|
+| A common capability Anthropic already provides: web search, web fetch, code execution | A **built-in (server) tool** | Nothing to build or host |
+| Claude to call **your own** function in **one** app | A **custom (client) tool** (8.1) | Simplest: a definition plus your code |
+| Claude to follow a repeatable **procedure** or use your know-how (instructions, templates, scripts) | A **Skill** | Loaded only when relevant, so it costs little context; reusable across calls and in Claude Code |
+| The **same** integration in **several** apps or clients | An **MCP server** (8.4, 8.5) | Build once, connect anywhere |
+| A rule that must **always** hold, whatever Claude decides | A **hook** or a check in the tool's code (3.3, 7.2) | Enforced outside the model |
 
 ### Further reading
 
@@ -651,4 +1087,5 @@ Your team wants everyone's Claude Code to use the company's hosted Jira MCP serv
   "A stdio server in `.mcp.json` looks shared but isn't: shared servers need HTTP.",
   "Permission rules can target one tool (`mcp__server__tool`); a deny on a tool beats an allow on the server.",
   "OAuth for user identity, env-var keys for service identity, never secrets in committed config.",
+  "Built-in tool for common capabilities; custom tool for your function in one app; Skill for a reusable procedure; MCP server for the same integration in many apps; hook for a rule that must always hold.",
 ]} />

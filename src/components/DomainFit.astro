@@ -1,0 +1,92 @@
+---
+/** "How this domain fits together": a map of the domain's sections, shown after the notes. Data: src/data/domain-fit.ts */
+import fs from 'node:fs';
+import path from 'node:path';
+import Flow from './diagrams/Flow.astro';
+import CodeSwitch from './CodeSwitch.astro';
+import { Code } from 'astro:components';
+import { DOMAIN_FIT } from '../data/domain-fit';
+import { url } from '../lib/site';
+
+interface Props { chapter: number; }
+const { chapter } = Astro.props;
+const fit = DOMAIN_FIT[chapter];
+
+// Section number -> { title, slug, chapter }, read from the chapter files (same slug rules as the headings).
+const dir = path.resolve('src/content/chapters');
+const SECTIONS: Record<string, { title: string; slug: string; ch: number }> = {};
+for (const f of fs.readdirSync(dir)) {
+  for (const m of fs.readFileSync(path.join(dir, f), 'utf8').matchAll(/^## (\d+)\.(\d+) (.+)$/gm)) {
+    const text = `${m[1]}.${m[2]} ${m[3]}`;
+    const slug = text.toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, '').replace(/\s/g, '-');
+    SECTIONS[`${m[1]}.${m[2]}`] = { title: m[3], slug, ch: Number(m[1]) };
+  }
+}
+const href = (sec: string) => {
+  const s = SECTIONS[sec];
+  return s ? `${url(`chapters/${s.ch}`)}#${s.slug}` : '#';
+};
+const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const fmt = (t: string) => esc(t).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\*([^*]+)\*/g, '<em>$1</em>').replace(/`([^`]+)`/g, '<code>$1</code>');
+const codeDir = path.resolve('src/data/fit-code');
+const read = (ext: string) => { try { return fs.readFileSync(path.join(codeDir, `d${chapter}.${ext}`), 'utf8').trimEnd(); } catch { return null; } };
+const code = fit?.code ? { java: read('java'), python: read('py'), typescript: read('ts.txt') } : null;
+const label = (sec: string) => (SECTIONS[sec] ? `${sec} ${SECTIONS[sec].title}` : sec);
+---
+{fit && (
+  <section class="card fit" id="how-it-fits" data-testid="domain-fit">
+    <p class="fit__eyebrow">Bringing it together</p>
+    <h2>How Domain {chapter} fits together</h2>
+    <p class="fit__story">{fit.story}</p>
+    <Flow caption={`Domain ${chapter} at a glance: each step has one home section`} steps={fit.steps.map((s) => ({ title: s.title, sub: `${s.sub} · ${s.sec}` }))} loop={fit.loop} />
+    <div class="fit__case">
+      <p class="fit__case-title"><span aria-hidden="true">🧩</span> Use case: {fit.useCase.title}</p>
+      <p class="fit__case-intro">{fit.useCase.intro}</p>
+      <ol class="fit__case-steps">
+        {fit.useCase.steps.map((t, i) => (
+          <li><span set:html={fmt(t)} />{' '}<a class="fit__sec" href={href(fit.steps[i].sec)}>({fit.steps[i].sec})</a></li>
+        ))}
+      </ol>
+    </div>
+    {code && code.java && code.python && code.typescript && (
+      <details class="fold fit__code">
+        <summary><span aria-hidden="true">&lt;/&gt;</span> Show the code: the whole domain in one example</summary>
+        <p class="fit__code-note">The numbered comments ①, ②… match the steps above. Each step is kept short and links to its section for the full version.</p>
+        <CodeSwitch title={fit.code}>
+          <Code code={code.java} lang="java" />
+          <Code code={code.python} lang="python" />
+          <Code code={code.typescript} lang="typescript" />
+        </CodeSwitch>
+      </details>
+    )}
+    <p class="fit__links-title">Where each step is explained</p>
+    <ol class="fit__steps">
+      {fit.steps.map((s) => (
+        <li><a href={href(s.sec)}><strong>{label(s.sec)}</strong></a>: {s.what}</li>
+      ))}
+    </ol>
+    <p class="fit__links-title">Where this connects to other domains</p>
+    <ul class="fit__links">
+      {fit.links.map((l) => <li><a href={href(l.sec)}>{l.text}{' '}<span class="fit__sec">({l.sec})</span></a></li>)}
+    </ul>
+  </section>
+)}
+
+<style>
+  .fit { margin: 2rem 0; border-top: 4px solid var(--accent, #d6234a); }
+  .fit__eyebrow { text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.78rem; font-weight: 700; color: var(--accent, #d6234a); margin: 0; }
+  .fit h2 { margin: 0.2rem 0 0.6rem; }
+  .fit__story { font-size: 1.05rem; }
+  .fit__steps { padding-left: 1.3rem; }
+  .fit__case { background: #f3f5ff; border: 1px solid #d9def7; border-radius: 12px; padding: 1rem 1.1rem; margin: 1.2rem 0; }
+  .fit__case-title { font-weight: 800; margin: 0 0 0.3rem; color: #2b3a8c; }
+  .fit__case-intro { margin: 0 0 0.5rem; font-style: italic; }
+  .fit__case-steps { padding-left: 1.3rem; margin: 0; }
+  .fit__case-steps li { margin: 0.45rem 0; }
+  .fit__steps li { margin: 0.35rem 0; }
+  .fit__code { margin: 1rem 0; }
+  .fit__code-note { font-size: 0.95rem; margin: 0.4rem 0 0.6rem; }
+  .fit__links-title { font-weight: 700; margin: 1rem 0 0.3rem; }
+  .fit__links { padding-left: 1.2rem; margin: 0; }
+  .fit__sec { color: var(--muted, #666); }
+</style>

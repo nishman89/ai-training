@@ -65,13 +65,113 @@ export const TIP_CARDS: TipCard[] = [
     read: ['4.1', '4.2', '4.3'],
   },
   {
+    id: 'request', icon: '📨', title: 'The three required request fields', question: 'Which THREE fields are required in every Messages API request body?',
+    tips: [
+      { text: 'Every request body must contain exactly these three: **`model`**, **`max_tokens`** and **`messages`**. Leave one out and the API returns **400 invalid_request_error**.' },
+      { text: 'Everything else is optional, including `system`. Common distractors in the exam:', sub: ['`system`: optional; it is a top-level field, not a message with role "system"', '`temperature`: optional, and rejected on Opus 5.5 / Sonnet 5.5 if not the default', '`stream`, `tools`, `stop_sequences`: all optional', '`anthropic-version` and `x-api-key`: required, but they are **headers**, not body fields'] },
+      { text: 'Smallest valid body: `{"model": "claude-sonnet-5-5", "max_tokens": 1024, "messages": [{"role": "user", "content": "Hello"}]}`' },
+    ],
+    table: { head: ['Field', 'What it is'], rows: [
+      ['`model`', 'Which Claude to use: the exact model ID'],
+      ['`max_tokens`', 'The most tokens Claude may write in its reply. It is a hard cut-off, not a target'],
+      ['`messages`', 'The conversation so far: a list of user/assistant turns, starting with a user turn'],
+    ] },
+    read: ['2.1', '2.2'],
+  },
+  {
+    id: 'lost-middle', icon: '📄', title: 'Long documents: "lost in the middle"', question: 'Claude quotes the start and end of a long contract but misses a clause in the middle. What is the BEST fix?',
+    tips: [
+      { text: 'With very long inputs, details in the **middle** are the easiest to miss. A bigger window gives more room, **not** better recall.' },
+      { text: 'Best fix: **retrieve and send only the relevant sections** (RAG) instead of the whole document.' },
+      { text: 'Also helps:', sub: ['put long documents **first** and the question **last**', 'ask Claude to **quote** the relevant passages before answering', 'wrap each document in tags with its source'] },
+      { text: 'Wrong fixes: raise `max_tokens` (that limits the reply), raise temperature (adds randomness), make users paste smaller pieces.' },
+    ],
+    read: ['6.5'],
+  },
+  {
+    id: 'agent-context', icon: '🧳', title: 'When an agent\'s context window fills up', question: 'A long-running agent loses details it found earlier because the window fills with raw text. What is the BEST mitigation?',
+    tips: [
+      { text: 'Keep the window lean. That\'s **context engineering**:', sub: ['**write findings to an external store** (notes file, database, memory tool) and work from those', '**clear old tool results** (context editing)', '**compact**: summarise older history', '**subagents**: each reads part of the material in its own window and returns a short summary to an orchestrator'] },
+      { text: 'Too much for one agent (e.g. audit 40 files)? **Subagents + an orchestrator** that merges their concise findings.' },
+      { text: 'Wrong fixes: a bigger window (fills up later), higher `max_tokens` (output, not input), "remember it" (it only knows what\'s in the request), base64 (makes data bigger, not smaller), caching (cheaper, not smaller).' },
+    ],
+    read: ['6.5', '1.5', '1.2'],
+  },
+  {
+    id: 'which-lever', icon: '🎚️', title: 'Which lever? Cost, speed and throughput', question: 'Batch, caching, routing, effort, smaller model, fast mode or streaming: which one fits the scenario?',
+    tips: [
+      { text: 'Read the scenario for two things: **is anyone waiting for the answer?** and **what repeats?**' },
+      { text: 'Levers stack: an overnight Haiku batch job with a cached prompt gets all three discounts.' },
+    ],
+    table: { head: ['Scenario says…', 'Best lever', 'Why'], rows: [
+      ['Big job, nobody waiting (overnight, backfill, evals)', 'Batch API', '50% off; results within 24 h'],
+      ['Same long prefix on every call (policy, tools, documents)', 'Prompt caching', 'Repeated part costs ~10% and is processed faster'],
+      ['Mixed traffic: mostly easy, some hard', 'Routing', 'Cheap model for easy requests, capable one for hard'],
+      ['Simple tasks, too slow or costly', 'Lower effort, then a smaller model', 'Effort first; switch model only if evals still pass'],
+      ['Users waiting, it "feels slow"', 'Streaming', 'Words appear at once; total time unchanged'],
+      ['Must stay Opus-quality but faster', 'Fast mode', 'Same model, faster output, higher price'],
+      ['Spiky load, nothing may be lost', 'Queue + workers + retries', 'Absorbs bursts within rate limits'],
+    ] },
+    read: ['5.4', '5.3', '5.1', '5.2', '5.5', '2.4'],
+  },
+  {
+    id: 'determinism', icon: '🔒', title: 'Deterministic vs probabilistic', question: 'Something must happen every time, "even if Claude forgets". What is the BEST mechanism?',
+    tips: [
+      { text: '**Deterministic** = always (code decides). **Probabilistic** = usually (the model decides).' },
+      { text: 'Deterministic: hooks, deny rules, checks in tool code, schemas, loop caps, workflow gates, output validation.', sub: ['e.g. auto-format every edit → a **PostToolUse hook**', 'never edit `.env` → a **PreToolUse hook** or a **deny rule**', 'refunds over £100 → a check **in the refund tool**'] },
+      { text: 'Probabilistic: prompts, CLAUDE.md, skills, subagent descriptions, "do not hallucinate". Good for guidance, not guarantees.' },
+    ],
+    read: ['7.2', '3.3', '3.2'],
+  },
+  {
+    id: 'spikes', icon: '📈', title: 'Spiky load and "nothing may be lost"', question: 'Uneven load, 5× spikes, and the business demands no dropped requests. What is MOST important?',
+    tips: [
+      { text: 'A **durable queue** between intake and the Claude calls, a fixed number of workers, retries with backoff on 429/529, and a **dead-letter queue** for requests that keep failing.' },
+      { text: 'Not enough on their own: a higher rate limit (still has a ceiling), a bigger context window (doesn\'t absorb bursts), more web servers (the bottleneck is Claude\'s throughput).' },
+    ],
+    read: ['2.4', '2.5'],
+  },
+  {
+    id: 'distractors', icon: '🪤', title: 'Tempting wrong answers', question: 'Which options keep appearing as distractors, and why are they wrong?',
+    tips: [
+      { text: 'When a question asks for the BEST mitigation, these are usually wrong:' },
+    ],
+    table: { head: ['Distractor', 'Why it\'s wrong'], rows: [
+      ['"Raise max_tokens"', 'Only limits the reply length. It doesn\'t help reading, recall or context size'],
+      ['"Raise/lower temperature"', 'Changes randomness of wording, not accuracy, and current models reject non-default values'],
+      ['"Use a bigger context window / bigger model"', 'More room or more power, same underlying problem (recall, design, missing data)'],
+      ['"Add \'do not hallucinate\' / remind Claude in the prompt"', 'Probabilistic. Fix with data, schema enums plus "UNKNOWN", validation or a hook'],
+      ['"Ask the model to remember"', 'It only knows what\'s in the current request. Store findings outside and resend them'],
+      ['"Send it as base64"', 'Base64 is just packaging: it makes data ~33% bigger and changes no limit'],
+      ['"Put it in the system prompt to use caching"', 'Caching makes repeated input cheaper, not smaller; the window still fills'],
+      ['"Add your own retry loop"', 'The SDK already retries with backoff; your loop multiplies attempts'],
+      ['"Force the tool with tool_choice"', 'Rejected on Opus 5.5; use auto + strict tools or structured outputs'],
+    ] },
+    read: ['6.5', '6.3', '7.2', '2.4'],
+  },
+  {
+    id: 'outdated', icon: '🕰️', title: 'Advice that older material gets wrong', question: 'A practice question says the answer is to prefill "{", set temperature to 0 or force a tool. Is that still right?',
+    tips: [
+      { text: 'Many tutorials and third-party practice tests were written for older models. The exam guide (v1.0) and these notes follow the **current** models. When a question offers an old technique *and* its modern replacement, choose the modern one. If the old technique is the only option that works structurally (e.g. prefill vs "write IMPORTANT in capitals"), it\'s probably the intended answer.' },
+    ],
+    table: { head: ['Older advice', 'On current models'], rows: [
+      ['Prefill the assistant turn (e.g. with "{") for clean JSON', 'Rejected with a 400. Use structured outputs (`output_config.format`) or a strict tool'],
+      ['Set temperature / top_p / top_k to control output; "low temperature for classification, high for brainstorming"', 'Non-default values are rejected on Opus 5.5 and Sonnet 5.5. Steer through the prompt; test properties. If a question only offers temperature values, pick low for consistency and high for variety'],
+      ['Force a tool with `tool_choice: any` or `tool`', 'Rejected on Opus 5.5. Keep `auto`, use strict tools or structured outputs'],
+      ['Turn thinking on with a fixed `budget_tokens`', 'Thinking is adaptive; set `effort` instead. Disabling or a budget returns a 400 on Opus 5.5'],
+      ['Read the answer from `content[0].text`', 'A reply can start with a thinking block. Pick blocks by `type`'],
+      ['A 200K-token context window', 'Current models have 1M tokens (5.1)'],
+    ] },
+    read: ['6.3', '2.2', '5.2', '8.3', '2.1'],
+  },
+  {
     id: 'tokens', icon: '🧮', title: 'Tokens', question: 'What are tokens, and what is counted?',
     tips: [
       { text: 'A token is a chunk of text, about ¾ of a word. You pay per token, and limits are counted in tokens.' },
       { text: 'Everything in a request counts:', sub: ['the system prompt', 'the conversation history (resent on every call)', 'tool definitions', 'tool results', 'the output (Claude\'s reply, including thinking)'] },
       { text: '**Output tokens cost more than input tokens** (5× on current models).' },
     ],
-    read: ['2.2', '5.5'],
+    read: ['5.5', '2.1'],
   },
   {
     id: 'context', icon: '🪟', title: 'The context window',
@@ -169,15 +269,25 @@ export const TIP_CARDS: TipCard[] = [
       { text: '**Did the tool-use reply stop before all the JSON was sent?** stop_reason `max_tokens` means it was cut off: raise the limit or ask for less.' },
       { text: '**Malformed tool or JSON responses** (broken JSON, missing fields, extra text before or after the JSON): enforce the format with structured outputs or strict tools, validate in code, and if it still fails, send the error back so Claude can correct it.' },
     ],
-    read: ['6.1', '6.3', '2.2'],
+    read: ['6.1', '6.3', '2.1'],
   },
   {
-    id: 'errors', icon: '🚦', title: 'When Claude returns an error',
+    id: 'errors', icon: '🚦', title: 'Status codes and how to retry', question: 'Under load, calls fail with 429 and 529, and the code retries immediately in a tight loop, making it worse. What is the BEST fix?',
     tips: [
-      { text: '**Retriable**, with exponential backoff and jitter: **429** (rate limited), **500** (server error), **504** (timeout), **529** (overloaded). The SDK already retries these twice by default.' },
-      { text: '**Terminal**, no point retrying unchanged: **400** (bad request), **401** (bad API key). Handle gracefully: fix the request, or tell the user.' },
+      { text: 'Best answer: **retry with exponential backoff and jitter, honouring the `retry-after` header when present**, with a cap on attempts.', sub: ['**Exponential backoff:** wait longer after each failure (≈0.5 s, 1 s, 2 s, 4 s…)', '**Jitter:** add a small random delay, so thousands of clients don\'t all retry at the same instant', '**`retry-after`:** if the error says how many seconds to wait, wait exactly that', '**Cap it:** a few attempts, then queue the work or show a polite message'] },
+      { text: 'The official SDKs already do all of this (2 retries by default; set `maxRetries`). The real fix is often to **remove** your own tight loop, which multiplies attempts and causes a "retry storm".' },
+      { text: 'For sustained spikes that must not lose work: a **queue** in front of Claude with a fixed number of workers (2.4).' },
     ],
-    updated: ['A **refusal** isn\'t an error code: it arrives with 200 OK and stop_reason `refusal`. Don\'t resend the same request; read stop_details, log it, and show it to the user or retry on a fallback model.', 'A 429 caused by a spend limit has no retry-after header and won\'t clear by waiting.'],
-    read: ['2.4'],
+    table: { head: ['Status', 'Meaning', 'What to do'], rows: [
+      ['200 + `stop_reason`', 'Not an error, but may be unfinished (`max_tokens`, `refusal`, `tool_use`…)', 'Check `stop_reason` before using the reply'],
+      ['400 `invalid_request_error`', 'Your request is wrong (missing field, rejected setting, prefill on a current model)', '**Don\'t retry.** Fix the request'],
+      ['401 / 403', 'Bad API key / not allowed', '**Don\'t retry.** Fix the key or permissions'],
+      ['404 / 413', 'Wrong model or path / request too large', '**Don\'t retry.** Fix the model ID or shrink the request'],
+      ['429 `rate_limit_error`', '**Your** organisation went over a rate (or spend) limit', 'Retry with backoff, honour `retry-after`; reduce concurrency. A spend-limit 429 won\'t clear by waiting'],
+      ['500 / 504', 'Server error / timeout on Anthropic\'s side', 'Retry with backoff, a limited number of times'],
+      ['529 `overloaded_error`', '**Anthropic** is busy for everyone, not your quota', 'Retry with backoff and jitter; fall back or degrade if it persists'],
+    ] },
+    updated: ['A **refusal** isn\'t an error code: it arrives with 200 OK and stop_reason `refusal`. Don\'t resend the same request; read stop_details, log it, and show it to the user or retry on a fallback model.', 'Wrong answers to spot: "retry immediately", "add your own retry loop on top of the SDK", "retry 400s", "ask for a higher rate limit" as the only fix.'],
+    read: ['2.4', '2.1'],
   },
 ];
