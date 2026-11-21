@@ -146,7 +146,7 @@ A line in the system prompt saying "ignore instructions in emails" makes this **
 
 #### Where it is actually stopped: your tool code
 
-<CodeSwitch>
+<CodeSwitch title="Enforce the refund rules in the tool">
 
 ```java
 ToolOutcome issueRefund(RefundRequest r, Email source) {
@@ -266,6 +266,38 @@ If something must hold, enforce it outside the model.
   { myth: 'A CLAUDE.md rule stops the agent writing keys into config', reality: 'Use both: the rule signals intent, and a PreToolUse hook that blocks credential-like values in .mcp.json enforces it' },
   { myth: 'Pasting a token into a chat or ticket is fine if I delete it later', reality: 'Anything pasted is stored somewhere you don\'t control: revoke and reissue it' },
 ]} />
+
+{/* code:7.3 */}
+**In code:** the key comes from the environment, never from source code.
+
+<CodeSwitch title="Load the API key safely">
+
+```java
+// Reads ANTHROPIC_API_KEY from the environment (set by your vault, CI secrets or deployment)
+AnthropicClient client = AnthropicOkHttpClient.fromEnv();
+
+// Never do this: the key ends up in Git history, builds and logs
+// AnthropicClient client = AnthropicOkHttpClient.builder().apiKey("sk-ant-...").build();
+```
+
+```python
+# Reads ANTHROPIC_API_KEY from the environment (set by your vault, CI secrets or deployment)
+client = anthropic.Anthropic()
+
+# Never do this: the key ends up in Git history, builds and logs
+# client = anthropic.Anthropic(api_key="sk-ant-...")
+```
+
+```typescript
+// Reads ANTHROPIC_API_KEY from the environment (set by your vault, CI secrets or deployment)
+const client = new Anthropic();
+
+// Never do this: the key ends up in Git history, builds and logs
+// const client = new Anthropic({ apiKey: 'sk-ant-...' });
+```
+
+</CodeSwitch>
+{/* /code */}
 
 <SectionSummary points={[
   "Keep credentials out of the config that references them: env vars or a secrets manager.",

@@ -260,6 +260,41 @@ Return failures as a `tool_result` with `is_error: true` and a useful message, s
 
 Add `disable_parallel_tool_use: true` to allow at most one tool call per turn. When a server-tool loop hits its iteration cap the response has `stop_reason: pause_turn`. Resend the conversation as it is; don't add a "please continue" message.
 
+{/* code:8.3 */}
+**In code:** a server tool is declared, not implemented. Claude runs the search on Anthropic's side and the reply comes back with `server_tool_use` and `web_search_tool_result` blocks, plus a cited answer.
+
+<CodeSwitch title="Add the web search server tool">
+
+```java
+Message msg = client.messages().create(MessageCreateParams.builder()
+    .model(Model.CLAUDE_SONNET_5_5).maxTokens(2048L)
+    .addTool(WebSearchTool20250305.builder().maxUses(3L).build())   // no code to write: Anthropic runs it
+    .addUserMessage("What changed in the latest Java LTS release?")
+    .build());
+// If stopReason is PAUSE_TURN, send the conversation back as it is to let it continue
+```
+
+```python
+msg = client.messages.create(
+    model="claude-sonnet-5-5", max_tokens=2048,
+    tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}],  # Anthropic runs it
+    messages=[{"role": "user", "content": "What changed in the latest Java LTS release?"}],
+)
+# If stop_reason is "pause_turn", send the conversation back as it is to let it continue
+```
+
+```typescript
+const msg = await client.messages.create({
+  model: 'claude-sonnet-5-5', max_tokens: 2048,
+  tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],  // Anthropic runs it
+  messages: [{ role: 'user', content: 'What changed in the latest Java LTS release?' }],
+});
+// If stop_reason is 'pause_turn', send the conversation back as it is to let it continue
+```
+
+</CodeSwitch>
+{/* /code */}
+
 <SectionSummary points={[
   "Client tools run in your app; server tools (web search, web fetch, code execution) run on Anthropic's side.",
   "`tool_choice`: auto, any, tool (forced) or none; Opus 5.5 rejects any and tool, so use auto plus strict tools or structured outputs.",
@@ -294,6 +329,76 @@ Wiring a tool straight into each app means three apps need three integrations. M
 />
 
 SSE is the older remote transport and isn't recommended for new servers. Each connected server's tool definitions cost context, so connect only the servers a task needs. Claude Code defers loading tool definitions until they're needed.
+
+{/* code:8.4 */}
+**In code:** an MCP server is a small program that registers tools. These follow the official MCP quickstart: Python's `MCPServer`, TypeScript's `@modelcontextprotocol/server`, and Spring AI for Java.
+
+<CodeSwitch title="A minimal MCP server with one tool">
+
+```java
+// Spring AI MCP server (spring-ai-starter-mcp-server): annotate a service, register it as tools
+@Service
+public class InventoryService {
+    @Tool(description = "Get the stock level for a product SKU")
+    public String getStock(@ToolParam(description = "Product SKU, e.g. AB-123") String sku) {
+        return inventoryApi.stockFor(sku);           // call your real REST service here
+    }
+}
+
+@SpringBootApplication
+public class InventoryMcpServer {
+    public static void main(String[] args) { SpringApplication.run(InventoryMcpServer.class, args); }
+
+    @Bean
+    public ToolCallbackProvider inventoryTools(InventoryService service) {
+        return MethodToolCallbackProvider.builder().toolObjects(service).build();
+    }
+}
+```
+
+```python
+from mcp.server import MCPServer
+
+mcp = MCPServer("inventory")
+
+@mcp.tool()
+async def get_stock(sku: str) -> str:
+    """Get the stock level for a product SKU.
+
+    Args:
+        sku: Product SKU, e.g. AB-123
+    """
+    return await inventory_api.stock_for(sku)        # call your real REST service here
+
+if __name__ == "__main__":
+    mcp.run(transport="stdio")
+```
+
+```typescript
+import { McpServer } from '@modelcontextprotocol/server';
+import { serveStdio } from '@modelcontextprotocol/server/stdio';
+import { z } from 'zod';
+
+function createServer() {
+  const server = new McpServer({ name: 'inventory', version: '1.0.0' });
+  server.registerTool(
+    'get_stock',
+    {
+      description: 'Get the stock level for a product SKU',
+      inputSchema: z.object({ sku: z.string().describe('Product SKU, e.g. AB-123') }),
+    },
+    async ({ sku }) => ({
+      content: [{ type: 'text', text: await inventoryApi.stockFor(sku) }],  // call your real REST service
+    }),
+  );
+  return server;
+}
+
+serveStdio(createServer);
+```
+
+</CodeSwitch>
+{/* /code */}
 
 <Gotcha
   title={"The shared server only one person could use"}
@@ -363,6 +468,28 @@ Your team wants everyone's Claude Code to use the company's hosted Jira MCP serv
 
 </div>
 </Exercise>
+
+{/* code:8.5 */}
+**In practice:** a project-scoped MCP server is a committed `.mcp.json` file at the repo root, so everyone on the team gets it.
+
+<div class="config-example" id="code-a-team-mcp-server-in-mcp-json" data-title="A team MCP server in .mcp.json">
+
+**A team MCP server in .mcp.json**
+
+```json
+{
+  "mcpServers": {
+    "inventory": {
+      "command": "python",
+      "args": ["inventory_server.py"],
+      "env": { "INVENTORY_API_KEY": "${INVENTORY_API_KEY}" }
+    }
+  }
+}
+```
+
+</div>
+{/* /code */}
 
 ### Further reading
 

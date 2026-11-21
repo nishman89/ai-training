@@ -107,6 +107,66 @@ A lead model decides the subtasks **at run time**, hands them to workers, and me
 
 One call generates, another critiques against clear criteria, and the loop repeats until the critique passes. Use it when you can state what "good" looks like and iteration measurably improves the result, such as literary translation or a search that needs several rounds.
 
+{/* code:1.2 */}
+**In code:** routing is just a cheap classification call, then a normal `switch` in your own code.
+
+<CodeSwitch title="Routing: classify with Haiku, then hand off">
+
+```java
+// Step 1: a cheap, fast call decides the category
+Message route = client.messages().create(MessageCreateParams.builder()
+    .model(Model.CLAUDE_HAIKU_5_5).maxTokens(10L)
+    .system("Classify the ticket. Reply with exactly one word: BILLING, TECHNICAL or OTHER.")
+    .addUserMessage(ticket)
+    .build());
+String category = route.content().stream()
+    .flatMap(b -> b.text().stream()).map(TextBlock::text)
+    .findFirst().orElse("OTHER").trim();
+
+// Step 2: YOUR code routes it: a fixed, testable decision
+String answer = switch (category) {
+    case "BILLING"   -> billingHandler.reply(ticket);     // e.g. its own prompt + refund tools
+    case "TECHNICAL" -> techHandler.reply(ticket);        // e.g. Sonnet with the docs search tool
+    default          -> humanQueue.add(ticket);
+};
+```
+
+```python
+# Step 1: a cheap, fast call decides the category
+route = client.messages.create(
+    model="claude-haiku-5-5", max_tokens=10,
+    system="Classify the ticket. Reply with exactly one word: BILLING, TECHNICAL or OTHER.",
+    messages=[{"role": "user", "content": ticket}],
+)
+category = next((b.text for b in route.content if b.type == "text"), "OTHER").strip()
+
+# Step 2: YOUR code routes it: a fixed, testable decision
+match category:
+    case "BILLING":   answer = billing_handler.reply(ticket)   # its own prompt + refund tools
+    case "TECHNICAL": answer = tech_handler.reply(ticket)      # Sonnet with the docs search tool
+    case _:           answer = human_queue.add(ticket)
+```
+
+```typescript
+// Step 1: a cheap, fast call decides the category
+const route = await client.messages.create({
+  model: 'claude-haiku-5-5', max_tokens: 10,
+  system: 'Classify the ticket. Reply with exactly one word: BILLING, TECHNICAL or OTHER.',
+  messages: [{ role: 'user', content: ticket }],
+});
+const category = (route.content.find((b) => b.type === 'text')?.text ?? 'OTHER').trim();
+
+// Step 2: YOUR code routes it: a fixed, testable decision
+switch (category) {
+  case 'BILLING':   answer = await billingHandler.reply(ticket); break;  // its own prompt + refund tools
+  case 'TECHNICAL': answer = await techHandler.reply(ticket); break;     // Sonnet with the docs search tool
+  default:          answer = await humanQueue.add(ticket);
+}
+```
+
+</CodeSwitch>
+{/* /code */}
+
 <Gotcha
   title={"Five agents, one module, fifteen times the bill"}
   scenario={"A team uses an orchestrator with five sub-agents to refactor one tightly coupled payments module."}
@@ -149,7 +209,7 @@ An agent is a multi-step tool-use loop with managed context and a defined goal.
 
 This is the raw loop. In **Python** (or TypeScript) the Claude Agent SDK can run this loop for you; it isn't available for **Java**, where you write the loop yourself or use the Java SDK's beta tool runner.
 
-<CodeSwitch>
+<CodeSwitch title="The agent loop">
 
 ```java
 List<MessageParam> history = new ArrayList<>();

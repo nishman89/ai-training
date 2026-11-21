@@ -160,6 +160,61 @@ test('classifier does not regress', async () => {          // Vitest / Jest
 
 The same eval gates deployments: run a new model version against a **pinned baseline** before it goes live (Domain 2).
 
+{/* code:4.3 */}
+**In code:** a judge is just a second Claude call with the rubric in the prompt. Ask for reasoning first and the score on the last line, so you can parse it.
+
+<CodeSwitch title="An LLM judge with a rubric">
+
+```java
+String JUDGE = """
+    You grade customer-support replies. Rubric:
+    1 = wrong or unsafe; 3 = correct but misses the customer's actual question; 5 = correct, complete, polite.
+    Explain your reasoning in two sentences, then end with a line: SCORE: <1-5>
+    """;
+
+Message verdict = client.messages().create(MessageCreateParams.builder()
+    .model(Model.CLAUDE_SONNET_5_5).maxTokens(400L)
+    .system(JUDGE)
+    .addUserMessage("<question>" + question + "</question>\n<reply>" + reply + "</reply>")
+    .build());
+String text = verdict.content().stream().flatMap(b -> b.text().stream()).map(TextBlock::text).collect(joining());
+int score = Integer.parseInt(text.replaceAll("(?s).*SCORE:\\s*(\\d).*", "$1"));
+// Before trusting it: compare these scores with human scores on the same sample
+```
+
+```python
+JUDGE = """You grade customer-support replies. Rubric:
+1 = wrong or unsafe; 3 = correct but misses the customer's actual question; 5 = correct, complete, polite.
+Explain your reasoning in two sentences, then end with a line: SCORE: <1-5>"""
+
+verdict = client.messages.create(
+    model="claude-sonnet-5-5", max_tokens=400,
+    system=JUDGE,
+    messages=[{"role": "user", "content": f"<question>{question}</question>\n<reply>{reply}</reply>"}],
+)
+text = "".join(b.text for b in verdict.content if b.type == "text")
+score = int(re.search(r"SCORE:\s*(\d)", text).group(1))
+# Before trusting it: compare these scores with human scores on the same sample
+```
+
+```typescript
+const JUDGE = `You grade customer-support replies. Rubric:
+1 = wrong or unsafe; 3 = correct but misses the customer's actual question; 5 = correct, complete, polite.
+Explain your reasoning in two sentences, then end with a line: SCORE: <1-5>`;
+
+const verdict = await client.messages.create({
+  model: 'claude-sonnet-5-5', max_tokens: 400,
+  system: JUDGE,
+  messages: [{ role: 'user', content: `<question>${question}</question>\n<reply>${reply}</reply>` }],
+});
+const text = verdict.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+const score = Number(/SCORE:\s*(\d)/.exec(text)?.[1]);
+// Before trusting it: compare these scores with human scores on the same sample
+```
+
+</CodeSwitch>
+{/* /code */}
+
 <Gotcha
   title={"The judge everyone trusted"}
   scenario={"An LLM judge scores summaries 8.7/10 on average, so the team ships a new prompt that raises it to 9.1."}
@@ -236,6 +291,40 @@ Record each step of a run: the prompt, tool calls, intermediate outputs and timi
 
 </div>
 </Exercise>
+
+{/* code:4.4 */}
+**In code:** a trace is just a structured log line per call. Record what you'll need when something goes wrong.
+
+<CodeSwitch title="Log enough to debug later">
+
+```java
+Message msg = client.messages().create(params);
+log.info("claude_call prompt_version={} model={} stop_reason={} in={} out={} cache_read={}",
+    PROMPT_VERSION, msg.model(), msg.stopReason().orElse(null),
+    msg.usage().inputTokens(), msg.usage().outputTokens(),
+    msg.usage().cacheReadInputTokens().orElse(0L));
+```
+
+```python
+msg = client.messages.create(**params)
+log.info("claude_call", extra={
+    "prompt_version": PROMPT_VERSION, "model": msg.model, "stop_reason": msg.stop_reason,
+    "input_tokens": msg.usage.input_tokens, "output_tokens": msg.usage.output_tokens,
+    "cache_read": msg.usage.cache_read_input_tokens,
+})
+```
+
+```typescript
+const msg = await client.messages.create(params);
+log.info('claude_call', {
+  promptVersion: PROMPT_VERSION, model: msg.model, stopReason: msg.stop_reason,
+  inputTokens: msg.usage.input_tokens, outputTokens: msg.usage.output_tokens,
+  cacheRead: msg.usage.cache_read_input_tokens,
+});
+```
+
+</CodeSwitch>
+{/* /code */}
 
 <Gotcha
   title={"Every test green, production wrong"}

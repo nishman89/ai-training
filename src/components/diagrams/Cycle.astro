@@ -35,9 +35,11 @@ const arc = (i: number) => {
       const lines = title.length + sub.length, y0 = y - ((lines - 1) * 17) / 2;
       return (
         <g>
-          <rect class={s.tone ? `b-${s.tone}` : i % 2 ? 'b-dark' : 'b-pink'} x={x - w / 2} y={y - h / 2} width={w} height={h} rx="14"/>
-          {title.map((t, j) => <text class={s.tone === 'yellow' ? 't-dark' : 't'} x={x} y={y0 + j * 17}>{t}</text>)}
-          {sub.map((t, j) => <text class={s.tone === 'yellow' ? 't-sm' : 't-sm-w'} x={x} y={y0 + (title.length + j) * 17} style={s.tone === 'yellow' ? 'fill:#2d2a2b' : undefined}>{t}</text>)}
+          <rect class="c-card c-card--end" x={x - w / 2} y={y - h / 2} width={w} height={h} rx="14" style={s.tone ? `stroke:var(--tone-${s.tone})` : undefined}/>
+          <circle cx={x - w / 2 + 2} cy={y - h / 2 + 2} r="13" class={s.tone ? `b-${s.tone}` : 'b-pink'}/>
+          <text class="t-num" x={x - w / 2 + 2} y={y - h / 2 + 3} style={s.tone === 'yellow' ? 'fill:#2d2a2b;font-size:13px' : 'font-size:13px'}>{i + 1}</text>
+          {title.map((t, j) => <text class="t-title" x={x} y={y0 + j * 17} style="font-size:15px">{t}</text>)}
+          {sub.map((t, j) => <text class="t-sub" x={x} y={y0 + (title.length + j) * 17 + 2} style="font-size:13px">{t}</text>)}
         </g>
       );
     })}
@@ -46,7 +48,7 @@ const arc = (i: number) => {
     {center && <p class="dg-center">{center}</p>}
     <ol class="dg-flow">
       {steps.map((s, i) => (
-        <li class:list={['dg-box', s.tone ? `dg-box--${s.tone}` : i % 2 ? 'dg-box--dark' : 'dg-box--pink']}><strong>{s.title}</strong>{s.sub && <span>{s.sub}</span>}</li>
+        <li class="dg-step"><span class="dg-num">{i + 1}</span><strong>{s.title}</strong>{s.sub && <span>{s.sub}</span>}</li>
       ))}
       <li class="dg-loop">↻ back to “{steps[0].title}”</li>
     </ol>

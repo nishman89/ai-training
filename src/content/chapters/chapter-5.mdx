@@ -72,6 +72,31 @@ You don't have to use one model for everything. The common production pattern se
 - **Costs** - a classification step and a second model path to maintain
 - **Skip it when** - traffic is uniform at one quality bar: pin one model
 
+{/* code:5.1 */}
+**In code:** the Models API tells you what's available, so you don't have to hard-code it.
+
+<CodeSwitch title="List the available models">
+
+```java
+for (ModelInfo m : client.models().list().autoPager()) {
+    System.out.println(m.id() + "  " + m.displayName());
+}
+```
+
+```python
+for m in client.models.list():
+    print(m.id, m.display_name)
+```
+
+```typescript
+for await (const m of client.models.list()) {
+  console.log(m.id, m.display_name);
+}
+```
+
+</CodeSwitch>
+{/* /code */}
+
 <Gotcha
   title={"The classifier that cost more than the product"}
   scenario={"A prototype used the most capable model for everything, including tagging 2 million support tickets a month."}
@@ -106,6 +131,40 @@ Choosing the model and choosing how much it reasons are set separately. Current 
 ]} />
 
 More thinking means more output tokens, so more cost and latency. In a multi-turn conversation, pass thinking blocks back unchanged (Domain 6).
+
+{/* code:5.2 */}
+**In code:** effort is one field, `output_config.effort`: `low`, `medium`, `high`, `xhigh` or `max`. Leave it out and you get the model's default (`medium` on Opus 5.5 and Haiku 5.5, `high` on the others).
+
+<CodeSwitch title="Set the effort level">
+
+```java
+Message msg = client.messages().create(MessageCreateParams.builder()
+    .model(Model.CLAUDE_OPUS_5_5).maxTokens(4096L)
+    .addUserMessage("Analyse the trade-offs between microservices and a monolith")
+    .outputConfig(OutputConfig.builder()
+        .effort(OutputConfig.Effort.LOW)             // less thinking: faster and cheaper
+        .build())
+    .build());
+```
+
+```python
+msg = client.messages.create(
+    model="claude-opus-5-5", max_tokens=4096,
+    messages=[{"role": "user", "content": "Analyse the trade-offs between microservices and a monolith"}],
+    output_config={"effort": "low"},                 # less thinking: faster and cheaper
+)
+```
+
+```typescript
+const msg = await client.messages.create({
+  model: 'claude-opus-5-5', max_tokens: 4096,
+  messages: [{ role: 'user', content: 'Analyse the trade-offs between microservices and a monolith' }],
+  output_config: { effort: 'low' },                  // less thinking: faster and cheaper
+});
+```
+
+</CodeSwitch>
+{/* /code */}
 
 <SectionSummary points={[
   "Choosing a model and choosing how much it reasons are separate decisions.",
@@ -176,7 +235,7 @@ The prefix must be **byte-identical**. A change at one level invalidates that le
 
 Read the usage fields: `total input = cache_read_input_tokens + cache_creation_input_tokens + input_tokens`. Note that `input_tokens` counts only the uncached tokens **after** the last breakpoint. If both cache fields are 0, the prefix was too short or not identical.
 
-<CodeSwitch>
+<CodeSwitch title="Cache a long system prompt and check it worked">
 
 ```java
 MessageCreateParams params = MessageCreateParams.builder()
@@ -248,7 +307,7 @@ The first line changes on every call, so the prefix is never identical and every
 
 #### Before: the buggy code
 
-<CodeSwitch>
+<CodeSwitch title="Bug: a timestamp at the start breaks the cache">
 
 ```java
 String system = "Time: " + Instant.now() + " | User: " + userId + "\n" + policy;   // changes every call
@@ -297,7 +356,7 @@ Every call **writes** a new cache entry (1.25× price) and none ever reads one: 
 
 #### After: the fix
 
-<CodeSwitch>
+<CodeSwitch title="Fix: keep the cached part identical">
 
 ```java
 client.messages().create(MessageCreateParams.builder()
@@ -384,7 +443,72 @@ For work that doesn't need an answer now (overnight classification, dataset back
   { myth: 'A loop of synchronous calls is a batch job', reality: '"Serialisation with extra steps": you pay full price and still block. Use the Batches API, or the async client for concurrency' },
 ]} />
 
-For high volume that **does** need prompt answers, use the async client (`client.async()`, returning `CompletableFuture<Message>`) for concurrency without blocking threads.
+For high volume that **does** need fast answers, use the async client (`client.async()`, returning `CompletableFuture<Message>`) for concurrency without blocking threads.
+
+{/* code:5.4 */}
+**In code:** submit many requests in one batch, each with your own `custom_id`, then read the results when the batch has ended. Results can come back in any order, so match them by `custom_id`.
+
+<CodeSwitch title="Submit a batch, then read the results">
+
+```java
+BatchCreateParams.Builder batch = BatchCreateParams.builder();
+for (Ticket t : tickets) {
+    batch.addRequest(BatchCreateParams.Request.builder()
+        .customId("ticket-" + t.id())                         // your key for matching results
+        .params(BatchCreateParams.Request.Params.builder()
+            .model(Model.CLAUDE_HAIKU_5_5).maxTokens(50)
+            .addUserMessage("Tag this ticket: " + t.text())
+            .build())
+        .build());
+}
+MessageBatch created = client.messages().batches().create(batch.build());
+
+// later (a scheduled job): once processingStatus is ENDED, stream the results
+try (var results = client.messages().batches().resultsStreaming(
+        BatchResultsParams.builder().messageBatchId(created.id()).build())) {
+    results.stream().forEach(r -> {
+        if (r.result().isSucceeded()) save(r.customId(), r.result().asSucceeded().message());
+        else retryLater(r.customId());                        // errored or expired
+    });
+}
+```
+
+```python
+batch = client.messages.batches.create(requests=[
+    {
+        "custom_id": f"ticket-{t.id}",                        # your key for matching results
+        "params": {"model": "claude-haiku-5-5", "max_tokens": 50,
+                   "messages": [{"role": "user", "content": f"Tag this ticket: {t.text}"}]},
+    }
+    for t in tickets
+])
+
+# later (a scheduled job): once processing_status == "ended", stream the results
+for r in client.messages.batches.results(batch.id):
+    if r.result.type == "succeeded":
+        save(r.custom_id, r.result.message)
+    else:                                                     # errored or expired
+        retry_later(r.custom_id)
+```
+
+```typescript
+const batch = await client.messages.batches.create({
+  requests: tickets.map((t) => ({
+    custom_id: `ticket-${t.id}`,                              // your key for matching results
+    params: { model: 'claude-haiku-5-5', max_tokens: 50,
+              messages: [{ role: 'user', content: `Tag this ticket: ${t.text}` }] },
+  })),
+});
+
+// later (a scheduled job): once processing_status === 'ended', stream the results
+for await (const r of await client.messages.batches.results(batch.id)) {
+  if (r.result.type === 'succeeded') save(r.custom_id, r.result.message);
+  else retryLater(r.custom_id);                               // errored or expired
+}
+```
+
+</CodeSwitch>
+{/* /code */}
 
 <Gotcha
   title={"The batch job a user was waiting for"}
@@ -396,7 +520,7 @@ For high volume that **does** need prompt answers, use the async client (`client
 <SectionSummary points={[
   "The Batch API halves token prices in exchange for up to 24 hours' turnaround (up to 100,000 requests or 256 MB).",
   "Same models and quality: only scheduling and price differ. It stacks with caching.",
-  "Never use it when a user is waiting; for prompt high-volume work use the async client instead.",
+  "Never use it when a user is waiting; for high-volume work that needs fast answers, use the async client instead.",
 ]} />
 
 <RoleLens dev={"The Batch API takes up to 100k requests, returns within 24 hours (usually much faster) and costs half. Use it for anything nobody is waiting on."} test={"Use Batch to run large eval suites cheaply overnight: thousands of cases at 50% of the cost."} data={"This is your default for backfills and nightly enrichment: submit, poll, then load the results by `custom_id`."} ba={"If the user doesn't need an answer immediately (overnight reports, monthly reviews), Batch halves the cost. Ask \"how fast does this really need to be?\""} />
@@ -433,6 +557,46 @@ In development the window rarely fills because test inputs are short. In product
 3. **Batch** anything that can wait.
 4. **Tune effort** down for simple work.
 5. **Shrink the context**: fewer tools, trimmed history, compaction (Domain 6).
+
+{/* code:5.5 */}
+**In code:** count tokens before you send. It's free, and uses the same inputs as a real request.
+
+<CodeSwitch title="Count tokens before sending">
+
+```java
+MessageTokensCount count = client.messages().countTokens(MessageCountTokensParams.builder()
+    .model(Model.CLAUDE_SONNET_5_5)
+    .system(systemPrompt)
+    .addUserMessage(longDocument)
+    .build());
+if (count.inputTokens() > BUDGET) {
+    longDocument = summarise(longDocument);           // trim before you pay for it
+}
+```
+
+```python
+count = client.messages.count_tokens(
+    model="claude-sonnet-5-5",
+    system=system_prompt,
+    messages=[{"role": "user", "content": long_document}],
+)
+if count.input_tokens > BUDGET:
+    long_document = summarise(long_document)          # trim before you pay for it
+```
+
+```typescript
+const count = await client.messages.countTokens({
+  model: 'claude-sonnet-5-5',
+  system: systemPrompt,
+  messages: [{ role: 'user', content: longDocument }],
+});
+if (count.input_tokens > BUDGET) {
+  longDocument = await summarise(longDocument);       // trim before you pay for it
+}
+```
+
+</CodeSwitch>
+{/* /code */}
 
 ### Further reading
 

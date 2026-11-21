@@ -12,7 +12,8 @@ const fmt = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
 <BaseLayout title="Summaries" description="Every section summary from the eight CCDV-F domains on one page, for quick revision.">
   <PageHead eyebrow="Quick revision" title="Summaries">
     <p class="lead">All {total} section summaries on one page, grouped by domain. Each heading links to the full notes; a
-      <span class="mini-gotcha">⚠ Gotcha</span> tag means that section also has a real-world trap worth reading.</p>
+      <span class="mini-gotcha">⚠ Gotcha</span> link jumps to that section's real-world trap, and a <span class="mini-code">&lt;/&gt; Code</span> link
+      jumps straight to a worked example in Java, Python and TypeScript.</p>
   </PageHead>
 
   <div class="container">
@@ -35,7 +36,12 @@ const fmt = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
             <article class="card sec" data-testid={`summary-${s.number.replace('.', '-')}`}>
               <h3><a href={`${url(`chapters/${d.number}`)}#${s.slug}`}><span class="sec__no">{s.number}</span> {s.title}</a></h3>
               <div class="pts">{s.points.map((p) => <p class="pt" set:html={fmt(p)} />)}</div>
-              {s.gotchas.map((g) => <a class="gotcha-tag" href={`${url(`chapters/${d.number}`)}#${s.slug}`}>⚠ Gotcha: <span set:html={fmt(g)} /></a>)}
+              {(s.gotchaLinks.length > 0 || s.code.length > 0) && (
+                <div class="links">
+                  {s.gotchaLinks.map((g) => <a class="gotcha-tag" href={`${url(`chapters/${d.number}`)}#${g.id}`}>⚠ Gotcha: <span set:html={fmt(g.title)} /></a>)}
+                  {s.code.map((c) => <a class="code-tag" href={`${url(`chapters/${d.number}`)}#${c.id}`} data-testid="code-link">&lt;/&gt; Code: <span set:html={fmt(c.title)} /></a>)}
+                </div>
+              )}
             </article>
           ))}
         </div>
@@ -69,7 +75,11 @@ const fmt = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
   .pts { display: grid; gap: 0.4rem; }
   .pt { position: relative; margin: 0; padding-left: 1.5rem; line-height: 1.5; font-size: 0.97rem; }
   .pt::before { content: '✓'; position: absolute; left: 0; color: var(--pink); font-weight: 700; }
-  .gotcha-tag { align-self: flex-start; margin-top: auto; padding: 0.3rem 0.75rem; border-radius: 10px; background: var(--pink-tint); color: var(--pink-dark); font-weight: 700; font-size: 0.88rem; text-decoration: none; }
+  .links { margin-top: auto; display: flex; flex-direction: column; align-items: flex-start; gap: 0.4rem; }
+  .mini-code { display: inline-block; padding: 0 0.5rem; border-radius: 999px; background: #e6eef8; color: #1f4f80; font-weight: 700; font-size: 0.85rem; }
+  .code-tag { padding: 0.3rem 0.75rem; border-radius: 10px; background: #e6eef8; color: #1f4f80; font-weight: 700; font-size: 0.88rem; text-decoration: none; }
+  .code-tag:hover { background: #1f4f80; color: #fff; }
+  .gotcha-tag { align-self: flex-start; padding: 0.3rem 0.75rem; border-radius: 10px; background: var(--pink-tint); color: var(--pink-dark); font-weight: 700; font-size: 0.88rem; text-decoration: none; }
   .gotcha-tag:hover { background: var(--pink); color: #fff; }
   .gotcha-tag :global(code) { background: rgb(255 255 255 / 0.6); }
   @media (max-width: 40rem) {

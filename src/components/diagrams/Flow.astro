@@ -1,44 +1,50 @@
 ---
-/** A left-to-right process of steps, optionally with a loop back to the start. */
+/** A left-to-right process of numbered steps, optionally with a loop back to the start. */
 import Figure from '../Figure.astro';
-import { wrap, fills } from '../../lib/svg';
+import { wrap } from '../../lib/svg';
 
 interface Step { title: string; sub?: string; }
 interface Props { steps: Step[]; caption: string; loop?: string; }
 const { steps, caption, loop } = Astro.props;
-const n = steps.length, gap = 28, w = (800 - gap * (n - 1)) / n, h = 120, top = 20;
-const id = `fl-${caption.length}-${n}`;
-const size = w < 130 ? 13 : 15;            // smaller text when there are many steps
-const perChar = size * 0.62;
+const n = steps.length, gap = 34, w = (800 - gap * (n - 1)) / n, top = 26;
+const tSize = w < 130 ? 14.5 : 16, sSize = w < 130 ? 12.5 : 13.5;
+const laid = steps.map((s) => ({
+  title: wrap(s.title, Math.floor((w - 18) / (tSize * 0.58))),
+  sub: s.sub ? wrap(s.sub, Math.floor((w - 18) / (sSize * 0.53))) : [],
+}));
+const lh = 19;
+const h = Math.max(104, 44 + Math.max(...laid.map((l) => l.title.length * lh + l.sub.length * (lh - 1) + (l.sub.length ? 6 : 0))));
+const H = top + h + (loop ? 78 : 14);
 ---
 <Figure caption={caption}>
-  <svg class="dg-svg" viewBox={`0 0 820 ${loop ? 210 : 160}`} role="img" aria-label={steps.map((s) => s.title).join(', then ')}>
-    <defs><marker id={id} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5c5c5c"/></marker></defs>
-    {steps.map((s, i) => {
+  <svg class="dg-svg" viewBox={`0 0 820 ${H}`} role="img" aria-label={steps.map((s, i) => `${i + 1}. ${s.title}`).join(', then ')}>
+    {laid.map((l, i) => {
       const x = 10 + i * (w + gap), cx = x + w / 2;
-      const title = wrap(s.title, Math.floor((w - 12) / perChar));
-      const sub = s.sub ? wrap(s.sub, Math.floor((w - 12) / (perChar * 0.85))) : [];
-      const lines = title.length + sub.length;
-      const y0 = top + h / 2 - ((lines - 1) * 18) / 2;
+      const block = l.title.length * lh + l.sub.length * (lh - 1) + (l.sub.length ? 6 : 0);
+      const y0 = top + 8 + h / 2 - block / 2 + lh / 2;
+      const last = i === n - 1;
       return (
         <g>
-          <rect class={fills[i % 2]} x={x} y={top} width={w} height={h} rx="12"/>
-          {title.map((t, j) => <text class="t" x={cx} y={y0 + j * 18} style={`font-size:${size}px`}>{t}</text>)}
-          {sub.map((t, j) => <text class="t-sm-w" x={cx} y={y0 + (title.length + j) * 18 + 2} style={`font-size:${size - 2}px`}>{t}</text>)}
-          {i < n - 1 && <line class="ln" x1={x + w + 3} y1={top + h / 2} x2={x + w + gap - 3} y2={top + h / 2} marker-end={`url(#${id})`}/>}
+          <rect class={last ? 'c-card c-card--end' : 'c-card'} x={x} y={top} width={w} height={h} rx="14"/>
+          <circle cx={cx} cy={top} r="15" class="b-pink"/>
+          <text class="t-num" x={cx} y={top + 1}>{i + 1}</text>
+          {l.title.map((t, j) => <text class="t-title" x={cx} y={y0 + j * lh} style={`font-size:${tSize}px`}>{t}</text>)}
+          {l.sub.map((t, j) => <text class="t-sub" x={cx} y={y0 + l.title.length * lh + 6 + j * (lh - 1)} style={`font-size:${sSize}px`}>{t}</text>)}
+          {!last && <path class="arrow" d={`M${x + w + 9} ${top + h / 2 - 9} L${x + w + gap - 9} ${top + h / 2} L${x + w + 9} ${top + h / 2 + 9} Z`}/>}
         </g>
       );
     })}
     {loop && (
       <g>
-        <path class="ln-dash" d={`M${10 + (n - 1) * (w + gap) + w / 2} ${top + h + 4} V${top + h + 40} H${10 + w / 2} V${top + h + 10}`} marker-end={`url(#${id})`}/>
-        <text class="t-lbl" x="410" y={top + h + 62}>{loop}</text>
+        <path class="ln-loop" d={`M${10 + (n - 1) * (w + gap) + w / 2} ${top + h + 4} V${top + h + 36} H${10 + w / 2} V${top + h + 12}`}/>
+        <path class="arrow" d={`M${10 + w / 2 - 8} ${top + h + 18} L${10 + w / 2} ${top + h + 5} L${10 + w / 2 + 8} ${top + h + 18} Z`}/>
+        <text class="t-lbl" x="410" y={top + h + 58} style="font-size:13px">↻ {loop}</text>
       </g>
     )}
   </svg>
   <ol class="dg-phone dg-flow">
     {steps.map((s, i) => (
-      <li class:list={['dg-box', i % 2 ? 'dg-box--dark' : 'dg-box--pink']}><strong>{s.title}</strong>{s.sub && <span>{s.sub}</span>}</li>
+      <li class="dg-step"><span class="dg-num">{i + 1}</span><strong>{s.title}</strong>{s.sub && <span>{s.sub}</span>}</li>
     ))}
     {loop && <li class="dg-loop">↻ {loop}</li>}
   </ol>

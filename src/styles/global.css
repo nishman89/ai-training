@@ -180,6 +180,23 @@ tbody tr:last-child > * { border-bottom: 0; }
 .diagram .t-lbl { font-size: 12px; font-weight: 700; fill: var(--pink-dark); text-anchor: middle; letter-spacing: 0.04em; }
 .diagram .ln { stroke: var(--grey); stroke-width: 2; fill: none; }
 .diagram .ln-pink { stroke: var(--pink); stroke-width: 2.5; fill: none; }
+.diagram { --tone-red: #c62828; --tone-green: #1f7a50; --tone-yellow: #d9a800; --tone-blue: #1f5f99; --tone-purple: #6b3fa0; --tone-pink: var(--pink); --tone-dark: var(--charcoal); }
+.diagram .c-card { fill: #fff; stroke: #d9dcdd; stroke-width: 1.5; }
+.diagram .c-card--end { stroke: var(--pink); stroke-width: 2; }
+.diagram .t-title { font-size: 16px; font-weight: 700; fill: var(--charcoal); text-anchor: middle; dominant-baseline: central; }
+.diagram .t-sub { font-size: 13.5px; font-weight: 500; fill: #55595b; text-anchor: middle; dominant-baseline: central; }
+.diagram .t-num { font-size: 14px; font-weight: 800; fill: #fff; text-anchor: middle; dominant-baseline: central; }
+.diagram .arrow { fill: var(--pink); }
+.diagram .ln-loop { stroke: var(--pink); stroke-width: 2; fill: none; stroke-dasharray: 7 5; }
+.diagram .ln-hub { stroke: #c9cdce; stroke-width: 2; }
+.dg-step { position: relative; margin: 0; display: grid; gap: 0.2rem; padding: 1.1rem 0.9rem 0.75rem; border-radius: 12px; background: #fff; border: 1.5px solid #d9dcdd; text-align: center; }
+.dg-step strong { font-size: 1rem; color: var(--charcoal); }
+.dg-step > span:not(.dg-num) { font-size: 0.9rem; color: #55595b; }
+.dg-num { position: absolute; top: -0.8rem; left: 50%; transform: translateX(-50%); min-width: 1.6rem; height: 1.6rem; padding: 0 0.45rem; display: grid; place-items: center; border-radius: 999px; background: var(--pink); color: #fff; font-weight: 800; font-size: 0.8rem; }
+.dg-flow > li.dg-step:not(:last-child)::after { content: '↓'; position: absolute; left: 0; right: 0; bottom: -1.55rem; line-height: 1; color: var(--pink); font-weight: 800; }
+.dg-flow:has(.dg-step) { gap: 2.4rem; padding-top: 0.9rem; }
+.dg-tiles:has(.dg-step) { gap: 1.4rem; padding-top: 0.9rem; }
+.dg-tiles { gap: 1.1rem; }
 .diagram .ln-dash { stroke: var(--grey); stroke-width: 1.5; fill: none; stroke-dasharray: 6 5; }
 
 /* ---- Diagrams on phones ----

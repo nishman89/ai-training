@@ -117,6 +117,60 @@ Examples **show** the pattern instead of describing it. They sit in the prompt, 
 
 Say exactly what you need: field names and types, length limits, whether to include a preamble, and what to do when data is absent. When software reads the output, move the constraint into the API (next section).
 
+{/* code:6.2 */}
+**In code:** a well-built prompt is just a string you assemble: role in the system prompt, data in XML tags, a couple of examples, then the task.
+
+<CodeSwitch title="Assemble a prompt with tags and examples">
+
+```java
+String system = "You are a support triage assistant for Acme. Be concise.";
+String prompt = """
+    <examples>
+    <example><ticket>I was charged twice this month</ticket><label>BILLING</label></example>
+    <example><ticket>The app crashes when I log in</ticket><label>TECHNICAL</label></example>
+    </examples>
+
+    <ticket>
+    %s
+    </ticket>
+
+    Label the ticket above as BILLING, TECHNICAL or OTHER. Reply with the label only.
+    """.formatted(ticketText);                       // data goes INSIDE tags, instructions outside
+```
+
+```python
+system = "You are a support triage assistant for Acme. Be concise."
+prompt = f"""<examples>
+<example><ticket>I was charged twice this month</ticket><label>BILLING</label></example>
+<example><ticket>The app crashes when I log in</ticket><label>TECHNICAL</label></example>
+</examples>
+
+<ticket>
+{ticket_text}
+</ticket>
+
+Label the ticket above as BILLING, TECHNICAL or OTHER. Reply with the label only."""
+# data goes INSIDE tags, instructions outside
+```
+
+```typescript
+const system = 'You are a support triage assistant for Acme. Be concise.';
+const prompt = `<examples>
+<example><ticket>I was charged twice this month</ticket><label>BILLING</label></example>
+<example><ticket>The app crashes when I log in</ticket><label>TECHNICAL</label></example>
+</examples>
+
+<ticket>
+${ticketText}
+</ticket>
+
+Label the ticket above as BILLING, TECHNICAL or OTHER. Reply with the label only.`;
+// data goes INSIDE tags, instructions outside
+```
+
+</CodeSwitch>
+{/* /code */}
+
 <SectionSummary points={[
   "The system prompt is the persistent spec: role, format and rules for every turn.",
   "XML tags separate instructions from data and make boundaries unambiguous.",
@@ -390,6 +444,56 @@ PDFs use a `document` block (base64, URL or `file_id`). Apply the same prompting
 ]} />
 
 <RoleLens dev={"Images and PDFs go in as content blocks next to text. Claude reads charts, scans and tables, but they cost tokens per page or image."} test={"Screenshots of a failing UI can go straight to Claude: \"what's wrong with this page against the design?\" It's useful for visual checks."} data={"Extracting tables from supplier PDFs into rows is a classic use. Validate against a schema, because scanned layouts vary."} ba={"Upload a process diagram or a scanned form and ask Claude to turn it into user stories or a field list. It's a quick start, but review it."} />
+
+{/* code:6.6 */}
+**In code:** an image is one more content block in the user message, placed before the question.
+
+<CodeSwitch title="Send an image with a question">
+
+```java
+String imageBase64 = Base64.getEncoder().encodeToString(Files.readAllBytes(Path.of("receipt.png")));
+
+ContentBlockParam image = ContentBlockParam.ofImage(ImageBlockParam.builder()
+    .source(Base64ImageSource.builder()
+        .mediaType(Base64ImageSource.MediaType.IMAGE_PNG)
+        .data(imageBase64)
+        .build())
+    .build());
+ContentBlockParam question = ContentBlockParam.ofText(TextBlockParam.builder()
+    .text("What is the total on this receipt?").build());
+
+Message msg = client.messages().create(MessageCreateParams.builder()
+    .model(Model.CLAUDE_SONNET_5_5).maxTokens(300L)
+    .addUserMessageOfContentBlockParams(List.of(image, question))   // image first, then the question
+    .build());
+```
+
+```python
+image_b64 = base64.standard_b64encode(open("receipt.png", "rb").read()).decode()
+
+msg = client.messages.create(
+    model="claude-sonnet-5-5", max_tokens=300,
+    messages=[{"role": "user", "content": [
+        {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": image_b64}},
+        {"type": "text", "text": "What is the total on this receipt?"},   # image first, then the question
+    ]}],
+)
+```
+
+```typescript
+const imageB64 = (await readFile('receipt.png')).toString('base64');   // node:fs/promises
+
+const msg = await client.messages.create({
+  model: 'claude-sonnet-5-5', max_tokens: 300,
+  messages: [{ role: 'user', content: [
+    { type: 'image', source: { type: 'base64', media_type: 'image/png', data: imageB64 } },
+    { type: 'text', text: 'What is the total on this receipt?' },        // image first, then the question
+  ] }],
+});
+```
+
+</CodeSwitch>
+{/* /code */}
 
 ### Further reading
 

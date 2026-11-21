@@ -7,8 +7,8 @@ interface Column { title: string; sub?: string; points: string[]; }
 interface Props { columns: Column[]; caption: string; middle?: string; }
 const { columns, caption, middle } = Astro.props;
 const n = columns.length, gap = middle ? 60 : 20, w = (800 - gap * (n - 1)) / n;
-const rows = columns.map((c) => c.points.flatMap((p) => wrap(p, Math.floor((w - 50) / 8.2)).map((l, i) => ({ l, first: i === 0 }))));
-const height = 110 + Math.max(...rows.map((r) => r.length)) * 22;
+const rows = columns.map((c) => c.points.flatMap((p) => wrap(p, Math.floor((w - 54) / 8.4)).map((l, i) => ({ l, first: i === 0 }))));
+const height = 116 + Math.max(...rows.map((r) => r.length)) * 24;
 ---
 <Figure caption={caption}>
   <svg class="dg-svg" viewBox={`0 0 820 ${height}`} role="img" aria-label={columns.map((c) => c.title).join(' compared with ')}>
@@ -16,21 +16,21 @@ const height = 110 + Math.max(...rows.map((r) => r.length)) * 22;
       const x = 10 + i * (w + gap);
       return (
         <g>
-          <rect class="b-white" x={x} y="10" width={w} height={height - 20} rx="14"/>
+          <rect class="c-card" x={x} y="10" width={w} height={height - 20} rx="14"/>
           <rect class={fills[i % 2]} x={x} y="10" width={w} height="64" rx="14"/>
           <rect class={fills[i % 2]} x={x} y="50" width={w} height="24"/>
           <text class="t" x={x + w / 2} y={c.sub ? 34 : 42} style="font-size:18px">{c.title}</text>
           {c.sub && <text class="t-sm-w" x={x + w / 2} y="58">{c.sub}</text>}
           {rows[i].map((r, j) => (
             <g>
-              {r.first && <circle cx={x + 22} cy={100 + j * 22} r="4" class="b-pink"/>}
-              <text class="t-dark" x={x + 34} y={100 + j * 22} style="font-size:14px;font-weight:600;text-anchor:start">{r.l}</text>
+              {r.first && <circle cx={x + 24} cy={104 + j * 24} r="5" class={i % 2 ? 'b-dark' : 'b-pink'}/>}
+              <text class="t-dark" x={x + 38} y={104 + j * 24} style="font-size:15px;font-weight:600;text-anchor:start">{r.l}</text>
             </g>
           ))}
         </g>
       );
     })}
-    {middle && <text class="t-lbl" x="410" y={height / 2} style="font-size:16px">{middle}</text>}
+    {middle && <g><circle cx="410" cy={height / 2} r="22" class="b-dark"/><text class="t" x="410" y={height / 2} style="font-size:14px">{middle}</text></g>}
   </svg>
   <div class="dg-phone dg-compare">
     {columns.map((c, i) => (

@@ -74,7 +74,7 @@ A request to `POST /v1/messages` needs three fields and two headers. Everything 
 
 The API is **stateless**: it keeps no conversation. Your app stores the history and resends it every turn, which is why long chats get slower and pricier.
 
-<CodeSwitch>
+<CodeSwitch title="Create a client and make a call">
 
 ```java
 AnthropicClient client = AnthropicOkHttpClient.builder()
@@ -133,7 +133,7 @@ acme-support/
 
 #### 2. The code that sends it
 
-<CodeSwitch>
+<CodeSwitch title="Load the system prompt from a file">
 
 ```java
 String systemPrompt = Files.readString(Path.of("src/main/resources/prompts/support-system.txt"));
@@ -226,7 +226,7 @@ Your code shows the `text` block to the customer (pick blocks by `type`, never `
 
 A 200 OK does **not** mean a complete answer. Branch on `stop_reason` every time, like checking an exit code.
 
-<CodeSwitch>
+<CodeSwitch title="Read the reply: text, stop_reason and usage">
 
 ```java
 msg.content().forEach(b -> b.text().ifPresent(t -> System.out.println(t.text())));
@@ -309,7 +309,7 @@ Which Claude does the work. Think of choosing junior, mid or senior staff: senio
 - **Opus** - a multi-hour coding agent
 - **Fable** - the hardest reasoning, when Opus still falls short on your evals
 
-<CodeSwitch>
+<CodeSwitch title="Choose the model">
 
 ```java
 .model(Model.CLAUDE_SONNET_5_5)      // or .model("claude-sonnet-5-5"); pin the full ID in production
@@ -367,7 +367,7 @@ HTTP status: **200 OK**. No exception. The text simply stops mid-word, so `JSON.
 
 Think of it as the employee handbook versus today's case file. Because the API remembers nothing, it's like phoning a call-centre agent who has no notes: you read out the whole file each time.
 
-<CodeSwitch>
+<CodeSwitch title="System prompt plus conversation history">
 
 ```java
 .system("You are Acme's support agent. Answer only about Acme products, in under 80 words.")
@@ -482,7 +482,7 @@ A stream *ending* isn't the same as a message *completing*. Only `message_stop` 
   { when: 'a retry then fails with a tool-use error', then: 'Check whether the previous turn was built from an interrupted stream before touching the schema' },
 ]} />
 
-<CodeSwitch>
+<CodeSwitch title="Stream a reply safely">
 
 ```java
 MessageAccumulator acc = MessageAccumulator.create();
@@ -604,7 +604,7 @@ Limits are set **per organisation, per model**, as requests per minute (RPM), in
 
 The official SDKs retry connection errors, 408, 409, 429 and 5xx automatically, **twice by default**, with exponential backoff, honouring `retry-after`. Don't wrap your own retry loop around that: it multiplies attempts. Tune `maxRetries`, then handle what's left.
 
-<CodeSwitch>
+<CodeSwitch title="Handle errors by type">
 
 ```java
 try {

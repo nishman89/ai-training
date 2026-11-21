@@ -6,11 +6,12 @@
  * Backticks in any field become inline code.
  */
 interface Props { title: string; scenario: string; gotcha: string; fix: string; }
+import { anchor } from '../lib/anchors';
 const { title, scenario, gotcha, fix } = Astro.props;
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const fmt = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
 ---
-<details class="gotcha fold" data-testid="gotcha">
+<details class="gotcha fold" data-testid="gotcha" id={anchor('gotcha', title)}>
   <summary class="gotcha__head"><span class="gotcha__badge" aria-hidden="true">⚠</span><span><span class="eyebrow">Gotcha</span><strong class="gotcha__title" set:html={fmt(title)} /></span></summary>
   <dl>
     <div><dt>The scenario</dt><dd set:html={fmt(scenario)} /></div>

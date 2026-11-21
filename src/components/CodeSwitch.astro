@@ -13,9 +13,10 @@
  *   </CodeSwitch>
  */
 interface Props { title?: string; }
+import { anchor } from '../lib/anchors';
 const { title } = Astro.props;
 ---
-<div class="code-switch" data-code-switch data-active="java">
+<div class="code-switch" data-code-switch data-active="java" id={title ? anchor('code', title) : undefined}>
   <div class="code-switch__bar no-print">
     {title && <span class="code-switch__title">{title}</span>}
     <div class="code-switch__tabs" role="group" aria-label="Code language">

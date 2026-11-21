@@ -11,6 +11,7 @@ objectives:
 ---
 import Compare from '../../components/diagrams/Compare.astro';
 import ExamRef from '../../components/ExamRef.astro';
+import CodeSwitch from '../../components/CodeSwitch.astro';
 import RoleLens from '../../components/RoleLens.astro';
 import Gotcha from '../../components/Gotcha.astro';
 import SectionSummary from '../../components/SectionSummary.astro';
@@ -95,6 +96,25 @@ The same agent loop is available programmatically through the Agent SDK (Python 
 
 **Deny beats allow**, and an enterprise deny can't be overridden, even in bypass mode. Put the human gate where the worst case is hard to undo: the agent's work is an input to a human decision on sensitive code, not a replacement for one.
 
+{/* code:3.2 */}
+**In practice:** permissions live in `.claude/settings.json`. Deny rules always win.
+
+<div class="config-example" id="code-permission-rules-in-settings-json" data-title="Permission rules in settings.json">
+
+**Permission rules in settings.json**
+
+```json
+{
+  "permissions": {
+    "allow": ["Bash(mvn test:*)", "Bash(npm test:*)"],
+    "deny":  ["Read(./.env)", "Read(./secrets/**)", "Bash(git push:*)"]
+  }
+}
+```
+
+</div>
+{/* /code */}
+
 <Gotcha
   title={"bypassPermissions on a laptop"}
   scenario={"To stop the approval prompts, a developer runs Claude Code in bypassPermissions mode on their workstation against the live repo."}
@@ -151,6 +171,38 @@ CLAUDE.md is a working set of rules, not an append log: every line weakens the o
 ]} />
 
 **For Java teams:** put `mvn -q test` or `./gradlew test` in CLAUDE.md and add a PostToolUse hook that runs your formatter (e.g. Spotless) after every edit. **For Python:** `pytest -q` and a `ruff format` hook.
+
+{/* code:3.3 */}
+**In practice:** a hook is a script registered in settings. This PreToolUse hook runs before every file edit; exiting with code 2 blocks the edit and tells Claude why.
+
+<div class="config-example" id="code-a-pretooluse-hook-that-blocks-edits" data-title="A PreToolUse hook that blocks edits">
+
+**A PreToolUse hook that blocks edits**
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [{ "type": "command", "command": "./scripts/block-migrations.sh" }]
+      }
+    ]
+  }
+}
+```
+
+```bash
+#!/bin/bash
+# block-migrations.sh: the tool call arrives as JSON on stdin
+if jq -r '.tool_input.file_path' | grep -q '/db/migrations/'; then
+  echo "Migrations are read-only: write a new migration instead" >&2
+  exit 2   # 2 = block the action
+fi
+```
+
+</div>
+{/* /code */}
 
 <Gotcha
   title={"The CLAUDE.md rule that stopped working"}
