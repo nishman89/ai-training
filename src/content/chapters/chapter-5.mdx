@@ -42,7 +42,7 @@ Picking which Claude to use, and not wasting money. Bigger models are smarter bu
 
 ### The current lineup
 
-All four current models have a 1M-token context window, 128K max output and adaptive thinking.
+All four current models have a 1M-token **context window** (the most one request can hold, input plus output: roughly 750,000 words), a **max output** of 128K tokens (the longest single reply), and **adaptive thinking** (they reason before answering when it helps, 5.2). **Default effort** is how hard each model thinks unless you say otherwise (also 5.2).
 
 | Model | API ID | Input / output per 1M tokens | Default effort | Speed | Best for |
 |---|---|---|---|---|---|
@@ -51,7 +51,7 @@ All four current models have a 1M-token context window, 128K max output and adap
 | Sonnet 5.5 | `claude-sonnet-5-5` | $2 / $10 | high | Fast | The balanced default |
 | Haiku 5.5 | `claude-haiku-5-5` | from $0.10 / $0.50 | medium | Fastest | Classification, extraction, routing, high volume |
 
-Prices and IDs change: check the [models overview](https://platform.claude.com/docs/en/models-overview) when you build. Use the Models API (`GET /v1/models`) to read limits and capabilities in code, and read its `line` field rather than parsing the ID.
+Prices and IDs change: check the [models overview](https://platform.claude.com/docs/en/models-overview) when you build. Use the Models API (`GET /v1/models`) to read limits and capabilities in code, and read its `line` field (the model family, such as `opus`) rather than parsing the ID.
 
 ### Pick a starting point, then let your test results decide
 
@@ -64,9 +64,26 @@ Prices and IDs change: check the [models overview](https://platform.claude.com/d
 
 Anthropic's guidance offers two starting points. **Capability-first:** start on Opus 5.5 (the recommendation for most workloads), then lower effort or move down a tier as the workflow matures. **Efficiency-first:** start on Haiku 5.5 for prototypes, tight latency, cost-sensitive or high-volume simple work, and move up only when tests show a specific gap. Either way, **adjust effort before switching models**, and move only on measured results from your own test set. Fable 5.2 is for when evals still fall short at the highest effort levels.
 
+{/* more:5-costs */}
+**Worked example: tagging 1 million support tickets.** Each ticket is about 300 input tokens and the label about 20 output tokens, so the job is 300M input tokens and 20M output tokens. Using list prices (thinking would add a little more output):
+
+| Model | Input | Output | Total | With the Batch API (50% off) |
+|---|---|---|---|---|
+| Haiku 5.5 ($0.10 / $0.50) | $30 | $10 | **$40** | $20 |
+| Sonnet 5.5 ($2 / $10) | $600 | $200 | **$800** | $400 |
+| Opus 5.5 ($4 / $20) | $1,200 | $400 | **$1,600** | $800 |
+
+If Haiku passes your eval on a sample of real tickets, it does the job for about 1/40th of the Opus price. That's why the model choice is a measured decision, not a default.
+{/* /more */}
+
+
+
+
+
+
 ### Routing: a default plus an override
 
-You don't have to use one model for everything. The common production pattern sends most traffic to a balanced default and routes specific requests up or down by task type, input length or a difficulty classification.
+**Routing** (the workflow pattern from 1.2) means sending each request to a different model depending on what kind of request it is, so simple ones go to a cheap model and hard ones to a capable one. You don't have to use one model for everything. The common production pattern sends most traffic to a balanced default and routes specific requests up or down by task type, input length or a difficulty classification.
 
 - **Handles well** - matching each workload to the cheapest model that meets its quality bar
 - **Costs** - a classification step and a second model path to maintain
@@ -130,7 +147,7 @@ Choosing the model and choosing how much it reasons are set separately. Current 
   { title: 'Wasted', sub: 'lower effort', points: ['Lookups', 'Classification and routing', 'Simple extraction', 'Reformatting'] },
 ]} />
 
-More thinking means more output tokens, so more cost and latency. In a multi-turn conversation, pass thinking blocks back unchanged (Domain 6).
+More thinking means more output tokens, so more cost and latency. In a multi-turn conversation, pass **thinking blocks** (the reasoning parts of a reply) back unchanged (6.4).
 
 {/* code:5.2 */}
 **In code:** effort is one field, `output_config.effort`: `low`, `medium`, `high`, `xhigh` or `max`. Leave it out and you get the model's default (`medium` on Opus 5.5 and Haiku 5.5, `high` on the others).
@@ -186,12 +203,12 @@ const msg = await client.messages.create({
 
 ### How it works
 
-Prompt caching stores the processing of a stable **prefix** of your request so the next request with the same prefix reads it back instead of recomputing it. The prefix is built in a fixed order: **tools → system → messages**, up to and including the block marked with `cache_control`.
+Prompt caching stores the processing of a stable **prefix** of your request so the next request with the same prefix reads it back instead of recomputing it. The prefix is built in a fixed order: **tools → system → messages**, up to and including the block marked with `cache_control`. That marker is called a **breakpoint**: it means "cache everything up to here".
 
 Think of a barista who remembers your usual order: the first visit takes longer to set up, and every repeat is quick and cheap.
 
 - **Automatic** - one top-level cache_control; the breakpoint moves forward as the conversation grows · best for multi-turn chat
-- **Explicit** - cache_control on specific blocks, up to 4 breakpoints · best when sections change at different rates (tools rarely, RAG context daily)
+- **Explicit** - cache_control on specific blocks, up to 4 breakpoints · best when sections change at different rates (tools rarely, retrieved documents daily)
 
 {/* diagram */}
 <Flow caption="The cache matches an exact prefix, in this order: stable first, changing last (Exam guide: Cost and Token Management)" steps={[
@@ -214,7 +231,7 @@ Think of a barista who remembers your usual order: the first visit takes longer 
 
 | Operation | Price vs base input |
 |---|---|
-| Cache write, 5-minute TTL (default) | 1.25× |
+| Cache write, 5-minute **TTL** (time to live: how long the entry lasts; the default) | 1.25× |
 | Cache write, 1-hour TTL | 2× |
 | Cache read | 0.1× on most models; **0.05× on Opus and Sonnet 5.5**; **0.025× on Fable** |
 
@@ -226,7 +243,7 @@ The prefix must be **byte-identical**. A change at one level invalidates that le
 
 <WhenThen whenLabel="If you change…" thenLabel="…this is invalidated" rows={[
   { when: 'tool definitions', then: 'Everything: tools, system and messages' },
-  { when: 'web search or citations on/off', then: 'System and messages' },
+  { when: 'web search or citations (Claude quoting its sources) on/off', then: 'System and messages' },
   { when: 'tool_choice, or add/remove images', then: 'Messages only' },
   { when: 'a timestamp or user name near the top', then: 'Everything after it, on every call (move it below the last breakpoint)' },
 ]} />
@@ -428,7 +445,7 @@ A cache hit costs 0.05× on Sonnet 5.5: about **$0.002 per call, ≈ $20 a day**
 
 ### The Message Batches API
 
-For work that doesn't need an answer now (overnight classification, dataset backfills, eval runs, scheduled reports), the Message Batches API processes requests asynchronously at **50% off** input and output.
+For work that doesn't need an answer now (overnight classification, dataset backfills, eval runs, scheduled reports), the **Message Batches API** (often just "the Batch API") processes requests **asynchronously**, meaning you hand over the work and collect the answers later instead of waiting, at **50% off** input and output.
 
 <Flow caption="A batch job: submit, poll, collect (Exam guide: Cost and Token Management)" steps={[
   { title: 'Submit', sub: 'up to 100,000 requests or 256 MB' },
@@ -443,7 +460,7 @@ For work that doesn't need an answer now (overnight classification, dataset back
   { myth: 'A loop of synchronous calls is a batch job', reality: '"Serialisation with extra steps": you pay full price and still block. Use the Batches API, or the async client for concurrency' },
 ]} />
 
-For high volume that **does** need fast answers, use the async client (`client.async()`, returning `CompletableFuture<Message>`) for concurrency without blocking threads.
+For high volume that **does** need fast answers, use the SDK's **async client** (`client.async()`, returning `CompletableFuture<Message>`), which sends many requests at once without blocking a thread per request.
 
 {/* code:5.4 */}
 **In code:** submit many requests in one batch, each with your own `custom_id`, then read the results when the batch has ended. Results can come back in any order, so match them by `custom_id`.
@@ -556,7 +573,7 @@ In development the window rarely fills because test inputs are short. In product
 2. **Cache** stable prefixes: long system prompts, tool sets, reference documents.
 3. **Batch** anything that can wait.
 4. **Tune effort** down for simple work.
-5. **Shrink the context**: fewer tools, trimmed history, compaction (Domain 6).
+5. **Shrink the context**: fewer tools, trimmed history, **compaction** (summarising older history, 6.5).
 
 {/* code:5.5 */}
 **In code:** count tokens before you send. It's free, and uses the same inputs as a real request.

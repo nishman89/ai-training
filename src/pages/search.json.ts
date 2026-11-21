@@ -54,6 +54,7 @@ export const GET: APIRoute = async () => {
     ['Mock exam', 'mock-exam', '53 questions in 120 minutes, weighted like the real CCDV-F exam'],
   ];
   pages.push(['Glossary', 'glossary', 'Every Claude term used in the notes, in plain English']);
+  pages.push(['Exam tips', 'exam-tips', 'Practical exam tips by topic: models, evals, tokens, context, caching, tools, MCP, security, streaming, errors']);
   for (const [title, path, text] of pages) entries.push({ title, where: 'Page', path, text });
   for (const g of GLOSSARY) entries.push({ title: g.term, where: 'Glossary', path: `glossary/#${slugOf(g.term)}`, text: g.def });
   return new Response(JSON.stringify(entries), { headers: { 'Content-Type': 'application/json' } });

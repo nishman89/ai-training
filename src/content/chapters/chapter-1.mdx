@@ -37,9 +37,9 @@ import Resource from '../../components/Resource.astro';
 
 ### In plain English
 
-This domain is about getting Claude to finish jobs that take several steps. A **workflow** is a fixed recipe you write: step 1 summarise, step 2 translate. An **agent** chooses its own steps: it asks for a tool, looks at the result, decides what to do next, and repeats until the job is done.
+This domain is about getting Claude to finish jobs that take several steps. A **workflow** is a fixed recipe you write: step 1 summarise, step 2 translate. An **agent** chooses its own steps: it asks for a **tool** (a function your code runs on Claude's behalf, such as "look up an order"), looks at the result, decides what to do next, and repeats until the job is done.
 
-**Real-life example:** "Find out why order 1234 is late and email the customer." The agent looks up the order, checks the courier, drafts an email and asks a human to approve sending it. The rule is to use the simplest option that works: agents are powerful, but slower, pricier and less predictable.
+**Real-life example:** "Find out why order 1234 is late and email the customer." The agent looks up the order, checks the courier, drafts an email and asks a human to approve sending it. The rule is to use the simplest option that works: agents are powerful, but slower, pricier and less predictable. **Multi-agent** systems, where several agents split one job between them, are the most powerful and the most expensive of all.
 
 <RoleLens dev={"A Spring service that classifies each support ticket is one call; summarise-then-translate is a workflow you code as two calls; \"investigate this outage and fix the config\" is an agent. Start with the call and only move up when a step can't be decided in advance."} test={"A test-data generator that always does the same three steps is a workflow. \"Find why this flaky Selenium test fails and propose a fix\" needs an agent: it must read logs, rerun and decide what to look at next."} data={"Nightly \"extract → classify each row with Claude → load\" is a workflow: the steps never change, so put it in Airflow as fixed tasks. Only use an agent for open-ended jobs such as \"work out why yesterday's load dropped 30% of rows\"."} ba={"When a stakeholder says \"we want an AI agent\", ask whether the steps are known up front. If you could write them as a process map, it's a workflow: cheaper, testable and easier to sign off. Capture that decision in the requirements."} />
 
@@ -75,7 +75,46 @@ This domain is about getting Claude to finish jobs that take several steps. A **
 
 ### Prompt chaining
 
-A fixed sequence of calls, each using the previous output, with optional code checks ("gates") between steps. Example: write marketing copy, check it meets length and tone rules, then translate it. Use it when a task splits cleanly into steps and accuracy matters more than latency.
+Anthropic describes five standard ways to arrange Claude calls into a **workflow**. They're called **patterns** because, like design patterns in Java, they're reusable shapes you'll recognise again and again. In all five, *your code* decides the order of the steps.
+
+**Prompt chaining** is the simplest: a fixed sequence of calls, each using the previous output, with optional code checks ("gates") between steps. Example: write marketing copy, check it meets length and tone rules, then translate it. Use it when a task splits cleanly into steps and accuracy matters more than **latency** (how long the user waits).
+
+{/* more:1-chain */}
+<CodeSwitch title="Prompt chaining with a gate">
+
+```java
+String draft = ask("Write a 50-word product description for: " + product);   // step 1
+if (draft.split("\\s+").length > 60) {                                        // gate: plain code check
+    draft = ask("Shorten this to under 50 words:\n" + draft);                   // fix before moving on
+}
+String french = ask("Translate into French, keeping the tone:\n" + draft);     // step 2 uses step 1's output
+// ask(...) = one messages().create call that returns the text
+```
+
+```python
+draft = ask(f"Write a 50-word product description for: {product}")   # step 1
+if len(draft.split()) > 60:                                           # gate: plain code check
+    draft = ask(f"Shorten this to under 50 words:\n{draft}")          # fix before moving on
+french = ask(f"Translate into French, keeping the tone:\n{draft}")    # step 2 uses step 1's output
+# ask(...) = one messages.create call that returns the text
+```
+
+```typescript
+let draft = await ask(`Write a 50-word product description for: ${product}`);  // step 1
+if (draft.split(/\s+/).length > 60) {                                          // gate: plain code check
+  draft = await ask(`Shorten this to under 50 words:\n${draft}`);              // fix before moving on
+}
+const french = await ask(`Translate into French, keeping the tone:\n${draft}`); // step 2 uses step 1's output
+// ask(...) = one messages.create call that returns the text
+```
+
+</CodeSwitch>
+{/* /more */}
+
+
+
+
+
 
 {/* diagram */}
 <Tiles cols={5} caption="The five workflow patterns: you write the control flow (Exam guide: Agent Architecture)" tiles={[
@@ -90,22 +129,105 @@ A fixed sequence of calls, each using the previous output, with optional code ch
 
 ### Routing
 
-Classify the input, then send it to a specialised prompt, tool set or model. Example: route refund requests, technical questions and general queries to different handlers, or send easy questions to Haiku and hard ones to a bigger model.
+**Routing** means sorting each request into a category first, then sending it to the handler built for that category, like a phone menu that says "press 1 for billing, 2 for technical support". In practice, one quick Claude call classifies the input, and your code then sends it to a specialised prompt, tool set or model. Example: route refund requests, technical questions and general queries to different handlers, or send easy questions to Haiku and hard ones to a bigger model.
 
 ### Parallelisation
 
-Run calls at the same time and combine the results.
+**Parallelisation** means running several Claude calls at the same time and combining the results. There are two kinds:
 
 - **Sectioning** - independent subtasks at once · e.g. one call answers the user while another screens for policy issues
 - **Voting** - the same task several times, then aggregate · e.g. three reviewers flag vulnerabilities, flag if any two agree
 
+{/* more:1-parallel */}
+<CodeSwitch title="Parallelisation: three calls at once">
+
+```java
+AnthropicClientAsync async = client.async();                  // non-blocking client
+List<CompletableFuture<Message>> calls = List.of(
+    async.messages().create(review("security", code)),
+    async.messages().create(review("performance", code)),
+    async.messages().create(review("readability", code)));
+CompletableFuture.allOf(calls.toArray(new CompletableFuture[0])).join();   // wait for all three
+List<String> reviews = calls.stream().map(f -> textOf(f.join())).toList();
+```
+
+```python
+import asyncio
+aclient = anthropic.AsyncAnthropic()                          # non-blocking client
+
+async def review(aspect: str) -> str:
+    msg = await aclient.messages.create(model="claude-sonnet-5-5", max_tokens=800,
+        messages=[{"role": "user", "content": f"Review this code for {aspect} only:\n{code}"}])
+    return "".join(b.text for b in msg.content if b.type == "text")
+
+reviews = await asyncio.gather(review("security"), review("performance"), review("readability"))
+```
+
+```typescript
+const review = async (aspect: string) => {
+  const msg = await client.messages.create({ model: 'claude-sonnet-5-5', max_tokens: 800,
+    messages: [{ role: 'user', content: `Review this code for ${aspect} only:\n${code}` }] });
+  return msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+};
+const reviews = await Promise.all(['security', 'performance', 'readability'].map(review)); // all at once
+```
+
+</CodeSwitch>
+{/* /more */}
+
+
+
+
+
+
 ### Orchestrator-workers
 
-A lead model decides the subtasks **at run time**, hands them to workers, and merges the results. It looks like parallelisation, but the subtasks aren't predefined. Anthropic reports multi-agent research runs using roughly **15× the tokens** of a single chat, so use it only for broad work that genuinely splits into independent parts. For tightly coupled work like coding, a single agent with good context wins.
+One lead call, the **orchestrator**, decides the subtasks **at run time**, hands each one to a separate call (a **worker**), and merges what they return. It looks like parallelisation, but the subtasks aren't predefined. Anthropic reports multi-agent research runs using roughly **15× the tokens** of a single chat, so use it only for broad work that genuinely splits into independent parts. For tightly coupled work like coding, a single agent with good context wins.
 
 ### Evaluator-optimizer
 
-One call generates, another critiques against clear criteria, and the loop repeats until the critique passes. Use it when you can state what "good" looks like and iteration measurably improves the result, such as literary translation or a search that needs several rounds.
+One call generates an answer (the **optimizer**), another checks it against clear criteria (the **evaluator**), and the loop repeats until the check passes. Use it when you can state what "good" looks like and iteration measurably improves the result, such as literary translation or a search that needs several rounds.
+
+{/* more:1-evalopt */}
+<CodeSwitch title="Evaluator-optimizer: write, check, repeat">
+
+```java
+String draft = ask("Translate into formal German:\n" + text);
+for (int round = 0; round < 3; round++) {                         // always cap the rounds
+    String verdict = ask("Check this translation against the original. Reply PASS, or list the problems.\n"
+                       + "<original>" + text + "</original><translation>" + draft + "</translation>");
+    if (verdict.startsWith("PASS")) break;
+    draft = ask("Improve the translation to fix these problems:\n" + verdict + "\n\n" + draft);
+}
+```
+
+```python
+draft = ask(f"Translate into formal German:\n{text}")
+for _ in range(3):                                                # always cap the rounds
+    verdict = ask("Check this translation against the original. Reply PASS, or list the problems.\n"
+                  f"<original>{text}</original><translation>{draft}</translation>")
+    if verdict.startswith("PASS"):
+        break
+    draft = ask(f"Improve the translation to fix these problems:\n{verdict}\n\n{draft}")
+```
+
+```typescript
+let draft = await ask(`Translate into formal German:\n${text}`);
+for (let round = 0; round < 3; round++) {                         // always cap the rounds
+  const verdict = await ask('Check this translation against the original. Reply PASS, or list the problems.\n' +
+    `<original>${text}</original><translation>${draft}</translation>`);
+  if (verdict.startsWith('PASS')) break;
+  draft = await ask(`Improve the translation to fix these problems:\n${verdict}\n\n${draft}`);
+}
+```
+
+</CodeSwitch>
+{/* /more */}
+
+
+
+
+
 
 {/* code:1.2 */}
 **In code:** routing is just a cheap classification call, then a normal `switch` in your own code.
@@ -194,7 +316,7 @@ switch (category) {
 
 ### The loop
 
-An agent is a multi-step tool-use loop with managed context and a defined goal.
+The **agent loop** is the code that makes an agent work. You call Claude with the conversation so far and a list of tools. If Claude's reply says it wants a tool (its `stop_reason`, the field that says why it stopped, is `tool_use`), your code runs that tool, adds the result to the conversation as a `tool_result`, and calls Claude again. When Claude stops asking for tools, the job is done.
 
 <Cycle center="Agent loop" caption="Loop while stop_reason is tool_use; stop on any other stop reason or an exit condition (Exam guide: Agent Construction with Claude)" steps={[
   { title: 'Call Claude', sub: 'history + tools', tone: 'dark' },
@@ -207,7 +329,7 @@ An agent is a multi-step tool-use loop with managed context and a defined goal.
 
 ### The agent loop in code
 
-This is the raw loop. In **Python** (or TypeScript) the Claude Agent SDK can run this loop for you; it isn't available for **Java**, where you write the loop yourself or use the Java SDK's beta tool runner.
+This is the raw loop. In **Python** (or TypeScript) the **Claude Agent SDK**, Anthropic's library that runs this loop for you (see 1.4), can do it instead. There's no Agent SDK for **Java**: you write the loop yourself, or use the Java SDK's beta *tool runner*, a helper that runs the loop for simple cases.
 
 <CodeSwitch title="The agent loop">
 
@@ -305,7 +427,56 @@ Builder method names can differ slightly between SDK versions. What the exam tes
 
 ### Exit conditions and human gates
 
-Every agent needs a clear stopping rule: a goal check, a maximum number of turns and a token or cost budget. Place human approval where the worst case is expensive.
+An **exit condition** is a rule that stops the loop. Every agent needs one: a goal check, a maximum number of turns and a token or cost budget. A **human gate** is a point where a person must approve before the agent continues. Place one where the worst case is expensive.
+
+{/* more:1-exit */}
+<CodeSwitch title="Exit conditions in the loop">
+
+```java
+long tokensUsed = 0;
+for (int turn = 0; turn < 15; turn++) {                              // 1. maximum turns
+    Message reply = client.messages().create(paramsFor(history));
+    tokensUsed += reply.usage().inputTokens() + reply.usage().outputTokens();
+    if (tokensUsed > 200_000) { escalate("Budget exceeded"); break; }   // 2. token budget
+    if (!reply.stopReason().equals(Optional.of(StopReason.TOOL_USE))) break; // 3. goal reached: no more tools
+    if (wantsRefundOver(reply, 50)) { awaitHumanApproval(reply); }      // human gate before a costly action
+    runToolsAndAppend(reply, history);
+}
+```
+
+```python
+tokens_used = 0
+for turn in range(15):                                               # 1. maximum turns
+    reply = client.messages.create(**params_for(history))
+    tokens_used += reply.usage.input_tokens + reply.usage.output_tokens
+    if tokens_used > 200_000:                                        # 2. token budget
+        escalate("Budget exceeded"); break
+    if reply.stop_reason != "tool_use":                              # 3. goal reached: no more tools
+        break
+    if wants_refund_over(reply, 50):                                 # human gate before a costly action
+        await_human_approval(reply)
+    run_tools_and_append(reply, history)
+```
+
+```typescript
+let tokensUsed = 0;
+for (let turn = 0; turn < 15; turn++) {                              // 1. maximum turns
+  const reply = await client.messages.create(paramsFor(history));
+  tokensUsed += reply.usage.input_tokens + reply.usage.output_tokens;
+  if (tokensUsed > 200_000) { escalate('Budget exceeded'); break; }  // 2. token budget
+  if (reply.stop_reason !== 'tool_use') break;                       // 3. goal reached: no more tools
+  if (wantsRefundOver(reply, 50)) await awaitHumanApproval(reply);   // human gate before a costly action
+  await runToolsAndAppend(reply, history);
+}
+```
+
+</CodeSwitch>
+{/* /more */}
+
+
+
+
+
 
 <WhenThen whenLabel="Insert a human check…" thenLabel="…because" rows={[
   { when: 'Before a destructive tool call (write, delete, send, pay)', then: 'High risk: the action can\'t be undone' },
@@ -341,13 +512,13 @@ turn 4  → tool_use get_courier_status  ← tool_result []
 turn 212 → still going at 06:00, 1.9M tokens
 ```
 
-What was missing: an **iteration cap** (e.g. stop at 15 turns), a **budget**, and `is_error: true` on the failed tool so Claude would tell the customer instead of retrying forever.
+What was missing: an **iteration cap** (e.g. stop at 15 turns), a **budget**, and `is_error: true` on the failed tool (the flag that tells Claude a tool failed, see 8.1) so Claude would tell the customer instead of retrying forever.
 
 </PictureIt>
 
 ### How many tools to give an agent
 
-Routing depends on how tools are described and how many are registered. Too many overlapping tools make choices erratic; too few and the agent invents a path or returns an incomplete result. Start with the minimum set and add a tool only for a specific gap.
+How well an agent picks the right tool depends on how the tools are described and how many you give it. Too many overlapping tools make choices erratic; too few and the agent invents a path or returns an incomplete result. Start with the minimum set and add a tool only for a specific gap.
 
 <Gotcha
   title={"The agent that never stopped"}
@@ -375,19 +546,73 @@ Routing depends on how tools are described and how many are registered. Too many
 
 ### Who runs the agent loop: you, the SDK or Anthropic?
 
+There are three ways to build the loop from 1.3. The **raw Messages API** way: you write the loop yourself against Claude's basic API. The **Agent SDK** way: a library runs the loop inside your own program. The **Claude Managed Agents** way: Anthropic runs the whole agent on its own servers, in a **sandbox** (an isolated environment where the agent's actions can't touch anything else).
+
 | | Raw Messages API loop | Agent SDK | Claude Managed Agents |
 |---|---|---|---|
 | **Who runs the loop** | You | The SDK, inside your process | Anthropic, in its sandbox |
 | **What you own** | Everything | Tool execution and the app around it | The app layer and the agent definition |
 | **Choose when** | You need full control, or have constraints a library can't meet | You want a ready loop, context handling and tools in your own environment (Python or TypeScript; no Java version) | You want long-running execution and a managed sandbox |
-| **Watch out** | You maintain all of it | Set `settingSources` explicitly, or CLAUDE.md and skills won't load | Public beta; sessions stored server-side, so **not** eligible for Zero Data Retention or HIPAA |
+| **Watch out** | You maintain all of it | Set `settingSources` explicitly: whether CLAUDE.md and skills load by default has changed between SDK versions | Public beta; sessions stored server-side, so **not** eligible for Zero Data Retention (Anthropic keeping none of your data) or HIPAA (the US health-data law) |
 
 Whichever path you take, the four steps are the same: register tools, scope the system prompt, run the tool loop, define exit conditions.
+
+{/* more:1-sdk */}
+**The Agent SDK in code:** compare this with the hand-written loop in 1.3. The SDK runs the loop, the built-in tools (read files, edit, run commands) and the context management for you.
+
+<CodeSwitch title="An agent with the Agent SDK">
+
+```java
+// There is no Agent SDK for Java.
+// Options: write the loop yourself (see "The agent loop" in 1.3),
+// use the Java SDK's beta tool runner for simple cases,
+// or call a Python/TypeScript Agent SDK service from your Java app.
+```
+
+```python
+import asyncio
+from claude_agent_sdk import query, ClaudeAgentOptions, ResultMessage
+
+async def main():
+    options = ClaudeAgentOptions(
+        allowed_tools=["Read", "Edit", "Glob"],   # pre-approved tools
+        setting_sources=["project"],              # load CLAUDE.md and project skills: set it explicitly
+        max_turns=20,                             # an exit condition
+    )
+    async for message in query(prompt="Find and fix the bug in utils.py", options=options):
+        if isinstance(message, ResultMessage) and message.subtype == "success":
+            print(message.result)
+
+asyncio.run(main())
+```
+
+```typescript
+import { query } from '@anthropic-ai/claude-agent-sdk';
+
+for await (const message of query({
+  prompt: 'Find and fix the bug in utils.ts',
+  options: {
+    allowedTools: ['Read', 'Edit', 'Glob'],   // pre-approved tools
+    settingSources: ['project'],              // load CLAUDE.md and project skills: set it explicitly
+    maxTurns: 20,                             // an exit condition
+  },
+})) {
+  if (message.type === 'result') console.log(message);
+}
+```
+
+</CodeSwitch>
+{/* /more */}
+
+
+
+
+
 
 <Gotcha
   title={"The skill that silently did nothing"}
   scenario={"A code-review skill works in Claude Code. The same agent, run headless through the Agent SDK in CI, ignores it."}
-  gotcha={"`settingSources` was never set, so the SDK didn't load filesystem settings: no CLAUDE.md, no skills, and no error."}
+  gotcha={"`settingSources` was never set. On the SDK version they used, that meant no filesystem settings: no CLAUDE.md, no skills, and no error. The default has changed between versions, which is exactly why you shouldn't rely on it."}
   fix={"Set `settingSources` (`setting_sources` in Python) explicitly, and confirm in a test that the skill fires."}
 />
 
@@ -418,7 +643,7 @@ Whichever path you take, the four steps are the same: register tools, scope the 
 
 ### Memory scopes
 
-Choose at design time what the agent should know when a new session starts.
+**Long-horizon** work means tasks that run for hours or across many separate conversations (**sessions**). Because the API remembers nothing between calls, an agent only "remembers" what you choose to give it. Its **memory scope** is that choice: decide at design time what the agent should know when a new session starts.
 
 | Scope | What persists | Cost | Use when | You lose |
 |---|---|---|---|---|
@@ -426,6 +651,49 @@ Choose at design time what the agent should know when a new session starts.
 | External storage | State in a database, read at start or on demand | Retrieval latency + code | State must survive sessions or be shared | Nothing (beyond latency) |
 | Summarised | A condensed summary injected next session | Cheaper than replaying history | Long-running conversational agents | Any detail the summary dropped |
 | Stateless | Nothing | None | Independent task runs and pipelines | All prior context |
+
+{/* more:1-memory */}
+**Example of external storage:** the agent keeps a small progress file. It reads it at the start of every session and updates it after every step, so a crash or a new session picks up where it left off.
+
+<CodeSwitch title="A progress file the agent reads and writes">
+
+```java
+Path progress = Path.of("progress.json");
+String state = Files.exists(progress) ? Files.readString(progress) : "{\"done\": [], \"next\": \"start\"}";
+
+String system = "You are migrating 40 database tables. Your progress so far:\n" + state
+              + "\nContinue from 'next'. After each table, call save_progress.";
+// ... run the agent loop; the save_progress tool handler does:
+Files.writeString(progress, newStateJson);     // e.g. {"done":["users","orders"],"next":"invoices"}
+```
+
+```python
+progress = pathlib.Path("progress.json")
+state = progress.read_text() if progress.exists() else '{"done": [], "next": "start"}'
+
+system = (f"You are migrating 40 database tables. Your progress so far:\n{state}\n"
+          "Continue from 'next'. After each table, call save_progress.")
+# ... run the agent loop; the save_progress tool handler does:
+progress.write_text(new_state_json)            # e.g. {"done":["users","orders"],"next":"invoices"}
+```
+
+```typescript
+const state = existsSync('progress.json') ? readFileSync('progress.json', 'utf8')
+                                           : '{"done": [], "next": "start"}';
+
+const system = `You are migrating 40 database tables. Your progress so far:\n${state}\n` +
+               "Continue from 'next'. After each table, call save_progress.";
+// ... run the agent loop; the save_progress tool handler does:
+writeFileSync('progress.json', newStateJson);  // e.g. {"done":["users","orders"],"next":"invoices"}
+```
+
+</CodeSwitch>
+{/* /more */}
+
+
+
+
+
 
 {/* diagram */}
 <Cycle caption="Long-horizon work: state lives outside the context window (Exam guide: Agent Patterns and Frameworks)" center="Progress file / memory" steps={[
@@ -446,7 +714,7 @@ Choose at design time what the agent should know when a new session starts.
 
 ### Subagents for long tasks
 
-A subagent gets a scoped task, the minimum context it needs, the tools for that task and clear exit conditions. It works in its own context window and returns only a summary, which keeps the parent's context small. You lose visibility of how it reached its answer.
+A **subagent** is a second agent that the main agent starts for one sub-task. It gets that task, the minimum context it needs, the tools for that task and clear exit conditions. It works in its own context window and returns only a summary, which keeps the parent's context small. You lose visibility of how it reached its answer.
 
 <Exercise title="Workflow, agent or neither?" id="exercise-pattern">
 
@@ -458,7 +726,7 @@ Pick the simplest pattern for each:
 
 <div slot="answer">
 
-1. **A single call per item, run through the Batch API.** There are no steps to decide.
+1. **A single call per item, run through the Batch API** (Anthropic's half-price service for jobs nobody is waiting on, see 5.4). There are no steps to decide.
 2. **Routing workflow.** Classify, then send billing to the specialist prompt and tools.
 3. **Agent.** The path depends on what each query reveals. Add a human gate before any fix is applied.
 

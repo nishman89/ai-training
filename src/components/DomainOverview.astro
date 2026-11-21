@@ -1,0 +1,29 @@
+---
+/** "This domain in plain English": the purpose of a domain, how you build it, what to watch, and an example. */
+import { OVERVIEWS } from '../data/domain-overviews';
+interface Props { chapter: number; }
+const o = OVERVIEWS[Astro.props.chapter];
+---
+{o && (
+  <section class="card ov" data-testid="domain-overview">
+    <span class="eyebrow">This domain in plain English</span>
+    <p class="ov__what">{o.what}</p>
+    <div class="ov__grid">
+      <div><h3>🔧 What building it involves</h3><p>{o.setup}</p></div>
+      <div><h3>⚠️ What to watch out for</h3><ul>{o.watch.map((w) => <li>{w}</li>)}</ul></div>
+    </div>
+    <p class="ov__ex"><strong>For example:</strong>{' '}{o.example}</p>
+  </section>
+)}
+
+<style>
+  .ov { margin-top: 1rem; border-left: 8px solid var(--charcoal); }
+  .ov__what { font: 600 1.15rem/1.5 var(--font-body); margin: 0.3rem 0 1rem; color: var(--charcoal); }
+  .ov__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .ov__grid > div { background: var(--bg); border-radius: 12px; padding: 0.8rem 1rem; }
+  .ov h3 { margin: 0 0 0.4rem; font-size: 1rem; }
+  .ov p, .ov ul { margin: 0; line-height: 1.5; }
+  .ov ul { padding-left: 1.1rem; }
+  .ov__ex { margin-top: 1rem !important; padding: 0.7rem 1rem; border-radius: 12px; background: var(--pink-tint); }
+  @media (max-width: 40rem) { .ov__grid { grid-template-columns: 1fr; } }
+</style>

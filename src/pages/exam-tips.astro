@@ -1,0 +1,93 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHead from '../components/PageHead.astro';
+import { TIP_CARDS } from '../data/exam-tips';
+import { getSummaries } from '../lib/summaries';
+import { url } from '../lib/site';
+
+const domains = await getSummaries();
+const where = new Map(domains.flatMap((d) => d.sections.map((s) => [s.number, { href: `${url(`chapters/${d.number}`)}#${s.slug}`, title: s.title }])));
+const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const fmt = (s: string) => esc(s).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/`([^`]+)`/g, '<code>$1</code>');
+---
+<BaseLayout title="Exam tips" description="Practical CCDV-F exam tips, topic by topic, each linked to the notes that explain it.">
+  <PageHead eyebrow="Exam preparation" title="Exam tips">
+    <p class="lead">The practical tips from the course's exam-preparation deck, one card per topic. Each card links (📖) to the part of the
+      notes that explains it in full. Where a tip was out of date or needed correcting against Anthropic's current docs, the card has a
+      <span class="mini-upd">✏️ Updated</span> note.</p>
+    <nav class="jump no-print" aria-label="Jump to a topic">
+      {TIP_CARDS.map((c) => <a href={`#${c.id}`}><span aria-hidden="true">{c.icon}</span> {c.title}</a>)}
+    </nav>
+  </PageHead>
+
+  <div class="container">
+    <div class="tips">
+      {TIP_CARDS.map((c, n) => (
+        <section class="card tip" id={c.id} data-testid={`tip-${c.id}`}>
+          <header class="tip__head">
+            <span class="tip__no">{n + 1}</span>
+            <div>
+              <h2><span aria-hidden="true">{c.icon}</span> {c.title}</h2>
+              {c.question && <p class="tip__q">{c.question}</p>}
+            </div>
+          </header>
+          <ul class="tip__list">
+            {c.tips.map((t) => (
+              <li><span set:html={fmt(t.text)} />
+                {t.sub && <ul>{t.sub.map((s) => <li set:html={fmt(s)} />)}</ul>}
+              </li>
+            ))}
+          </ul>
+          {c.table && (
+            <div class="tip__table">
+              <table>
+                <thead><tr>{c.table.head.map((h) => <th>{h}</th>)}</tr></thead>
+                <tbody>{c.table.rows.map((r) => <tr>{r.map((cell, i) => (i === 0 ? <th scope="row">{cell}</th> : <td>{cell}</td>))}</tr>)}</tbody>
+              </table>
+            </div>
+          )}
+          {c.updated && (
+            <div class="tip__upd">
+              <p class="tip__upd-h">✏️ Updated</p>
+              {c.updated.map((u) => <p set:html={fmt(u)} />)}
+            </div>
+          )}
+          {c.read.length > 0 && (
+            <p class="tip__read"><span>📖 Read more:</span>
+              {c.read.map((r) => where.get(r) && <a href={where.get(r)!.href}>{r} {where.get(r)!.title}</a>)}
+            </p>
+          )}
+          {c.id === 'study' && <p class="tip__read"><span>📖 See also:</span><a href={url('summaries')}>Summaries</a><a href={url('mock-exam')}>Mock exam and the official sample questions</a></p>}
+        </section>
+      ))}
+    </div>
+  </div>
+</BaseLayout>
+
+<style>
+  .lead { max-width: 52rem; }
+  .mini-upd { display: inline-block; padding: 0 0.5rem; border-radius: 999px; background: #fff4d6; color: #7a5200; font-weight: 700; font-size: 0.85rem; }
+  .jump { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1rem; }
+  .jump a { padding: 0.3rem 0.75rem; border-radius: 999px; background: var(--surface); box-shadow: var(--shadow); font-weight: 700; font-size: 0.88rem; text-decoration: none; color: var(--charcoal); }
+  .jump a:hover { background: var(--pink); color: #fff; }
+  .tips { display: grid; gap: 1.25rem; margin: 2rem 0 3rem; }
+  .tip { margin: 0; scroll-margin-top: 6rem; border-top: 6px solid var(--pink); }
+  .tip__head { display: flex; gap: 0.9rem; align-items: flex-start; margin-bottom: 0.75rem; }
+  .tip__no { flex: none; display: grid; place-items: center; width: 2.2rem; height: 2.2rem; border-radius: 50%; background: var(--charcoal); color: #fff; font: 700 1rem var(--font-head); }
+  .tip h2 { margin: 0.1rem 0 0; font-size: 1.35rem; }
+  .tip__q { margin: 0.2rem 0 0; color: var(--grey); font-style: italic; }
+  .tip__list { margin: 0; padding-left: 1.25rem; display: grid; gap: 0.45rem; line-height: 1.55; }
+  .tip__list ul { margin: 0.3rem 0 0; padding-left: 1.2rem; display: grid; gap: 0.2rem; }
+  .tip__table { overflow-x: auto; margin: 1rem 0 0; }
+  .tip__table table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+  .tip__table th, .tip__table td { text-align: left; padding: 0.55rem 0.7rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .tip__table thead th { background: var(--charcoal); color: #fff; }
+  .tip__table tbody th { white-space: nowrap; }
+  .tip__upd { margin: 1rem 0 0; padding: 0.7rem 1rem; border-radius: 12px; background: #fff4d6; border-left: 5px solid #e0a800; }
+  .tip__upd p { margin: 0.2rem 0 0; line-height: 1.5; }
+  .tip__upd .tip__upd-h { margin: 0; font-weight: 800; color: #7a5200; }
+  .tip__read { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin: 1rem 0 0; font-size: 0.9rem; }
+  .tip__read span { font-weight: 700; color: var(--grey); }
+  .tip__read a { padding: 0.2rem 0.65rem; border-radius: 999px; background: var(--pink-tint); color: var(--pink-dark); font-weight: 700; text-decoration: none; }
+  .tip__read a:hover { background: var(--pink); color: #fff; }
+</style>

@@ -33,11 +33,31 @@ import Resource from '../../components/Resource.astro';
 
 ### In plain English
 
-Claude Code is Claude working as a coding assistant inside your project folder. It can read files, write code and run commands, but asks permission first (how often depends on the permission mode). You give it standing project rules in a file called CLAUDE.md, and you can add automatic checks ("hooks") that always run, like "run the tests after every edit" or "never touch the secrets file".
+**Claude Code** is Anthropic's coding agent: Claude working as a coding assistant inside your project folder, from your terminal or IDE. It can read files, write code and run commands, but asks permission first (how often depends on the **permission mode**, see 3.2). You give it standing project rules in a file called CLAUDE.md, and you can add automatic checks ("hooks") that always run, like "run the tests after every edit" or "never touch the secrets file".
+
+{/* more:3-claudemd */}
+**Example CLAUDE.md** for a Java service (kept short on purpose: every line costs context in every session):
+
+```markdown
+# Orders service
+- Build and test: `./mvnw -q verify`
+- Java 21, Spring Boot. Use records for DTOs, AssertJ for assertions.
+- Data access goes through the repository classes in `src/main/java/.../repo/`.
+- Never edit files in `db/migrations/`: add a new migration instead.
+- Run the tests after every change and fix failures before moving on.
+```
+{/* /more */}
+
+
+
+
+
 
 <RoleLens dev={"Claude Code is an agent in your terminal: it reads the repo, edits files and runs `mvn test` or `npm test` itself, asking permission before risky actions."} test={"Ask it to \"write REST Assured tests for this controller and run them until green\". It loops on the real test output, so the tests it hands back have actually run."} data={"Useful for SQL and dbt models: \"add a test for null customer_ids and run dbt test\". It reads the project, writes the test and runs it."} ba={"Point it at a repo and ask \"explain what this service does in business terms\" or \"which code implements the refund rule?\". It's good for impact analysis."} />
 
 ### Explore, plan, then code
+
+The recommended way to work is to let Claude read and understand the code first, then describe what it intends to change, and only edit once you've agreed. **Plan mode** enforces this: Claude can read but can't change anything until you approve its plan.
 
 <Flow caption="The sequence matters: plan mode holds Claude in exploration until you approve (Exam guide: Claude Code Operation)" steps={[
   { title: 'Explore', sub: 'read files, trace logic' },
@@ -46,7 +66,26 @@ Claude Code is Claude working as a coding assistant inside your project folder. 
   { title: 'Code', sub: 'edit and run' },
 ]} />
 
-The same agent loop is available programmatically through the Agent SDK (Python and TypeScript), with the same permission model.
+Under the hood, Claude Code is the agent loop from 1.3. The same loop is available to your own programs through the **Agent SDK** (Python and TypeScript, see 1.4), with the same permission model.
+
+{/* more:3-headless */}
+**Headless mode** runs Claude Code without the interactive screen, for scripts and CI. `-p` (print) takes one prompt, runs it to completion and prints the result:
+
+```bash
+# In a CI job: review the diff, allow only read tools and the test command, get JSON back
+claude -p "Review the changes in this branch and list any bugs" \
+  --allowedTools "Read" "Grep" "Bash(./mvnw -q test:*)" \
+  --output-format json > review.json
+
+# Start an interactive session in plan mode (read-only until you approve a plan)
+claude --permission-mode plan
+```
+{/* /more */}
+
+
+
+
+
 
 <SectionSummary points={[
   "Claude Code runs the agent loop in your terminal: explore, plan, then code.",
@@ -66,14 +105,16 @@ The same agent loop is available programmatically through the Agent SDK (Python 
 
 ### Pick the mode by risk, not speed
 
+A **permission mode** sets how much Claude Code may do without asking you first. The more it can do unasked, the faster it works and the more damage a mistake can cause.
+
 | Mode | Auto-approves | Still gated | Use for |
 |---|---|---|---|
 | `default` | Reads | Edits and shell commands | New or unfamiliar codebases |
 | `acceptEdits` | Reads, edits and common file commands in the working dir | Other shell commands, writes outside the dir, protected paths | Trusted local work where shell still needs an eye |
 | `plan` | Reads only | Everything until you approve a plan | Sensitive or unfamiliar code |
-| `auto` | Most actions, after a classifier reviews each one | Deploys, mass deletes, credential access, force-push | Long tasks with fewer prompts; the built-in default in recent versions (a classifier, not a safety guarantee) |
-| `dontAsk` | Only pre-approved tools | Everything else, auto-denied | Locked-down CI and scripts |
-| `bypassPermissions` | Everything | Almost nothing | Disposable containers or VMs only, never a live workstation |
+| `auto` | Most actions, after a **classifier** (a separate AI check) reviews each one | Deploys, mass deletes, credential access, force-push | Long tasks with fewer prompts; the built-in default in recent versions (a classifier, not a safety guarantee) |
+| `dontAsk` | Only pre-approved tools | Everything else, auto-denied | Locked-down **CI** (continuous integration: your automated build server) and scripts |
+| `bypassPermissions` | Everything | Almost nothing | Disposable **containers** or virtual machines only (throwaway environments you can wipe), never a live workstation |
 
 {/* diagram */}
 <Flow caption="Settings layers: later layers override earlier ones, and enterprise wins (Exam guide: Claude Code Operation)" steps={[
@@ -87,6 +128,8 @@ The same agent loop is available programmatically through the Agent SDK (Python 
 
 ### Settings layers
 
+Claude Code reads its settings, including **permission rules** (lists of actions that are always allowed or always blocked), from up to four files. Each layer can override the one before it.
+
 | Level | File | Applies to |
 |---|---|---|
 | User | `~/.claude/settings.json` | All your projects |
@@ -94,7 +137,7 @@ The same agent loop is available programmatically through the Agent SDK (Python 
 | Local | `.claude/settings.local.json` (git-ignored) | Your overrides for one project |
 | Enterprise | Managed settings, set by admins | Everyone; can't be overridden |
 
-**Deny beats allow**, and an enterprise deny can't be overridden, even in bypass mode. Put the human gate where the worst case is hard to undo: the agent's work is an input to a human decision on sensitive code, not a replacement for one.
+**Deny beats allow**: if one rule allows an action and another denies it, it's denied. An enterprise deny can't be overridden, even in bypass mode. Put the human gate where the worst case is hard to undo: the agent's work is an input to a human decision on sensitive code, not a replacement for one.
 
 {/* code:3.2 */}
 **In practice:** permissions live in `.claude/settings.json`. Deny rules always win.
@@ -140,6 +183,8 @@ The same agent loop is available programmatically through the Agent SDK (Python 
 
 ### Where each kind of rule goes
 
+**Durable context** means instructions that persist from one session to the next, so you don't have to retype them into every conversation. Claude Code has five places to put them, and each loads at a different time and costs a different amount of the context window.
+
 <Tiles cols={5} caption="Five mechanisms, five jobs (Exam guide: Claude Code Operation)" tiles={[
   { title: 'CLAUDE.md', sub: 'every session, always' },
   { title: 'Rules', sub: 'when a path matches' },
@@ -151,16 +196,18 @@ The same agent loop is available programmatically through the Agent SDK (Python 
 | Mechanism | Loads | Context cost | Belongs here |
 |---|---|---|---|
 | CLAUDE.md | At every session start (`/init` drafts one) | Constant; dilutes as it grows | Universal rules, build and test commands |
-| `.claude/rules` | When a file matches its `paths` glob | Only when triggered | Path-specific guidance |
-| Skills (`SKILL.md`) | Description at start, body on demand | Only when used | Reusable procedures; also replaces custom slash commands |
-| Hooks | At lifecycle events, as your script | Minimal | Guardrails, side effects, audit logs |
+| `.claude/rules` | When a file matches its `paths` **glob** (a file pattern, such as `src/data/**`) | Only when triggered | Path-specific guidance |
+| Skills (`SKILL.md`) | Description at start, body on demand | Only when used | Reusable procedures; also replaces custom **slash commands** (commands you type with a `/`, such as `/init`) |
+| Hooks | At set moments (events, below), as your script | Minimal | Guardrails, side effects, audit logs |
 | Subagents | Own context; returns a summary | Keeps the main context small | Exploration and parallel work |
 
-CLAUDE.md is a working set of rules, not an append log: every line weakens the others. Past a few hundred lines, audit it. Instructions are **probabilistic**; hooks are **guarantees**. If a rule must always hold, make it a hook. Custom subagents don't inherit your skills unless they're listed in the subagent's definition.
+A **subagent** here is a helper agent with its own separate context (as in 1.5). CLAUDE.md is a working set of rules, not an append log: every line weakens the others. Past a few hundred lines, audit it. Instructions are **probabilistic**; hooks are **guarantees**. If a rule must always hold, make it a hook. Custom subagents don't inherit your skills unless they're listed in the subagent's definition.
 
 <RoleLens dev={"`CLAUDE.md` holds the repo's standing instructions: build commands, conventions, \"use AssertJ, not JUnit asserts\". It's read at the start of every session."} test={"Put your test conventions in `CLAUDE.md`: Page Object pattern, naming, where fixtures live. Every generated test then follows them."} data={"Document the warehouse conventions there: schema naming, \"never `SELECT *` in models\", how to run the pipeline locally."} ba={"`CLAUDE.md` is effectively a living definition of done for the AI. A BA can help write the domain glossary section."} />
 
 ### Hook events
+
+A **hook** is your own script that Claude Code runs automatically at a set moment, called an **event**. Because your code runs it, not the model, it always happens. These are the main events:
 
 <WhenThen whenLabel="Event" thenLabel="Typical use" rows={[
   { when: 'PreToolUse', then: 'Block an action before it runs (exit code 2), e.g. writes to .env or credentials in .mcp.json' },
@@ -229,9 +276,30 @@ fi
 
 ### Skills, commands and plugins
 
-- **Skill** - a SKILL.md in .claude/skills · loads when its description matches, or by name · the same skill can run in Claude Code, the API (code execution container) and the Agent SDK (set settingSources)
-- **Custom command** - a named, explicit entry point · now written as a skill (set disable-model-invocation to stop automatic use) · the old .claude/commands folder is legacy
-- **Plugin** - a versioned bundle of skills, hooks, subagents and MCP servers · installed from a marketplace in one step · admins can deploy org-wide
+These are three ways to package a setup so the rest of your team (or your whole organisation) gets the same behaviour, from smallest to biggest.
+
+- **Skill** - a SKILL.md in .claude/skills · loads when its description matches, or by name · the same skill can run in Claude Code, the API (inside Anthropic's code execution sandbox) and the Agent SDK (set settingSources)
+- **Custom command** - a named command you run on purpose, such as `/release-notes` · now written as a skill (set disable-model-invocation in the skill file so Claude never runs it on its own) · the old .claude/commands folder is legacy
+- **Plugin** - a versioned bundle of skills, hooks, subagents and MCP servers (connectors to other systems, Domain 8) · installed in one step from a **marketplace** (a catalogue of plugins) · admins can deploy org-wide
+
+{/* more:3-skill */}
+**Example skill** (`.claude/skills/release-notes/SKILL.md`). Only the `description` loads at session start; the rest loads when a request matches it:
+
+```markdown
+---
+name: release-notes
+description: Draft release notes from the commits since the last tag. Use when asked for release notes or a changelog.
+---
+1. Run `git describe --tags --abbrev=0` to find the last tag.
+2. Run `git log <tag>..HEAD --oneline` and group commits into Features, Fixes and Chores.
+3. Write the notes in `RELEASE_NOTES.md`, newest version first, one line per change.
+```
+{/* /more */}
+
+
+
+
+
 
 {/* diagram */}
 <Compare caption="Three ways to share a setup, from smallest to biggest (Exam guide: Claude Code Operation)" columns={[
@@ -244,7 +312,7 @@ fi
 
 ### Make it portable
 
-A plugin that hard-codes `/Users/you/...` works for its author and fails for everyone else. Use `$CLAUDE_PROJECT_DIR` for project scripts and `${CLAUDE_PLUGIN_ROOT}` for scripts inside the plugin, bundle every file the plugin depends on, document and validate the environment variables it needs, and test the install on a clean machine. A deny rule or hook you relied on locally only travels with the plugin if it's bundled.
+A plugin that hard-codes `/Users/you/...` works for its author and fails for everyone else. Use the environment variables Claude Code sets for you instead: `$CLAUDE_PROJECT_DIR` (the project's folder) for project scripts and `${CLAUDE_PLUGIN_ROOT}` (the plugin's install folder) for scripts inside the plugin, bundle every file the plugin depends on, document and validate the environment variables it needs, and test the install on a clean machine. A deny rule or hook you relied on locally only travels with the plugin if it's bundled.
 
 <Exercise title="Where does it go?" id="exercise-where">
 

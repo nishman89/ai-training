@@ -1,0 +1,183 @@
+/**
+ * Exam tips from the course's "Developer Foundation: essential knowledge, practical tips" deck, restructured.
+ * Wording is tidied; anything the deck got wrong or out of date against current Anthropic docs is marked `updated`.
+ * `read` lists the sections of the notes that explain each card.
+ */
+export interface Tip { text: string; sub?: string[]; }
+export interface TipCard {
+  id: string; icon: string; title: string; question?: string;
+  tips: Tip[];
+  table?: { head: string[]; rows: string[][] };
+  updated?: string[];
+  read: string[];
+}
+
+export const TIP_CARDS: TipCard[] = [
+  {
+    id: 'study', icon: '📚', title: 'How to study',
+    tips: [
+      { text: 'Concentrate on the five Claude modules of the course:', sub: ['MSO Foundations', 'Production-Grade Prompting, Agents & Tool Use', 'Claude Code, MCP & Integration', 'Production Engineering, Evals & Security', 'Accelerators & IP Contribution'] },
+      { text: 'Use the prerequisites for reference, not as the main study material.' },
+      { text: 'Read the summary at the end of each learning page. (This site has them all on one page: Summaries.)' },
+      { text: 'Do a practice paper early, to find your weak areas while there is time to fix them. The deck suggests "Claude Certified Developer - Foundations [Mock Exams 2026]" on Udemy Business. It is unofficial, so check any surprising answer against the docs.' },
+    ],
+    updated: ['The only official practice items are the three sample questions in the exam guide (see the Mock exam page).'],
+    read: [],
+  },
+  {
+    id: 'models', icon: '🧠', title: 'The models', question: 'What are the different models?',
+    tips: [
+      { text: 'From most to least capable: **Fable** (deepest thinking, most expensive) → **Opus** → **Sonnet** → **Haiku** (fastest and cheapest).' },
+      { text: '**Move up** a tier if the task needs deeper thinking. **Move down** if the job is simpler and quality is not compromised.' },
+      { text: 'Current models tune their own thinking automatically (adaptive thinking); you steer it with the effort setting.' },
+      { text: '**Triage** (routing): use Haiku to classify requests, and send only the hard cases to a bigger model.' },
+    ],
+    updated: ['The deck calls Sonnet "the default, start here". Anthropic\'s current guidance offers two starting points: Opus 5.5 (capability-first) or Haiku 5.5 (efficiency-first). Adjust effort before switching model, and move only on measured test results.'],
+    read: ['5.1', '5.2', '1.2'],
+  },
+  {
+    id: 'ways', icon: '🧭', title: 'Ways of using Claude', question: 'What are the different ways of using Claude, and how do you choose?',
+    tips: [{ text: '**How to decide:** the use case, the customer\'s current cloud provider, data residency rules (where data may be stored and processed), and access control.' }],
+    table: {
+      head: ['Way', 'What it is', 'Good to know'],
+      rows: [
+        ['Apps for people', 'Claude.ai web chat; Claude Desktop', 'Desktop can connect to local tools through MCP'],
+        ['Claude Code', 'Agentic coding tool: terminal, VS Code and JetBrains extensions, desktop app and web', 'Can run headless (no interactive screen), e.g. in CI/CD pipelines'],
+        ['Building your own app', 'The Claude Messages API, called directly or through an official SDK', 'Stateless request–response: your code manages everything, including history'],
+        ['Claude Agent SDK', 'A library that runs the agent loop for you', 'Handles the loop, built-in tools, context compaction and spawning subagents'],
+        ['Claude Managed Agents', 'Anthropic runs the whole agent on its servers', 'Least to operate; sessions are stored server-side'],
+        ['Through a cloud provider', 'Amazon Bedrock (AWS), Google Cloud Vertex AI, Microsoft Foundry (Azure)', 'Chosen when the customer already uses that cloud, or for residency'],
+        ['Inside other products', 'Chrome extension, Slack, Excel, PowerPoint', 'Claude where people already work'],
+      ],
+    },
+    read: ['2.1', '2.5', '1.4', '3.1'],
+  },
+  {
+    id: 'evals', icon: '✅', title: 'Evaluating model output', question: 'How can we evaluate model output?',
+    tips: [
+      { text: 'Output is **not deterministic**: test **properties** (valid JSON, right category, under 80 words), not exact strings or keywords.' },
+      { text: 'Ask **another model to judge** the output against set criteria (an LLM judge with a rubric), after checking it agrees with humans.' },
+      { text: 'Use **evals**: tweak the prompt until the quality bar is reached.' },
+      { text: '**Keep the evals** and run them regularly to see whether quality degrades over time.' },
+      { text: 'Re-use them to test the **next model or code upgrade** before it ships.' },
+      { text: 'Keep the code, the model version used and the evals in **source control**, with version tags.' },
+    ],
+    read: ['4.1', '4.2', '4.3'],
+  },
+  {
+    id: 'tokens', icon: '🧮', title: 'Tokens', question: 'What are tokens, and what is counted?',
+    tips: [
+      { text: 'A token is a chunk of text, about ¾ of a word. You pay per token, and limits are counted in tokens.' },
+      { text: 'Everything in a request counts:', sub: ['the system prompt', 'the conversation history (resent on every call)', 'tool definitions', 'tool results', 'the output (Claude\'s reply, including thinking)'] },
+      { text: '**Output tokens cost more than input tokens** (5× on current models).' },
+    ],
+    read: ['2.2', '5.5'],
+  },
+  {
+    id: 'context', icon: '🪟', title: 'The context window',
+    tips: [
+      { text: '**What it is:** everything Claude can see in one request (system prompt, history, documents, tool results and its own reply), with a fixed size limit.' },
+      { text: '**When it gets full:** an input that is already too big is rejected with an error; a reply that runs out of room stops early, with a stop_reason saying so.' },
+      { text: '**How to stop it filling up:**', sub: ['**Pruning:** roll back to an earlier point after a dead end', '**Compaction:** summarise older history (tell the summariser what to keep)', '**Subagents:** hand a sub-task off and get back only a summary, then combine the results'] },
+    ],
+    updated: ['The deck lists prompt caching here too. Caching makes repeated context much cheaper and faster, but it does not make the context any smaller.'],
+    read: ['6.5', '1.5'],
+  },
+  {
+    id: 'caching', icon: '⚡', title: 'Prompt caching',
+    tips: [
+      { text: 'Set a **breakpoint** (`cache_control`) at the end of the part that repeats. You can have up to **four**.' },
+      { text: 'The **first** call is more expensive (it sets up the cache); later calls that use the cache are much cheaper.' },
+      { text: 'The cached part **must not change**: any change invalidates the cache.' },
+      { text: 'Put anything that varies, such as a date stamp or user name, **after** the breakpoint.' },
+      { text: 'A cache lasts **5 minutes** by default (renewed on each use); you can extend it to 1 hour.' },
+    ],
+    read: ['5.3'],
+  },
+  {
+    id: 'other', icon: '🧰', title: 'Batches and configuration',
+    tips: [
+      { text: 'Use the **Batch API** for jobs that don\'t need an instant response: about **50% cheaper**, results within 24 hours.' },
+      { text: 'Know where each configuration file lives and **who it applies to**:' },
+    ],
+    table: {
+      head: ['Scope', 'Applies to', 'Example'],
+      rows: [
+        ['Local', 'Just you, in this project', '.claude/settings.local.json (git-ignored)'],
+        ['Project', 'Everyone who clones the repo', '.claude/settings.json, .mcp.json (committed)'],
+        ['User', 'Just you, in every project', '~/.claude/settings.json'],
+        ['Enterprise', 'Everyone in the organisation; can\'t be overridden', 'Managed settings, set by admins'],
+      ],
+    },
+    read: ['5.4', '3.2', '8.5'],
+  },
+  {
+    id: 'tools', icon: '🔌', title: 'Tools and MCP',
+    tips: [
+      { text: '**Tools** are structured capabilities Claude can call to do things: search the web, read and edit files, run shell commands, invoke workflows. In Claude Code: WebSearch, Bash, Read, Edit, Write, Agent, Skill and more.' },
+      { text: '**Claude picks a tool from its description**, so:', sub: ['avoid overlapping descriptions', 'say when the tool should **not** be used', 'don\'t expose too many tools'] },
+      { text: '**MCP** lets Claude connect to external tools and data sources such as databases, APIs and third-party services.' },
+      { text: '**How it connects:** stdio for an MCP server on the same machine; HTTP for shared, remote ones.' },
+      { text: '**Vendor-provided MCP servers** (e.g. GitHub, Jira) save you writing your own.' },
+    ],
+    read: ['8.1', '8.2', '8.4', '8.5'],
+  },
+  {
+    id: 'prompts', icon: '✍️', title: 'Prompt engineering and hooks',
+    tips: [
+      { text: '**Be explicit**, and favour **examples** (one-shot, few-shot) over longer prompts. Spell out:', sub: ['the data format', 'the classification categories', 'the length of the response'] },
+      { text: '**Hooks are deterministic:** favour them over prompt instructions, which are only suggestions.', sub: ['**PreToolUse** runs before a tool: e.g. block writes to certain files', '**PostToolUse** runs after a tool: e.g. reformat code after a write'] },
+    ],
+    read: ['6.1', '6.2', '3.3'],
+  },
+  {
+    id: 'security', icon: '🔒', title: 'Security',
+    tips: [
+      { text: '**Keep credentials private:**', sub: ['never put them in a config file, even a git-ignored one', 'use different credentials for dev, staging and production', 'if one is exposed: rotate it, remove it from Git history, and move it to proper secret storage'] },
+      { text: '**Prompt injection** and how to defend against it:', sub: ['treat user and other untrusted input as **data, not instructions**: put a fence (tags) around it', 'apply **least privilege** to anything unsafe the agent can do'] },
+      { text: '**Security controls in Claude Code:** CLAUDE.md for universal rules, path-scoped rules files for specific folders, and **hooks for enforcement**. A PreToolUse hook blocks an action by exiting with code 2; PostToolUse handles audit logging.' },
+      { text: '**A prompt instruction is never a security control.**' },
+    ],
+    updated: ['Where the deck says "use a secrets file", prefer environment variables injected at run time or a secrets manager (e.g. AWS Secrets Manager, HashiCorp Vault) for anything shared.'],
+    read: ['7.1', '7.2', '7.3'],
+  },
+  {
+    id: 'streaming', icon: '📡', title: 'API streaming',
+    tips: [
+      { text: 'Stream when you want the user to **see the reply appear** as Claude writes it.' },
+      { text: 'Print text blocks as they arrive; **assemble tool_use blocks** into complete JSON.' },
+      { text: '**Act only after message_stop.** A tool_use block isn\'t valid JSON until its content_block_stop.' },
+      { text: 'If the stream drops, **discard the partial turn** and retry from the last complete turn.' },
+    ],
+    read: ['2.3'],
+  },
+  {
+    id: 'workflows', icon: '🔀', title: 'Choosing a workflow',
+    tips: [
+      { text: 'The shapes you\'ll meet: **sequential** (chaining), **parallel**, **routing**, **loop-based** (evaluator-optimizer), **human in the loop**, **agentic**, **RAG-based** and **multi-agent**.' },
+      { text: 'Choose a **deterministic workflow** if you can describe the steps in advance.' },
+      { text: 'Use an **agentic** workflow only when a deterministic one can\'t handle the task.' },
+      { text: '**Orchestrator-worker** setups cost roughly **15× the tokens**, so reserve them for genuinely parallel tasks.' },
+    ],
+    read: ['1.1', '1.2', '1.3'],
+  },
+  {
+    id: 'diagnose', icon: '🩺', title: 'Diagnosing failing outputs',
+    tips: [
+      { text: '**Is the context window getting full?** Check `usage` and stop_reason.' },
+      { text: '**Is the question in the wrong place?** With long documents, put the documents first and the question at the end, not buried in the middle.' },
+      { text: '**Did the tool-use reply stop before all the JSON was sent?** stop_reason `max_tokens` means it was cut off: raise the limit or ask for less.' },
+      { text: '**Malformed tool or JSON responses** (broken JSON, missing fields, extra text before or after the JSON): enforce the format with structured outputs or strict tools, validate in code, and if it still fails, send the error back so Claude can correct it.' },
+    ],
+    read: ['6.1', '6.3', '2.2'],
+  },
+  {
+    id: 'errors', icon: '🚦', title: 'When Claude returns an error',
+    tips: [
+      { text: '**Retriable**, with exponential backoff and jitter: **429** (rate limited), **500** (server error), **504** (timeout), **529** (overloaded). The SDK already retries these twice by default.' },
+      { text: '**Terminal**, no point retrying unchanged: **400** (bad request), **401** (bad API key). Handle gracefully: fix the request, or tell the user.' },
+    ],
+    updated: ['A **refusal** isn\'t an error code: it arrives with 200 OK and stop_reason `refusal`. Don\'t resend the same request; read stop_details, log it, and show it to the user or retry on a fallback model.', 'A 429 caused by a spend limit has no retry-after header and won\'t clear by waiting.'],
+    read: ['2.4'],
+  },
+];

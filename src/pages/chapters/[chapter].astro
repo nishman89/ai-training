@@ -3,6 +3,7 @@ import { render } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import PageHead from '../../components/PageHead.astro';
 import WatchOut from '../../components/WatchOut.astro';
+import DomainOverview from '../../components/DomainOverview.astro';
 import BlueprintSkills from '../../components/BlueprintSkills.astro';
 import { SECTION_TITLES as TITLES } from '../../data/syllabus-sections.mjs';
 const SECTION_TITLES: Record<string, string> = TITLES;
@@ -84,6 +85,7 @@ const mainCount = (await getQuestions(MAIN_SET, data.number)).length;
         <ul>{data.objectives.map((o) => <li>{o}</li>)}</ul>
       </section>
 
+      <DomainOverview chapter={data.number} />
       <BlueprintSkills chapter={data.number} />
 
       <div class="chapter-progress no-print" id="chapter-progress" data-testid="chapter-progress" data-chapter-progress data-chapter={data.number} data-total={headings.filter((h) => h.depth === 2).length}>

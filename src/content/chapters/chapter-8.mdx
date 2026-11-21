@@ -37,7 +37,7 @@ import Resource from '../../components/Resource.astro';
 
 ### In plain English
 
-This domain is about letting Claude **do** things, not just talk. You describe a function ("get_order_status takes an order ID"). Claude replies "please run get_order_status with A-1234", **your** code runs it and sends back the answer, and Claude continues. **MCP** is a standard way to package tools so they plug into any Claude app, like USB for tools.
+This domain is about letting Claude **do** things, not just talk, through **tool use** (also called function calling). You describe a function ("get_order_status takes an order ID"). Claude replies "please run get_order_status with A-1234", **your** code runs it and sends back the answer, and Claude continues. **MCP** (the **Model Context Protocol**) is an open standard for packaging tools so they plug into any Claude app, like USB for tools. A program that offers tools this way is an **MCP server**; an app that connects to it is an **MCP client**.
 
 **Real-life example:** connect the GitHub MCP server once, and Claude can search code and open issues in any app that supports MCP.
 
@@ -53,7 +53,7 @@ This domain is about letting Claude **do** things, not just talk. You describe a
   { title: 'Claude continues', sub: 'answer or another tool' },
 ]} />
 
-A tool conversation is built from typed blocks: `text`, `tool_use`, `tool_result` and (with thinking) `thinking`. The API enforces the pairing: each `tool_use` must be answered by a `tool_result` with the matching ID in the next user turn. Most bugs sit on that boundary between what Claude owns and what your code owns.
+Each tool is defined by a name, a description, and an `input_schema` (a JSON schema listing its parameters and their types). A tool conversation is built from typed blocks: `text`, `tool_use`, `tool_result` and (with thinking) `thinking`. The API enforces the pairing: each `tool_use` must be answered by a `tool_result` with the matching ID in the next user turn. Most bugs sit on that boundary between what Claude owns and what your code owns.
 
 <CodeSwitch title="One tool call, answered">
 
@@ -203,8 +203,70 @@ Claude picks a tool by reasoning over every registered description in the contex
 
 - **Say when NOT to use it** - one sentence of exclusion gives a decision boundary · "Look up an order's status. Do not use for refunds."
 - **Merge what you can't separate** - two overlapping tools → one tool with a type parameter
-- **Use the schema** - enum for fixed values, required only for truly required fields, clear parameter descriptions
+- **Use the schema** - an enum (a fixed list of allowed values) for fixed values, required only for truly required fields, clear parameter descriptions
 - **Don't over-tool** - every definition costs tokens on every call, and overlap makes selection erratic · start minimal
+
+{/* more:8-describe */}
+**Example:** two definitions of the same tool. Claude reads only the name, description and schema, so the second one gets picked correctly far more often.
+
+<CodeSwitch title="A tool description that says when, and when not">
+
+```java
+// Weak: Tool.builder().name("orders").description("Order tool.")...
+Tool getOrderStatus = Tool.builder()
+    .name("get_order_status")
+    .description("Look up the delivery status of ONE existing order by its ID (format A-1234). "
+               + "Use when the customer asks where an order is. Do NOT use for refunds or cancellations.")
+    .inputSchema(Tool.InputSchema.builder()
+        .properties(JsonValue.from(Map.of(
+            "order_id", Map.of("type", "string", "description", "Order ID, e.g. A-1234"),
+            "detail",   Map.of("type", "string", "enum", List.of("summary", "full")))))
+        .required(List.of("order_id"))
+        .build())
+    .build();
+```
+
+```python
+# Weak: {"name": "orders", "description": "Order tool.", ...}
+get_order_status = {
+    "name": "get_order_status",
+    "description": ("Look up the delivery status of ONE existing order by its ID (format A-1234). "
+                    "Use when the customer asks where an order is. Do NOT use for refunds or cancellations."),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "order_id": {"type": "string", "description": "Order ID, e.g. A-1234"},
+            "detail": {"type": "string", "enum": ["summary", "full"]},   # a fixed list of allowed values
+        },
+        "required": ["order_id"],
+    },
+}
+```
+
+```typescript
+// Weak: { name: 'orders', description: 'Order tool.', ... }
+const getOrderStatus: Anthropic.Tool = {
+  name: 'get_order_status',
+  description: 'Look up the delivery status of ONE existing order by its ID (format A-1234). ' +
+               'Use when the customer asks where an order is. Do NOT use for refunds or cancellations.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      order_id: { type: 'string', description: 'Order ID, e.g. A-1234' },
+      detail: { type: 'string', enum: ['summary', 'full'] },     // a fixed list of allowed values
+    },
+    required: ['order_id'],
+  },
+};
+```
+
+</CodeSwitch>
+{/* /more */}
+
+
+
+
+
 
 {/* diagram */}
 <Compare caption="A tool Claude struggles with, and one it picks correctly (Exam guide: Tool Implementation)" columns={[
@@ -244,10 +306,14 @@ Return failures as a `tool_result` with `is_error: true` and a useful message, s
 
 ### Client tools vs server tools: where the tool runs
 
+Tools differ in *who runs them*. Most are yours, but Anthropic also runs some tools for you on its own servers.
+
 <VsPair
-  left={{ title: 'Client tools', meaning: 'Defined by you (or Anthropic-schema tools like bash and text_editor) and run in YOUR application.', example: 'Response stops with stop_reason tool_use; you run it and send tool_result.' }}
+  left={{ title: 'Client tools', meaning: 'Defined by you (or tools whose definition Anthropic provides, like bash and text_editor) and run in YOUR application.', example: 'Response stops with stop_reason tool_use; you run it and send tool_result.' }}
   right={{ title: 'Server tools', meaning: 'Run on Anthropic\'s side, e.g. web search, web fetch, code execution. Declared in the request; nothing to implement.', example: 'May cost extra per use. A long server loop returns pause_turn.' }}
 />
+
+`tool_choice` is a request setting that controls whether Claude may, must or must not call a tool.
 
 | `tool_choice` | Meaning |
 |---|---|
@@ -258,7 +324,29 @@ Return failures as a `tool_result` with `is_error: true` and a useful message, s
 
 **Model check:** Claude Opus 5.5 rejects the forcing options (`any` and `tool`) with a 400 error, so code that forced a tool breaks when you upgrade. On that model, keep `auto`, make the tool `strict`, and say in the prompt when it applies. For a guaranteed JSON shape, use structured outputs (`output_config.format`).
 
-Add `disable_parallel_tool_use: true` to allow at most one tool call per turn. When a server-tool loop hits its iteration cap the response has `stop_reason: pause_turn`. Resend the conversation as it is; don't add a "please continue" message.
+Claude can ask for several tools in one reply (**parallel tool use**). Add `disable_parallel_tool_use: true` to allow at most one tool call per turn. When a server-tool loop hits its iteration cap the response has `stop_reason: pause_turn`. Resend the conversation as it is; don't add a "please continue" message.
+
+{/* more:8-parallel */}
+**Example of parallel tool use:** the customer asks *"Where are orders A-1 and A-2?"*. Claude can ask for both lookups in one reply, and you answer both in **one** user message, each `tool_result` with its own matching ID:
+
+```json
+// Claude's reply
+{ "role": "assistant", "content": [
+  { "type": "tool_use", "id": "toolu_01", "name": "get_order_status", "input": { "order_id": "A-1" } },
+  { "type": "tool_use", "id": "toolu_02", "name": "get_order_status", "input": { "order_id": "A-2" } }
+]}
+// Your next message: both results together
+{ "role": "user", "content": [
+  { "type": "tool_result", "tool_use_id": "toolu_01", "content": "Delivered yesterday" },
+  { "type": "tool_result", "tool_use_id": "toolu_02", "content": "Out for delivery" }
+]}
+```
+{/* /more */}
+
+
+
+
+
 
 {/* code:8.3 */}
 **In code:** a server tool is declared, not implemented. Claude runs the search on Anthropic's side and the reply comes back with `server_tool_use` and `web_search_tool_result` blocks, plus a cited answer.
@@ -315,7 +403,16 @@ const msg = await client.messages.create({
 
 ### Why MCP
 
-Wiring a tool straight into each app means three apps need three integrations. MCP moves the tool into a **server** that any MCP client (Claude Code, Claude apps, your own app) can attach to, so you build the integration once. Think JDBC: one driver standard, many databases and clients.
+Wiring a tool straight into each app means three apps need three integrations. MCP moves the tool into a **server** that any **MCP client**, meaning any app that speaks MCP (Claude Code, Claude apps, your own app), can attach to, so you build the integration once. Think JDBC: one driver standard, many databases and clients.
+
+{/* more:8-mcpcaps */}
+**Example, for an inventory MCP server:** a **tool** `get_stock(sku)` that Claude decides to call; a **resource** `inventory://warehouses`, a read-only list of warehouses the app can attach to the conversation; and a **prompt** `restock-report`, a ready-made template a user picks from a menu (in Claude Code, prompts appear as slash commands).
+{/* /more */}
+
+
+
+
+
 
 <Hub center="MCP server" caption="An MCP server exposes three kinds of capability (Exam guide: MCP Server Development)" items={['Tools: actions the model calls', 'Resources: read-only data the client fetches', 'Prompts: templates the user invokes']} />
 
@@ -323,12 +420,14 @@ Wiring a tool straight into each app means three apps need three integrations. M
 
 ### Transports: how Claude connects to an MCP server
 
+A **transport** is the channel the client and server use to exchange messages. There are two.
+
 <VsPair
   left={{ title: 'stdio', meaning: 'The client launches the server as a local subprocess and talks over stdin/stdout. Runs on ONE machine.', example: 'A personal script, a local database tool, a dev server.' }}
   right={{ title: 'Streamable HTTP', meaning: 'The server runs remotely; clients connect to its URL over the network.', example: 'A shared team server or a hosted integration.' }}
 />
 
-SSE is the older remote transport and isn't recommended for new servers. Each connected server's tool definitions cost context, so connect only the servers a task needs. Claude Code defers loading tool definitions until they're needed.
+SSE (Server-Sent Events) is the older remote transport and isn't recommended for new servers. Each connected server's tool definitions cost context, so connect only the servers a task needs. Claude Code defers loading tool definitions until they're needed.
 
 {/* code:8.4 */}
 **In code:** an MCP server is a small program that registers tools. These follow the official MCP quickstart: Python's `MCPServer`, TypeScript's `@modelcontextprotocol/server`, and Spring AI for Java.
@@ -425,6 +524,8 @@ serveStdio(createServer);
 
 ### MCP server scopes in Claude Code
 
+In Claude Code, an MCP server's **scope** is where its configuration is saved, and that decides who gets the server.
+
 | Scope | Stored in | Who gets it | Right for |
 |---|---|---|---|
 | Local | `~/.claude.json` under the project | Only you, in this project | A tool tied to one project |
@@ -447,6 +548,23 @@ Transport and scope are separate decisions with linked consequences: a **stdio s
 
 Connecting a server exposes its whole tool list. Permission rules can target one tool by name: `mcp__server__tool`. For example, allow `mcp__github__create_issue` without a prompt while other GitHub tools still prompt, or deny a write tool while read tools stay available. **A deny on one tool beats an allow on the server.** Through the API's **MCP connector** (remote servers called straight from the Messages API), an `mcp_toolset` can enable or disable each tool: a permission rule decides "can it run", enabling decides "can the model see it".
 
+{/* more:8-pertool */}
+```json
+// .claude/settings.json: tool names follow mcp__<server>__<tool>; check your server's actual tool names
+{
+  "permissions": {
+    "allow": ["mcp__github__create_issue"],
+    "deny":  ["mcp__github__merge_pull_request"]
+  }
+}
+```
+{/* /more */}
+
+
+
+
+
+
 ### Authentication
 
 <MythReality rows={[
@@ -454,7 +572,7 @@ Connecting a server exposes its whole tool list. Permission rules can target one
   { myth: 'OAuth that works in staging will work in production', reality: 'Redirect URIs are registered per host: add production\'s before go-live' },
 ]} />
 
-- **User identity (SaaS, cloud)** - OAuth, browser sign-in · audit with a PostToolUse hook
+- **User identity (SaaS, cloud)** - for hosted products such as Jira or GitHub: OAuth, where each user signs in through their browser · audit with a PostToolUse hook
 - **Service identity (internal API)** - API key in an environment variable or secrets manager · never in committed config
 - **Local (filesystem, local DB)** - stdio, no network auth · deny rules enforce path access
 

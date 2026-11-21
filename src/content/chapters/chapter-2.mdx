@@ -36,7 +36,7 @@ import Resource from '../../components/Resource.astro';
 
 ### In plain English
 
-This domain is how your program talks to Claude. You send one HTTP request, a package of settings plus the conversation so far, and get back a message, a note on why it stopped and an itemised bill. Everything else in the exam is a field on that request, a way to handle the reply, or a pattern for sending many requests in a row.
+This domain is how your program talks to Claude. Claude is reached through an **API** (application programming interface): a web address your code sends requests to, like any REST service. Its main one, the **Messages API**, is the subject of this domain. You send one HTTP request, a package of settings plus the conversation so far, and get back a message, a note on why it stopped and an itemised bill. Everything is measured and billed in **tokens**, chunks of text of about ¾ of a word (more in 2.2). Everything else in the exam is a field on that request, a way to handle the reply, or a pattern for sending many requests in a row.
 
 **Real-life example:** a bank's help chat. Behind it, the bank's Java service sends each customer question to Claude and shows the answer. When 10,000 customers ask at once, some calls get a "slow down" error (429), and the service should wait and retry instead of crashing. That's Domain 2.
 
@@ -70,7 +70,7 @@ A request to `POST /v1/messages` needs three fields and two headers. Everything 
 | `messages` | The conversation: alternating `user` and `assistant` turns | Yes |
 | `system` | Standing instructions for the whole conversation (a top-level field, **not** a role) | No |
 | `tools`, `tool_choice` | Functions Claude may ask you to run (Domain 8) | No |
-| `stream` | Receive the reply as server-sent events | No |
+| `stream` | Receive the reply piece by piece as **server-sent events** (a standard way for a server to push data over one open HTTP connection; see 2.3) | No |
 
 The API is **stateless**: it keeps no conversation. Your app stores the history and resends it every turn, which is why long chats get slower and pricier.
 
@@ -210,9 +210,9 @@ Your code shows the `text` block to the customer (pick blocks by `type`, never `
 
 | Field | Meaning | Real-life comparison |
 |---|---|---|
-| `content` | A list of blocks: `text`, `tool_use`, `thinking` | The work delivered |
+| `content` | A list of **content blocks**, each with a type: `text` (the answer), `tool_use` (a request to run a tool, Domain 8) or `thinking` (Claude's reasoning before it answers, 6.4) | The work delivered |
 | `stop_reason` | Why it stopped (below) | The contractor's note: "done", "ran out of hours", "need you to fetch something" |
-| `usage` | `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens` | The itemised invoice |
+| `usage` | `input_tokens`, `output_tokens`, plus two cache counters used by prompt caching (Domain 5) | The itemised invoice |
 
 | `stop_reason` | Means | Your code should… |
 |---|---|---|
@@ -220,9 +220,9 @@ Your code shows the `text` block to the customer (pick blocks by `type`, never `
 | `max_tokens` | Hit your `max_tokens` cap; the reply is cut off | Raise the cap, ask for less, or continue |
 | `stop_sequence` | Wrote one of your stop strings | Use the text before it |
 | `tool_use` | Wants you to run a tool | Run it, send back a `tool_result` (Domain 8) |
-| `pause_turn` | A server-tool loop paused | Resend the conversation as it is |
-| `refusal` | Declined for safety reasons | Read `stop_details`, log it, and surface it or retry on a fallback model; don't resend the same request with backoff |
-| `model_context_window_exceeded` | The reply filled the model's context window | Treat it as truncated, like `max_tokens` |
+| `pause_turn` | A long-running **server tool** (a tool Anthropic runs for you, such as web search, 8.3) paused | Resend the conversation as it is |
+| `refusal` | Declined for safety reasons | Read `stop_details` (which says why), log it, and show it to the user or retry on a different (fallback) model; don't just resend the same request |
+| `model_context_window_exceeded` | The reply filled the model's **context window** (the most text it can handle in one request: input plus output) | Treat it as truncated, like `max_tokens` |
 
 A 200 OK does **not** mean a complete answer. Branch on `stop_reason` every time, like checking an exit code.
 
@@ -300,6 +300,15 @@ You pick the contractor (`model`), hand over the standing brief (`system`) and t
 
 A token is the unit Claude reads, writes and bills in: a chunk of text of roughly ¾ of an English word. Think of a taxi meter that ticks per chunk of road. Your prompt, the whole history, tool definitions, tool results and images all tick the **input** meter. Everything Claude writes ticks the **output** meter, which costs 5× more per token on every current model.
 
+{/* more:2-tokens */}
+**Example:** the sentence *"Please summarise this invoice."* is about 6–8 tokens. A one-page email is roughly 500 tokens; a 300-page book is roughly 100,000. You never count by hand: the API reports exact numbers in `usage` on every reply, and 5.5 shows how to count before sending.
+{/* /more */}
+
+
+
+
+
+
 ### model
 
 Which Claude does the work. Think of choosing junior, mid or senior staff: seniors are better, slower and pricier.
@@ -307,7 +316,7 @@ Which Claude does the work. Think of choosing junior, mid or senior staff: senio
 - **Haiku** - tagging 1M support tickets overnight
 - **Sonnet** - a customer-facing chatbot
 - **Opus** - a multi-hour coding agent
-- **Fable** - the hardest reasoning, when Opus still falls short on your evals
+- **Fable** - the hardest reasoning, when Opus still falls short on your **evals** (your automated tests for AI output, Domain 4)
 
 <CodeSwitch title="Choose the model">
 
@@ -354,7 +363,7 @@ HTTP status: **200 OK**. No exception. The text simply stops mid-word, so `JSON.
 02:14:07 ERROR ProductJob  JsonParseException: Unexpected end-of-input at line 1, column 4096
 ```
 
-`output_tokens` exactly equal to your `max_tokens` is the giveaway. Fix: check `stop_reason` before parsing, and send one product per request (via the Batch API) instead of 150 in one reply.
+`output_tokens` exactly equal to your `max_tokens` is the giveaway. Fix: check `stop_reason` before parsing, and send one product per request (via the **Batch API**, Anthropic's half-price service for bulk jobs, 5.4) instead of 150 in one reply.
 
 </PictureIt>
 
@@ -399,8 +408,61 @@ messages: [
 ### stop_sequences, temperature and effort
 
 - **stop_sequences** - strings that end the reply as soon as Claude writes them; stop_reason becomes stop_sequence · e.g. stop at a closing answer tag so no commentary follows
-- **temperature / top_p** - randomness knobs, low = predictable · on the newest models you can't set them: steer with the prompt and test properties, not exact wording
-- **effort** - how hard the model thinks before answering · current models think adaptively: low for routing an email, high for a tricky bug · more thinking = more output tokens, cost and latency
+- **temperature / top_p** - randomness settings that older models accepted, low = predictable · on the newest models you can't set them: steer with the prompt and test properties, not exact wording
+- **effort** - how hard the model thinks before answering · current models decide for themselves how much to think (**adaptive thinking**), and effort steers it: low for sorting an email into a category, high for a tricky bug · more thinking = more output tokens, cost and latency
+
+{/* more:2-temp */}
+#### Temperature, explained
+
+When Claude writes, it picks each next word from a ranked list of likely options. **Temperature** controls how adventurous that pick is, on a scale from 0 to 1.
+
+- **Low (close to 0):** it almost always takes the most likely word. Ask *"Suggest a name for a coffee shop"* ten times and you get nearly the same answer every time.
+- **High (1, the default):** it sometimes takes less likely words. The same question gives ten different names.
+
+**top_p** does a similar job a different way: it only lets Claude choose from the most likely words that together add up to, say, 90% of the probability.
+
+**On the newest models you don't set either.** Opus 5.5 and Sonnet 5.5 reject any value except the default, so you steer variety through the prompt instead: *"Give one short name"* for consistency, *"Give five names that are very different from each other"* for variety. And because answers vary, your tests check **properties** (is it under 20 characters? does it avoid the word "coffee"?) rather than exact text.
+
+#### stop_sequences, in practice
+
+A **stop sequence** is a piece of text that ends the reply the moment Claude writes it. Useful when you ask for an answer inside a tag and want nothing after it.
+
+<CodeSwitch title="Stop at a marker with stop_sequences">
+
+```java
+Message msg = client.messages().create(MessageCreateParams.builder()
+    .model(Model.CLAUDE_HAIKU_5_5).maxTokens(200L)
+    .addUserMessage("Classify this ticket. Put only the label inside <answer></answer>: " + ticket)
+    .addStopSequence("</answer>")                  // stop as soon as Claude closes the tag
+    .build());
+// stopReason is STOP_SEQUENCE and the text ends with "<answer>BILLING": no chatter after it
+```
+
+```python
+msg = client.messages.create(
+    model="claude-haiku-5-5", max_tokens=200,
+    messages=[{"role": "user", "content": f"Classify this ticket. Put only the label inside <answer></answer>: {ticket}"}],
+    stop_sequences=["</answer>"],                  # stop as soon as Claude closes the tag
+)
+# msg.stop_reason == "stop_sequence" and the text ends with "<answer>BILLING": no chatter after it
+```
+
+```typescript
+const msg = await client.messages.create({
+  model: 'claude-haiku-5-5', max_tokens: 200,
+  messages: [{ role: 'user', content: `Classify this ticket. Put only the label inside <answer></answer>: ${ticket}` }],
+  stop_sequences: ['</answer>'],                   // stop as soon as Claude closes the tag
+});
+// msg.stop_reason === 'stop_sequence' and the text ends with "<answer>BILLING": no chatter after it
+```
+
+</CodeSwitch>
+{/* /more */}
+
+
+
+
+
 
 ### Worked cost example
 
@@ -413,7 +475,7 @@ Sonnet 5.5 costs $2 per million input tokens and $10 per million output tokens. 
 | **Per call** | | | **$0.0130** |
 | **100,000 calls a day** | | | **≈ $1,300 a day** |
 
-Caching the 3,000-token system prompt (cache reads cost 0.05× base on Sonnet 5.5) cuts that slice from $0.006 to $0.0003 per call, saving about $570 a day. Domain 5 covers how.
+**Prompt caching**, which lets Claude reuse the processed system prompt instead of reading it again on every call (cache reads cost 0.05× base on Sonnet 5.5), cuts that slice from $0.006 to $0.0003 per call, saving about $570 a day. Domain 5 covers how.
 
 <Exercise title="What went wrong?" id="exercise-max-tokens">
 
@@ -460,6 +522,8 @@ Streaming sends the reply as it's written, like watching a live broadcast instea
 <RoleLens dev={"Streaming sends text as server-sent events so the UI updates as it's written. Only commit the message to history once the stream has completed cleanly."} test={"Test the interrupted-stream case: kill the connection mid-reply and check the app doesn't save half an answer or show it as final."} data={"You rarely stream in batch pipelines: you want the whole result. Streaming matters for long outputs on the request path, where it avoids HTTP timeouts."} ba={"Streaming is a UX decision: users see words appear immediately. It makes no difference to cost or quality, so it belongs in the non-functional requirements."} />
 
 ### The event sequence
+
+A streamed reply arrives as a series of small, named messages called **events**. Each reply is built from **content blocks** (a text block, a tool request), and the events tell you when each block starts, what to add to it, and when it's finished.
 
 <Flow caption="Server-sent events for one streamed message (Exam guide: Claude API Mechanics)" steps={[
   { title: 'message_start', sub: 'empty shell' },
@@ -571,7 +635,7 @@ The team spends a morning looking at the tool schema, which was never the proble
 
 ### Retriable or terminal?
 
-Ask one question of every failure: could waiting and sending the **same** request succeed?
+A **retriable** error might succeed if you wait and send the same request again (the service was busy). A **terminal** error fails every time until you change the request (it was malformed). Ask one question of every failure: could waiting and sending the **same** request succeed?
 
 | Status | `error.type` | Meaning | Retry? |
 |---|---|---|---|
@@ -579,8 +643,8 @@ Ask one question of every failure: could waiting and sending the **same** reques
 | 401 / 403 | authentication / permission | Bad key or no access | **No** |
 | 404 / 413 | not_found / request_too_large | Wrong model or path; payload too big | **No** |
 | 429 | `rate_limit_error` | Your org hit a rate or spend limit | **Yes**, after `retry-after`. A spend-cap 429 has no `retry-after` and won't clear by waiting |
-| 500 / 504 | `api_error` / `timeout_error` | Server-side fault | **Yes**, bounded backoff |
-| 529 | `overloaded_error` | Anthropic-wide capacity, not your quota | **Yes**, backoff with jitter |
+| 500 / 504 | `api_error` / `timeout_error` | Server-side fault | **Yes**, with **backoff** (waiting longer between each attempt), a limited number of times |
+| 529 | `overloaded_error` | Anthropic-wide capacity, not your quota | **Yes**, backoff with **jitter** (a random extra delay, so thousands of clients don't all retry at the same moment) |
 | 200 + `refusal` | (not an error) | A content decision by the model | **Not as-is**: read `stop_details`, log it, then surface it or fall back to another model |
 
 <VsPair
@@ -598,11 +662,50 @@ Ask one question of every failure: could waiting and sending the **same** reques
 
 ### Rate limits
 
-Limits are set **per organisation, per model**, as requests per minute (RPM), input tokens per minute (ITPM) and output tokens per minute (OTPM). They use a token-bucket model and rise with your usage tier. Cached input reads typically don't count against ITPM on current models, so caching raises throughput as well as cutting cost.
+Limits are set **per organisation, per model**, as requests per minute (RPM), input tokens per minute (ITPM) and output tokens per minute (OTPM). They work like a **token bucket**: your allowance refills at a steady rate rather than resetting once a minute. They rise with your **usage tier**, which Anthropic raises as your account's spending history grows. Cached input reads typically don't count against ITPM on current models, so caching raises throughput as well as cutting cost.
 
 ### What the SDK already does
 
 The official SDKs retry connection errors, 408, 409, 429 and 5xx automatically, **twice by default**, with exponential backoff, honouring `retry-after`. Don't wrap your own retry loop around that: it multiplies attempts. Tune `maxRetries`, then handle what's left.
+
+{/* more:2-retries */}
+**What backoff looks like in practice:** attempt 1 gets a 529 → the SDK waits about half a second → attempt 2 gets a 529 → it waits about a second → attempt 3 succeeds. Each wait roughly doubles, with a little randomness (jitter) added. If the response includes a `retry-after` header, the SDK waits exactly that long instead.
+
+**Tuning it:** set retries and a timeout once, when you create the client.
+
+<CodeSwitch title="Configure retries and timeouts">
+
+```java
+AnthropicClient client = AnthropicOkHttpClient.builder()
+    .fromEnv()
+    .maxRetries(4)                          // default is 2
+    .timeout(Duration.ofSeconds(60))        // give up on one attempt after 60 s
+    .build();
+```
+
+```python
+client = anthropic.Anthropic(
+    max_retries=4,       # default is 2
+    timeout=60.0,        # give up on one attempt after 60 s
+)
+# one call that must fail fast (e.g. a health check):
+client.with_options(max_retries=0).messages.create(...)
+```
+
+```typescript
+const client = new Anthropic({
+  maxRetries: 4,       // default is 2
+  timeout: 60_000,     // give up on one attempt after 60 s (milliseconds)
+});
+```
+
+</CodeSwitch>
+{/* /more */}
+
+
+
+
+
 
 <CodeSwitch title="Handle errors by type">
 
@@ -707,28 +810,62 @@ A Claude application moves through the same lifecycle as any engineered system. 
 ]} />
 
 - **Functional requirements** - what the system must do, with enough detail to check · these become your eval cases
-- **Infrastructure requirements** - latency, scale, data residency, identity, audit · some of these decide the platform, so capture them first
+- **Infrastructure requirements** - latency, scale, **data residency** (which country or region the data is stored and processed in), identity, audit · some of these decide the platform, so capture them first
 - **Gates** - don't build until the platform meets residency · don't release until the new version clears the eval
 
 <RoleLens dev={"Pin full model IDs, keep prompts in version control, roll out new models behind a flag, and watch the deprecation dates."} test={"A model upgrade is a regression risk: run your eval suite against the new model ID before switching, just as you would run the regression pack before a release."} data={"Prompt and model versions belong in your lineage metadata, so you can explain why last month's classifications differ from this month's."} ba={"Model deprecations are planned change. Put them on the roadmap with an owner, a test window and sign-off, the same as any dependency upgrade."} />
 
 ### Choosing a platform
 
-The customer's existing cloud, identity and compliance agreements usually decide the platform.
+Claude isn't only available from Anthropic directly: the big cloud providers also offer it, so a **platform** here means *where you call Claude from*. The customer's existing cloud, identity and compliance agreements usually decide the platform.
 
 | Platform | Identity and data | Choose when |
 |---|---|---|
 | Claude API (first-party) | Anthropic identity and terms; new features first | No binding cloud or residency constraint |
 | Claude Platform on AWS | Through the customer's AWS account, Anthropic model IDs and lifecycle | On AWS but wants first-party parity |
 | Amazon Bedrock | AWS identity; data stays in the configured AWS boundary | On AWS with a compliance posture there |
-| Google Vertex AI | Google Cloud IAM; regional or global endpoints | On Google Cloud |
-| Microsoft Foundry | Wrapping product's identity and billing | Customer already runs Foundry |
+| Google Vertex AI | Google Cloud IAM (Google's identity and access system); regional or global endpoints | On Google Cloud |
+| Microsoft Foundry (Microsoft's AI platform) | Microsoft's identity and billing | Customer already runs Foundry |
 
-Compare platforms on **latency** (measured from the customer's region), **compliance** (usually pass or fail) and **total cost** (tokens plus egress, fees and integration effort), not token price alone.
+Compare platforms on **latency** (measured from the customer's region), **compliance** (usually pass or fail) and **total cost** (tokens plus **egress**, the charge for data leaving a cloud, plus fees and integration effort), not token price alone.
 
 ### Pin the exact model version you release
 
-Every full model ID is a fixed snapshot; an alias moves over time and may resolve differently per platform. Pin the full ID in configuration, keep the previous version available for rollback, and promote a new model only after it clears your eval baseline (Domain 4). A moving alias is fine for a throwaway prototype, never for production.
+The **model ID** is the exact name you send in `model`. A full ID points at a fixed **snapshot**, a frozen version of the model that never changes. An **alias** is a nickname that's moved to newer snapshots over time, and it may point at different versions on different platforms. Pin the full ID in configuration, keep the previous version available for rollback, and promote a new model only after it matches or beats your **eval baseline**, the score your current version gets on your tests (Domain 4). A moving alias is fine for a throwaway prototype, never for production.
+
+{/* more:2-pin */}
+**Example:** keep the model ID in configuration, not in code, so an upgrade is a config change you can test and roll back.
+
+<CodeSwitch title="Read the model ID from configuration">
+
+```java
+// application.properties: claude.model=claude-sonnet-5-5
+String model = config.getProperty("claude.model");
+Message msg = client.messages().create(MessageCreateParams.builder()
+    .model(model).maxTokens(1024L)
+    .addUserMessage(question)
+    .build());
+```
+
+```python
+MODEL = os.environ["CLAUDE_MODEL"]          # e.g. "claude-sonnet-5-5", set per environment
+msg = client.messages.create(model=MODEL, max_tokens=1024,
+                             messages=[{"role": "user", "content": question}])
+```
+
+```typescript
+const MODEL = process.env.CLAUDE_MODEL!;    // e.g. 'claude-sonnet-5-5', set per environment
+const msg = await client.messages.create({ model: MODEL, max_tokens: 1024,
+                                           messages: [{ role: 'user', content: question }] });
+```
+
+</CodeSwitch>
+{/* /more */}
+
+
+
+
+
 
 ### Further reading
 

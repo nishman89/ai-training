@@ -6,6 +6,7 @@ import CodeSwitch from '../components/CodeSwitch.astro';
 import { GUIDE_V1_URL, GUIDE_V11_URL } from '../data/blueprint';
 import { getChapters } from '../lib/data';
 import { READING_ORDER } from '../data/prerequisites';
+import { OVERVIEWS } from '../data/domain-overviews';
 import { url, QUESTIONS_PER_CHAPTER } from '../lib/site';
 
 const chapters = await getChapters();
@@ -101,7 +102,7 @@ const pom = `<dependency>
     </section>
 
     <section id="reading-order" data-testid="reading-order">
-      <h2 class="dot">New to Claude? Read the domains in this order</h2>
+      <h2 class="dot">The eight domains in plain English, in the order to read them</h2>
       <p>The site keeps the official domain numbers, which put agents first. For a first read, go in this order instead: each domain only
         builds on the ones before it. Unfamiliar words have a <span class="gl-demo">dotted underline</span>: hover over or tap them for a plain-English
         definition, or open the <a href={url('glossary')}>Glossary</a>. Each section also says what to <strong>📖 read first</strong>.</p>
@@ -113,7 +114,8 @@ const pom = `<dependency>
               <span class="order__n">{i + 1}</span>
               <div>
                 <a class="order__title" href={url(`chapters/${r.domain}`)}>Domain {r.domain}: {ch.data.title} →</a>
-                <p>{r.why}</p>
+                <p class="order__what">{OVERVIEWS[r.domain].what}</p>
+                <p><strong>Why read it now:</strong> {r.why}</p>
               </div>
             </li>
           );
@@ -208,6 +210,7 @@ const pom = `<dependency>
         <li><strong>Follow the <a href="#reading-order">reading order</a> above.</strong> Each section is collapsible; tick sections off as you go. Every domain opens with a plain-English summary, then the detail, Java, Python and TypeScript examples, and links to the official docs.</li>
         <li><strong>Spend most time on what's new to everyone:</strong> token and cost arithmetic, reading <code>stop_reason</code> and <code>usage</code>, the tool-use round trip, workflow vs agent, context strategies, and why prompt rules are never security controls.</li>
         <li><strong>Check the "Watch out for…" box</strong> at the end of each domain: the confusions exam questions like to test.</li>
+        <li><strong>Before the exam, read the <a href={url('exam-tips')}>Exam tips</a>:</strong> practical tips by topic, each linked to the notes.</li>
         <li><strong>Revise from the <a href={url('summaries')}>Summaries</a> page:</strong> every section's key points on one page.</li>
         <li><strong>Take the domain quiz.</strong> Original practice questions in the exam's style, every option explained, each linked to the Claude doc it's based on.</li>
         <li><strong>Sit the <a href={url('mock-exam')}>mock exam</a></strong> when you've covered all eight domains.</li>
@@ -250,5 +253,6 @@ const pom = `<dependency>
   .order__title { font: 700 1.1rem var(--font-head); text-decoration: none; color: var(--charcoal); }
   .order__title:hover { color: var(--pink-dark); }
   .order__step p { margin: 0.25rem 0 0; color: var(--grey); }
+  .order__step .order__what { color: var(--charcoal); font-weight: 600; }
   .gl-demo { text-decoration: underline dotted var(--pink); text-decoration-thickness: 2px; text-underline-offset: 3px; }
 </style>
