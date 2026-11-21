@@ -3,16 +3,17 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import PageHead from '../components/PageHead.astro';
 import { getSummaries } from '../lib/summaries';
 import { url } from '../lib/site';
+import { WATCH_OUTS } from '../data/summary-watchouts';
 
 const domains = await getSummaries();
 const total = domains.reduce((n, d) => n + d.sections.length, 0);
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const fmt = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
+const fmt = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
 ---
 <BaseLayout title="Summaries" description="Every section summary from the eight CCDV-F domains on one page, for quick revision.">
   <PageHead eyebrow="Quick revision" title="Summaries">
-    <p class="lead">All {total} section summaries on one page, grouped by domain. Each heading links to the full notes, and each
-      domain ends with a link to its "How it all fits together" map.</p>
+    <p class="lead">All {total} section summaries on one page, grouped by domain. Each heading links to the full notes, and some
+      sections add a <span class="mini-gotcha">⚠ Watch out</span> line for a common trap, and each domain ends with a link to its "How it all fits together" map.</p>
   </PageHead>
 
   <div class="container">
@@ -34,7 +35,8 @@ const fmt = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
           {d.sections.map((s) => (
             <article class="card sec" data-testid={`summary-${s.number.replace('.', '-')}`}>
               <h3><a href={`${url(`chapters/${d.number}`)}#${s.slug}`}><span class="sec__no">{s.number}</span> {s.title}</a></h3>
-              <div class="pts">{s.points.map((p) => <p class="pt" set:html={fmt(p)} />)}</div>
+              <div class="pts">{s.points.map((p, i) => i === 0 ? <p class="pt pt--key"><span class="pt__tag">★ The one thing</span><span set:html={fmt(p)} /></p> : <p class="pt" set:html={fmt(p)} />)}</div>
+              {(WATCH_OUTS[s.number] ?? []).map((w) => <p class="watch" data-testid="watch-out"><span class="watch__tag">⚠ Watch out</span> <span set:html={fmt(w)} /></p>)}
             </article>
           ))}
         </div>
@@ -46,6 +48,11 @@ const fmt = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
 
 <style>
   .lead { max-width: 50rem; }
+  .pt--key { padding: 0.6rem 0.8rem !important; border-radius: 10px; background: var(--pink-tint); font-weight: 600; }
+  .pt--key::before { content: none !important; }
+  .pt__tag { display: block; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pink-dark); margin-bottom: 0.15rem; }
+  .watch { margin: 0.75rem 0 0; padding: 0.55rem 0.8rem; border-radius: 10px; background: var(--pink-tint); font-size: 0.95rem; line-height: 1.5; }
+  .watch__tag { font-weight: 800; color: var(--pink-dark); white-space: nowrap; }
   .fit-link { display: inline-block; margin-top: 1rem; padding: 0.55rem 1rem; border-radius: 10px; background: var(--charcoal); color: #fff; font-weight: 700; text-decoration: none; }
   .fit-link:hover { background: var(--pink); color: #fff; }
   .mini-gotcha { display: inline-block; padding: 0 0.5rem; border-radius: 999px; background: var(--pink-tint); color: var(--pink-dark); font-weight: 700; font-size: 0.85rem; }

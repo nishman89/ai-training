@@ -8,12 +8,14 @@
 interface Props { points: string[]; title?: string; }
 const { points, title = 'Section summary' } = Astro.props;
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const fmt = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
+const fmt = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
 ---
 <details class="section-summary fold" data-testid="section-summary">
   <summary><span class="eyebrow">{title}</span></summary>
   <div class="pts">
-    {points.map((p) => <p class="pt" set:html={fmt(p)} />)}
+    {points.map((p, i) => i === 0
+      ? <p class="pt pt--key"><span class="pt__tag">★ The one thing</span><span set:html={fmt(p)} /></p>
+      : <p class="pt" set:html={fmt(p)} />)}
   </div>
 </details>
 
@@ -25,5 +27,9 @@ const fmt = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
   .section-summary .pts { display: grid; gap: 0.45rem; }
   .section-summary .pt { position: relative; margin: 0; padding-left: 1.6rem; line-height: 1.5; color: #fff; }
   .section-summary .pt::before { content: '✓'; position: absolute; left: 0; top: 0; color: var(--pink-soft); font-weight: 700; }
+  .section-summary .pt--key { padding: 0.6rem 0.8rem; border-radius: 10px; background: rgb(255 255 255 / 0.08); font-weight: 600; }
+  .section-summary .pt--key::before { content: none; }
+  .section-summary .pt__tag { display: block; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pink-soft); margin-bottom: 0.15rem; }
+  .section-summary :global(strong) { color: #fff; }
   .section-summary :global(code) { background: rgb(255 255 255 / 0.12); color: var(--pink-soft); }
 </style>

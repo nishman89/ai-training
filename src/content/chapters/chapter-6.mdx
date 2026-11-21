@@ -96,9 +96,9 @@ The second version adds three structural pieces: **who it's for** (the agent, 10
 | **Diligence** | Taking responsibility for what you ship | Domain 7 |
 
 <SectionSummary points={[
-  "When a prompt fails, find the ONE missing building block (role, context, examples, format) instead of adding words.",
-  "Wrong format → state the output format; drifting over a long chat → a firmer system prompt; inventing its own structure → examples; failing on one kind of input → a rule for that input.",
-  "Change one thing, re-run the eval, repeat.",
+  "When a prompt fails, find the one missing piece rather than adding more words.",
+  "**Wrong format:** state the format. **Drifting in a long chat:** a firmer system prompt. **Inventing structure:** add examples.",
+  "**After each fix,** re-run the eval and remove instructions that don't improve the score.",
 ]} />
 
 ## 6.2 The techniques
@@ -299,13 +299,10 @@ Claude behaves differently depending on **where** you use it, because each surfa
 | **Claude apps** (claude.ai, desktop, mobile) | Anthropic's own system prompt, plus features such as projects, memory and connectors | A prompt that works in the app may not work the same through the API. Test it where it will run |
 
 <SectionSummary points={[
-  "The system prompt is the persistent spec: role, format and rules for every turn.",
-  "XML tags separate instructions from data and make boundaries unambiguous. Name the tags in your instructions; tag names are your choice.",
-  "Few-shot examples show the shape; they're not training data and cost tokens every call.",
-  "Output constraints name fields, types, length, preamble and how to handle missing data.",
-  "System prompt: role, standing rules, stable reference material. User turn: the request and all untrusted data, in tags.",
-  "Sanitise untrusted input: cap length, strip invisible characters and your own tag names, validate fields. It helps, but it's not a security control on its own.",
-  "The API has no default system prompt; Claude Code and the Claude apps add their own instructions and tools. Test prompts on the surface they'll run on.",
+  "Put standing rules in the system prompt, and the user's request and any outside data in the user turn, inside tags.",
+  "**Use XML tags** to separate instructions from data, and refer to the tags by name.",
+  "**When describing the format doesn't work,** show one to three examples.",
+  "**Clean up untrusted input** (limit its length, strip hidden characters). It helps, but it isn't security on its own.",
 ]} />
 
 ## 6.3 Structured outputs
@@ -644,12 +641,10 @@ if (c.category === 'UNKNOWN') {
 </CodeSwitch>
 
 <SectionSummary points={[
-  "Move machine-readable format control into the API: JSON outputs (`output_config.format`) or strict tools (`strict: true`).",
-  "A guaranteed schema isn't a guaranteed answer: still check for refusal and max_tokens.",
-  "Give fixed lists an enum plus an \"UNKNOWN\" escape hatch, then validate in code and route unknowns to a person. \"Do not hallucinate\" and temperature 0 are not fixes.",
-  "Costs: slower first request per schema, extra input tokens.",
-  "Defensive parsing: check stop_reason, parse in a try, validate the schema, then your business rules. Confident wording isn't evidence.",
-  "JSON wrapped in text or fences: use structured outputs; otherwise cut from the first { to the last } and parse in a try. Prefilling the reply is rejected on current models.",
+  "When code reads Claude's reply, use structured outputs or a strict tool, so the format is guaranteed.",
+  "**A guaranteed format isn't a guaranteed answer:** check `stop_reason` first, because a refusal or cut-off reply has no usable JSON.",
+  "**For fixed lists,** use an enum with an \"UNKNOWN\" option, and send unknowns to a person.",
+  "**Then check the content** in code: the schema, and your business rules.",
 ]} />
 
 {/* diagram */}
@@ -692,9 +687,8 @@ The reasoning comes back in its own **thinking blocks**, separate from the answe
 {/* /more */}
 
 <SectionSummary points={[
-  "What thinking is, when it's worth it and how to set effort: 5.2.",
-  "Send thinking blocks back unchanged in the next request.",
-  "Thinking text is omitted by default on newest models; thinking tokens bill as output.",
+  "When continuing a conversation, send Claude's previous reply back unchanged, thinking blocks included.",
+  "**Thinking text is hidden by default** on the newest models, but its tokens are still billed as output.",
 ]} />
 
 
@@ -1026,13 +1020,11 @@ Anthropic reported that contextual retrieval cut failed retrievals by about half
 </Exercise>
 
 <SectionSummary points={[
-  "The context window is one shared budget: decide what goes in, what's summarised, and what never enters.",
-  "Four strategies: pruning, compaction, clearing, subagent handoff. Each loses something different.",
-  "Tell a summariser what to keep: file paths, decisions, errors and fixes.",
-  "RAG breaks at chunking, embedding match (add lexical search for exact terms) or assembly.",
-  "Long documents: details in the middle get missed. Best fix: send only the relevant sections; also put documents first and the question last, and ask for quotes first.",
-  "Long-running agents: write findings to an external store, clear old tool results, compact, or use subagents. A bigger window or higher max_tokens is not the fix.",
-  "Better retrieval: hybrid (embeddings + BM25), reranking, contextual retrieval.",
+  "Everything Claude sees shares one limited space, the context window. Decide what goes in, what gets summarised, and what stays out.",
+  "**When a long document's details get missed,** send only the relevant sections. Put the document first and the question last.",
+  "**When a long conversation or agent run fills up,** summarise it, clear old tool results, or hand work to a subagent. A bigger window doesn't fix it.",
+  "**When you summarise,** tell the summariser what to keep: files changed, decisions made, errors and their fixes.",
+  "**When RAG gives poor answers,** check how documents were split, whether search found the right pieces, and how they were added to the prompt.",
 ]} />
 
 ## 6.6 Images and PDFs
@@ -1133,7 +1125,7 @@ const msg = await client.messages.create({
 <Resource kind="docs" href="https://platform.claude.com/docs/en/build-with-claude/structured-outputs" title="Structured outputs" text="JSON outputs and strict tool use, with limits." />
 
 <SectionSummary points={[
-  "Images cost tokens (≈ width × height / 784): resize when detail isn't needed.",
-  "Base64 for one-offs, URL for public hosted images, the Files API (`file_id`) for assets reused across requests.",
-  "PDFs use a `document` block; say how to handle visual ambiguity.",
+  "Images and PDFs go in the user message, before the question, and cost tokens by size, so resize big images.",
+  "**One-off file:** send it as base64. **Public file:** a URL. **Used many times:** upload it once with the Files API.",
+  "**When a picture could be read two ways,** tell Claude what to do about it.",
 ]} />

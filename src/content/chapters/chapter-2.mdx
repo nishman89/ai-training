@@ -624,12 +624,11 @@ For each reply, which of the three outcomes is it, and what should your code do?
 />
 
 <SectionSummary points={[
-  "A call is one stateless `POST /v1/messages`: your app resends the whole history every time.",
-  "Required: `model`, `max_tokens`, `messages` plus the API-key and `anthropic-version` headers. `system` is a top-level field, not a role.",
-  "The response gives you `content` blocks, a `stop_reason` and `usage`.",
-  "Every call ends one of three ways: an error (no reply), a 200 that isn't finished (max_tokens, tool_use, pause_turn, refusal, model_context_window_exceeded), or a finished 200 (end_turn, stop_sequence). Always check `stop_reason`.",
-  "Pick `content` blocks by `type`, never `content[0]`.",
-  "`usage`: total input = `input_tokens` + cache writes + cache reads; `output_tokens` includes thinking.",
+  "Each call is independent: your app sends the whole conversation every time, and Claude remembers nothing between calls.",
+  "**Every request needs** `model`, `max_tokens` and `messages`, plus the API key and version headers. `system` is its own field.",
+  "**A 200 OK doesn't mean finished.** Check `stop_reason`: only `end_turn` (or `stop_sequence`) is a complete answer.",
+  "**When reading the reply,** pick blocks by their `type`, never `content[0]`, because a thinking block can come first.",
+  "**For cost,** read `usage`: input tokens, cache reads and writes, and output tokens (which include thinking).",
 ]} />
 
 ## 2.2 Request parameters, explained
@@ -878,11 +877,10 @@ Fixes: check `stop_reason` before parsing; raise `max_tokens` or, better, **spli
 />
 
 <SectionSummary points={[
-  "Tokens are the unit of reading, writing and billing; output costs about 5× input.",
-  "`model` picks the tier: Haiku for high volume, Sonnet for a balance of speed and quality, Opus or Fable for the hardest work.",
-  "`max_tokens` caps the reply only. Hitting it truncates silently with `stop_reason: max_tokens`, never an error.",
-  "`system` holds standing rules; `messages` holds the alternating conversation.",
-  "Cost = input tokens × input price + output tokens × output price. 5.5 works through a full example.",
+  "`max_tokens` only limits the reply. If it's hit, the reply is cut off silently, with no error.",
+  "**Tokens** are how everything is measured and billed, and output costs about 5× as much as input.",
+  "**Choosing a model:** Haiku for high volume, Sonnet for balance, Opus or Fable for the hardest work.",
+  "**Standing rules** go in `system`; the conversation goes in `messages`, as alternating user and assistant turns.",
 ]} />
 
 ## 2.3 Streaming
@@ -1074,10 +1072,10 @@ The team spends a morning looking at the tool schema, which was never the proble
 **Streaming uses server-sent events, not websockets.** Server-sent events are one-way: the server keeps an ordinary HTTP response open and pushes events down it. A **websocket** is a two-way connection that both sides can send on at any time. Claude's API (and MCP over HTTP) uses SSE. If your web app uses websockets between its own server and the browser, your server simply passes the streamed text along.
 
 <SectionSummary points={[
-  "Stream when a person is watching or the output is long; skip it for short backend jobs.",
-  "Events run message_start → content_block_start/delta/stop → message_delta → message_stop.",
-  "Never act on a partial block: a tool_use input isn't valid JSON until its block stops.",
-  "Only `message_stop` means complete: commit to history then, and discard a partial turn on interruption.",
+  "Only `message_stop` means a streamed reply is complete. Save it to the history then, never before.",
+  "**Stream when a person is watching** or the reply is long; skip it for short background jobs.",
+  "**Never act on a half-received block:** a tool request's input isn't valid JSON until its block ends.",
+  "**When a stream breaks,** throw away the partial reply and retry from the last complete turn.",
 ]} />
 
 ## 2.4 Errors, retries and rate limits
@@ -1497,13 +1495,11 @@ const summaries = await Promise.all(tickets.map((t) => limit(async () => {
 If nobody is waiting for the results, the **Batch API** (5.4) is simpler still: one request, no concurrency to manage, and half the price.
 
 <SectionSummary points={[
-  "First question for any failure: could the same request succeed later? Retriable: 429, 500, 504, 529. Terminal: 400, 401, 403, 404, 413.",
-  "429 is your organisation's limit (honour `retry-after`); 529 is Anthropic-wide overload.",
-  "Limits are per organisation and model: RPM, ITPM, OTPM.",
-  "The SDK already retries with backoff (2× by default): tune `maxRetries`, don't stack your own loop.",
-  "A refusal arrives as 200 OK: read `stop_details` and log it; surface it or fall back to another model, never back off and resend the same request.",
-  "Async code runs many calls at once, but cap how many are in flight (a semaphore or thread pool) to stay under rate limits.",
-  "Spiky load plus \"nothing may be lost\" → a durable queue in front of Claude, a fixed number of workers, retries with backoff, and a dead-letter queue. Higher limits alone can't guarantee it.",
+  "For any error, ask: could the same request succeed later? If not (400, 401, 403, 404, 413), fix it rather than retry.",
+  "**429** means you went over your organisation's limit: wait as long as `retry-after` says. **529** means Anthropic is overloaded.",
+  "**The SDK already retries with backoff.** Tune its retry setting rather than adding your own loop on top.",
+  "**A refusal is a 200, not an error.** Show it or use a fallback model; resending the same request won't help.",
+  "**Spiky load where nothing may be lost:** put a queue in front of Claude, with a fixed number of workers.",
 ]} />
 
 ## 2.5 The lifecycle and deployment
@@ -1686,11 +1682,8 @@ In the **Claude Console**, an organisation can be split into **workspaces**, for
 The Console's **Workbench** is a browser playground for drafting and testing prompts against real models before you write any code. When a prompt works there, its code view gives you the request to copy into your app.
 
 <SectionSummary points={[
-  "Requirements → design → build → test → deploy → operate → iterate, with a gate between phases.",
-  "Capture infrastructure requirements (residency, latency, identity) first: they often decide the platform.",
-  "The customer's cloud and compliance posture usually pick the platform; compare latency, compliance and total cost.",
-  "Pin the full model ID, keep the previous version, and promote a new one only when it clears the eval.",
-  "Version prompts like code: files in Git, a version ID logged with every call, evals before release. A release is a prompt plus a pinned model.",
-  "Workspaces split an organisation by team or environment, each with its own keys and limits; the Workbench is for drafting and testing prompts.",
-  "Before designing, clarify scope, escalation paths, compliance and data rules, success criteria, and volume. Model and scaling choices come after.",
+  "Pin the full model ID, version your prompts in Git, and release a new pair only when it passes your evals.",
+  "**Before designing,** agree the scope, when a person takes over, the compliance rules, what success looks like, and the volume.",
+  "**Infrastructure needs** (where data may live, speed, sign-in) often decide the platform, so gather them first.",
+  "**Separate teams or environments** with workspaces, each with its own keys and limits.",
 ]} />

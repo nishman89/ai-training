@@ -245,9 +245,10 @@ The attack reached the model but couldn't reach the money. That's the difference
 />
 
 <SectionSummary points={[
-  "Injection hides instructions in content the agent reads; a jailbreak is a user trying to bypass safety rules.",
-  "Treat untrusted content as data (tags help, but it's a soft boundary).",
-  "The reliable control is on actions: fewest tools, least privilege, human approval, logging.",
+  "Claude can be steered by instructions hidden in what it reads, so control what it can do, not just what it's told.",
+  "**Injection** hides instructions in content; a **jailbreak** is a user trying to get round the rules.",
+  "**Treat outside content as data.** Tags help, but they aren't a guarantee.",
+  "**Real protection:** few tools, minimal access, a person approving risky actions, and logs.",
 ]} />
 
 ## 7.2 Enforce, don't ask
@@ -287,10 +288,9 @@ GRANT SELECT ON orders, customers TO reporting_agent;   -- read-only, two tables
 {/* /more */}
 
 <SectionSummary points={[
-  "No prompt instruction is a security control: if it must hold, enforce it outside the model.",
-  "Hooks and deny rules enforce; least privilege limits the blast radius; an OS sandbox catches what no rule covers.",
-  "Log the source, the attempted action and the block.",
-  "Deterministic = always the same result (code, hooks, deny rules, schemas, loop caps). Probabilistic = usually (prompts, CLAUDE.md, skills, the model's own choices). Must-hold rules need deterministic controls.",
+  "No prompt instruction is a security control: if something must always happen, enforce it in code.",
+  "**Code, hooks, deny rules and schemas** always behave the same way. **Prompts, CLAUDE.md and skills** only usually do.",
+  "**Limit the damage** with minimal access, and log what was attempted and what was blocked.",
 ]} />
 
 {/* diagram */}
@@ -476,10 +476,9 @@ app.post('/api/ask', requireLogin, async (req, res) => {       // signed-in user
 If a key has already shipped in a front end, treat it as **leaked**: revoke it and issue a new one (see the steps above).
 
 <SectionSummary points={[
-  "Keep credentials out of the config that references them: env vars or a secrets manager.",
-  "A committed key stays in git history: rotate it.",
-  "Rotate on a schedule and after any suspected exposure, including keys pasted into chats or tickets.",
-  "Never ship a key to a browser or mobile app: put a backend proxy in between that holds the key, authenticates users, and enforces per-user limits.",
+  "Keys belong in environment variables or a secrets manager, never in code, config files or chats.",
+  "**When a key leaks** (committed, pasted, shared), rotate it straight away: deleting it doesn't remove it from history.",
+  "**Never put a key in a browser or mobile app.** Your backend holds it and calls Claude for them.",
 ]} />
 
 {/* diagram */}
@@ -616,8 +615,8 @@ Which of these would a security reviewer accept as **enforced** controls? (a) "N
 The underlying rule: **Claude can only leak what it was given, and what its tools can reach.** So control access in your code, before the prompt is built.
 
 <SectionSummary points={[
-  "Raise residency, audit logging and admin-locked configuration in scoping, not at review.",
-  "ZDR eligibility varies by model, feature and platform: confirm it.",
-  "Trust doesn't carry across seams: each component treats incoming content as data and runs with least privilege.",
-  "Data leakage: send the minimum, filter retrieval by the user's permissions in code, keep secrets out of prompts, redact logs, and restrict where tools can send data.",
+  "Raise data location, audit logging and locked-down settings when scoping, not at the final review.",
+  "**Check zero data retention** for each model, feature and platform you use. It varies.",
+  "**Trust doesn't carry over:** content from an earlier step is still untrusted at every later one.",
+  "**Send the minimum data,** and filter by the user's permissions in your code.",
 ]} />

@@ -75,9 +75,9 @@ Cover the unhappy paths too: ask Claude to brainstorm edge cases that could brea
 {/* /more */}
 
 <SectionSummary points={[
-  "Write the design doc first: success criteria, failures to survive, cost and latency budget, trust boundary.",
-  "An eval = cases + expected behaviour + grader, averaged into one score.",
-  "Change one thing at a time and cover the unhappy paths.",
+  "An eval is a test suite for AI output: real example inputs, the expected answers, and a score you re-run after every change.",
+  "**Before building,** write down what success looks like, which failures matter, and the cost and speed limits.",
+  "**When changing a prompt,** change one thing at a time and include the awkward cases, not just the easy ones.",
 ]} />
 
 ## 4.2 Choosing a grader
@@ -150,8 +150,9 @@ function passes(output: string): boolean {
 {/* /more */}
 
 <SectionSummary points={[
-  "Exact match for one correct form; code checks for format; an LLM judge for open-ended quality.",
-  "Run cheap code checks on every commit and the judge on a schedule.",
+  "Use the cheapest grader that can tell good from bad.",
+  "**One correct answer:** exact match. **A required format:** a code check. **Open-ended quality:** an LLM judge.",
+  "**Run cheap checks on every change** and the slower judge on a schedule.",
 ]} />
 
 <RoleLens dev={"Code graders (exact match, JSON schema, regex) first; an LLM judge only for subjective qualities such as tone. Humans for calibration."} test={"Prefer deterministic assertions wherever possible. Use an LLM-as-judge only for \"is this polite?\", and treat it like a flaky oracle you must calibrate."} data={"A classification output can be graded with a simple SQL join against labelled data: accuracy per class in one query."} ba={"Turn vague criteria (\"good answer\") into checkable ones (\"mentions the 30-day limit, under 80 words\"). That's what makes them gradable by code."} />
@@ -329,9 +330,9 @@ const score = Number(/SCORE:\s*(\d)/.exec(text)?.[1]);
 />
 
 <SectionSummary points={[
-  "A judge is a second model call with a rubric: ask for strengths, weaknesses and reasoning before the score.",
-  "Calibrate against human-labelled cases; if agreement is low, tighten the rubric and re-measure.",
-  "The same eval gates releases against a pinned baseline.",
+  "Don't trust an LLM judge until its scores agree with a person's on the same cases.",
+  "**Give the judge a rubric** saying what each score means, and ask for its reasoning before the score.",
+  "**When agreement is low,** make the rubric more precise, add a good and a bad example, and measure again.",
 ]} />
 
 {/* diagram */}
@@ -571,9 +572,8 @@ if (score < BASELINE_SCORE) {
 </CodeSwitch>
 
 <SectionSummary points={[
-  "Unit, functional, integration and end-to-end tests each catch different breaks; most silent failures hide at integration seams.",
-  "Traces (prompts, tool calls, outputs, timing) show which step failed.",
-  "Debug in order: `stop_reason`, then `usage`, then the previous turn, then log the request-id.",
-  "First decide the layer: your integration code, the model's output, or the tools and data. The trace tells you, and the fixes differ.",
-  "After launch, inputs drift: sample real traffic daily, score it with your graders, track cost, latency and errors, and alert on drops.",
+  "When something goes wrong, open the trace, the record of every step, and find which step failed first.",
+  "**Decide the layer:** your code, Claude's output, or the tool or data. Each has a different fix.",
+  "**Most silent failures** happen where two parts hand over, so test those joins.",
+  "**After launch,** score a sample of real traffic every day and alert when quality, cost or speed drift.",
 ]} />

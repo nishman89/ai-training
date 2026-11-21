@@ -131,10 +131,10 @@ A common setup in production: most requests go to a middle model (usually Sonnet
 />
 
 <SectionSummary points={[
-  "Four tiers trade capability for cost and speed: Fable, Opus, Sonnet, Haiku.",
-  "Start capability-first (Opus 5.5) or efficiency-first (Haiku 5.5); tune effort before switching, and move tiers only on measured eval results.",
-  "Route mixed traffic: a default model plus an override by task type, length or difficulty.",
-  "Check IDs and prices in the docs (or the Models API) at build time: they change.",
+  "Choose the model by measuring: start with one, run your evals, and move up or down only on the results.",
+  "**The tiers:** Fable and Opus for the hardest work, Sonnet for balance, Haiku for cheap, high-volume tasks.",
+  "**Before switching model,** try changing the effort setting.",
+  "**Mixed traffic:** use a default model, and route easy or hard requests to a different one.",
 ]} />
 
 ## 5.2 Reasoning and effort
@@ -228,10 +228,10 @@ const msg = await client.messages.create({
 Use fast mode when quality must stay at Opus level *and* speed matters more than cost, for example an interactive coding agent. It isn't the answer for cutting cost.
 
 <SectionSummary points={[
-  "Choosing a model and choosing how much it reasons are separate decisions.",
-  "Current models think adaptively; tune depth with `effort`, not a token budget.",
-  "Spend reasoning on multi-step problems, not lookups, classification or reformatting: thinking tokens are output tokens.",
-  "Fast mode: same Opus-class model, up to 2.5× faster output, same quality, premium price. For speed, not for saving money.",
+  "Thinking helps with multi-step problems, but it's billed as output tokens, so don't pay for it on simple tasks.",
+  "**To control how hard it thinks,** set `effort`. Current models decide the rest themselves.",
+  "**Skip heavy thinking** for lookups, classification and reformatting.",
+  "**Need faster replies?** Fast mode gives the same quality up to 2.5× faster, at a higher price.",
 ]} />
 
 <RoleLens dev={"Extended thinking and the effort setting let Claude reason more before answering, which costs more tokens and time. Turn it up only where accuracy needs it."} test={"Higher effort can fix a failing eval case, but measure the latency and cost change too. That's a performance test."} data={"Don't switch on deep reasoning for simple row classification. It multiplies cost across millions of rows for little gain."} ba={"More thinking is slower and costs more, so ask: does this decision need it? A complex claim assessment might; a ticket tag doesn't."} />
@@ -399,10 +399,10 @@ What it costs: with a 20,000-token policy and 10,000 calls a day on Sonnet 5.5, 
 
 
 <SectionSummary points={[
-  "Caching reuses the processed prefix tools → system → messages, up to a `cache_control` breakpoint (automatic, or up to 4 explicit).",
-  "Writes cost 1.25× (5 min) or 2× (1 h); reads cost a fraction (0.1×, 0.05× on Opus/Sonnet 5.5). It pays only when reads outnumber writes.",
-  "The prefix must be byte-identical: changing tools invalidates everything; put variable content after the last breakpoint.",
-  "Prove it with `cache_read_input_tokens` and `cache_creation_input_tokens`. Both 0 means nothing was cached, often because the prefix is under the 512-token minimum.",
+  "Caching makes a repeated start of a request much cheaper, but only if that start is exactly the same every time.",
+  "**Put stable content first** (tools, then system prompt) and anything that changes after the cache marker.",
+  "**Writing the cache costs extra** (1.25×); reading it costs a small fraction. It pays off when calls repeat within minutes.",
+  "**When nothing caches,** check the usage fields: the cached part may be under the 512-token minimum, or something near the top changes.",
 ]} />
 
 ## 5.4 Batch processing
@@ -601,9 +601,9 @@ for await (const r of await client.messages.batches.results(batch.id)) {
 />
 
 <SectionSummary points={[
-  "The Batch API halves token prices in exchange for up to 24 hours' turnaround (up to 100,000 requests or 256 MB).",
-  "Same models and quality: only scheduling and price differ. It stacks with caching.",
-  "Never use it when a user is waiting; for high-volume work that needs fast answers, use the async client instead.",
+  "The Batch API halves the price, but results can take up to 24 hours, so never use it when someone is waiting.",
+  "**Same models, same quality:** only the timing and price change, and it combines with caching.",
+  "**Lots of requests that need fast answers?** Run them in parallel with the async client instead.",
 ]} />
 
 <RoleLens dev={"The Batch API takes up to 100k requests, returns within 24 hours (usually much faster) and costs half. Use it for anything nobody is waiting on."} test={"Use Batch to run large eval suites cheaply overnight: thousands of cases at 50% of the cost."} data={"This is your default for backfills and nightly enrichment: submit, poll, then load the results by `custom_id`."} ba={"If the user doesn't need an answer immediately (overnight reports, monthly reviews), Batch halves the cost. Ask \"how fast does this really need to be?\""} />
@@ -762,8 +762,7 @@ if (count.input_tokens > BUDGET) {
 />
 
 <SectionSummary points={[
-  "Everything in a request is tokens: history, documents, tool definitions, tool results, images (≈ width × height / 784).",
-  "Oversized input is rejected; a reply that runs out of room stops early.",
-  "Count tokens before sending, and measure with production-sized inputs.",
-  "Levers in order: right-size the model, cache, batch, lower effort, shrink the context.",
+  "Everything you send is tokens: history, documents, tool definitions, tool results and images. Measure with real-sized inputs.",
+  "**Before sending something large,** count the tokens: too much input is rejected, and a long reply can be cut off.",
+  "**To cut cost,** in order: a smaller model, caching, batching, lower effort, then less context.",
 ]} />

@@ -158,9 +158,9 @@ const draft = await runAgent('Find out why order 1234 is late and draft an email
 />
 
 <SectionSummary points={[
-  "Climb only as far as needed: single call → workflow → agent → multi-agent.",
-  "If you can write the steps down, build a workflow: predictable, cheap and testable.",
-  "Use an agent when you know the goal and tools but not the path, and non-determinism is acceptable.",
+  "Use the simplest option that works: one call, then a fixed workflow, then an agent, then several agents.",
+  "**When you can write the steps down,** build a workflow: it's predictable, cheaper and easy to test.",
+  "**When you know the goal and the tools but not the steps,** use an agent, and accept less predictable results.",
 ]} />
 
 ## 1.2 The five workflow patterns
@@ -510,11 +510,11 @@ for (let round = 0; round < 3; round++) {                         // always cap 
 />
 
 <SectionSummary points={[
-  "Prompt chaining: fixed steps, each using the last, with code gates between.",
-  "Routing: classify, then send down ONE specialised path or model.",
-  "Parallelisation: sectioning (independent parts) or voting (same task, aggregated).",
-  "Orchestrator-workers: subtasks decided at run time, about 15× the tokens, for broad parallel work only.",
-  "Evaluator-optimizer: generate, critique against clear criteria, repeat.",
+  "Pick the workflow pattern by the shape of the job; each one is just a few Claude calls joined by your code.",
+  "**Steps in a fixed order:** prompt chaining, with code checks between steps.",
+  "**Different kinds of request:** routing. Classify first, then send each to its own prompt or model.",
+  "**Independent parts, or several opinions:** parallelisation. Run the calls at once, then combine.",
+  "**Subtasks only known at run time:** orchestrator and workers. Powerful, but about 15× the tokens.",
 ]} />
 
 ## 1.3 The agent loop
@@ -805,10 +805,10 @@ How well an agent picks the right tool depends on how the tools are described an
 />
 
 <SectionSummary points={[
-  "The loop: call → if `stop_reason` is tool_use, run the tools → append tool_results with matching IDs → call again.",
-  "Append the assistant turn unchanged so the tool_use blocks stay intact.",
-  "You define the exit: a goal check, an iteration cap and a budget.",
-  "Put human approval before destructive actions, after planning, and on unexpected output. Register only the tools the task needs.",
+  "An agent is a loop: call Claude, run any tools it asks for, send the results back, repeat until it stops asking.",
+  "**When `stop_reason` is `tool_use`,** run the tools and send each `tool_result` with the matching ID.",
+  "**Always set exits:** a goal check, a maximum number of turns and a token or cost budget.",
+  "**Before anything risky or unexpected,** stop and ask a person to approve.",
 ]} />
 
 ## 1.4 Three ways to wire an agent
@@ -964,11 +964,11 @@ Whichever you pick, the point is the same: a framework doesn't remove the fundam
 />
 
 <SectionSummary points={[
-  "Raw API loop: you own everything. Agent SDK: the loop runs in your process (Python/TypeScript, not Java). Managed Agents: Anthropic runs the loop and sandbox.",
-  "With the Agent SDK, set `settingSources` explicitly or CLAUDE.md and skills won't load.",
-  "Managed Agents store sessions server-side, so they aren't currently ZDR or HIPAA eligible.",
-  "Agent SDK hooks (PreToolUse, PostToolUse…) are functions in your code that can block or check tool calls: rules the agent can't skip.",
-  "Frameworks such as LangGraph, Strands and PydanticAI can also run Claude; you still own tools, prompts, exit conditions and hard rules.",
+  "You can write the loop yourself, let the Agent SDK run it in your program, or let Anthropic run it (Managed Agents).",
+  "**Writing in Java?** There's no Agent SDK, so you write the loop or use the SDK's simple tool runner.",
+  "**With the Agent SDK,** set `settingSources` explicitly, or CLAUDE.md and skills may silently not load.",
+  "**When a rule must hold,** use an SDK hook: your code checks or blocks each tool call.",
+  "**Need zero data retention or HIPAA?** Managed Agents don't qualify yet, because sessions are stored on Anthropic's side.",
 ]} />
 
 {/* diagram */}
@@ -1090,7 +1090,7 @@ Pick the simplest pattern for each:
 <Resource kind="article" href="https://www.anthropic.com/engineering/building-effective-agents" title="Building effective agents" text="Anthropic's guide to workflows vs agents and the five workflow patterns." />
 
 <SectionSummary points={[
-  "Pick a memory scope at design time: in-context, external storage, summarised or stateless.",
-  "State that must survive sessions or be shared across instances belongs in external storage.",
-  "Subagents get a scoped task and a fresh context, and return only a summary: cheaper context, less visibility.",
+  "Decide at design time what the agent must remember, and where that memory lives.",
+  "**When state must survive a restart or be shared,** keep it outside the conversation: a file or a database.",
+  "**When a side task would clutter the context,** give it to a subagent. It works in a fresh context and returns only a summary.",
 ]} />

@@ -126,11 +126,10 @@ Each conversation with Claude Code is a **session**, saved on your machine so yo
 **Session hygiene:** one task per session. Use `/clear` (or a new session) between unrelated tasks, `--continue` to pick the same task back up, and put anything that must outlive the session in CLAUDE.md or a notes file, not in the chat.
 
 <SectionSummary points={[
-  "Claude Code runs the agent loop in your terminal: explore, plan, then code.",
-  "Plan mode holds it in exploration until you approve.",
-  "The Agent SDK exposes the same loop and permission model in code.",
-  "Manage the session's window: /context to see it, /compact (with instructions) to summarise, /clear for a new task, /rewind to undo a dead end.",
-  "Sessions: --continue the last one, --resume an older one; headless output can be text, json or stream-json. One task per session.",
+  "Claude Code is the agent loop in your terminal: it explores, plans, then changes code, asking permission as it goes.",
+  "**For anything big,** use plan mode: it only explores until you approve the plan.",
+  "**When the session fills up,** use `/compact` to summarise, `/clear` for a new task, or `/rewind` to undo a dead end.",
+  "**Keep one task per session.** Pick up earlier work with `--continue` or `--resume`.",
 ]} />
 
 ## 3.2 Permission modes and settings
@@ -204,9 +203,9 @@ Claude Code reads its settings, including **permission rules** (lists of actions
 />
 
 <SectionSummary points={[
-  "Choose the permission mode by risk: default, acceptEdits, plan, auto, dontAsk, bypassPermissions (disposable environments only).",
-  "Settings layer user → project → local → enterprise; enterprise can't be overridden.",
-  "Deny beats allow, even in bypass mode.",
+  "Deny rules always win, even over allow rules and even in the most permissive mode.",
+  "**Choose the permission mode by risk.** Only use `bypassPermissions` in a throwaway container or virtual machine.",
+  "**Settings combine in layers,** and company-wide (enterprise) settings can't be overridden.",
 ]} />
 
 ## 3.3 Durable context
@@ -373,11 +372,10 @@ fi
 />
 
 <SectionSummary points={[
-  "CLAUDE.md: short universal rules, loaded every session. Rules: path-scoped. Skills: on demand. Hooks: guarantees. Subagents: isolated context.",
-  "Instructions are probabilistic, hooks are guaranteed: PreToolUse can block (exit code 2), PostToolUse formats, tests and logs.",
-  "Custom subagents don't inherit skills unless listed.",
-  "CLAUDE.md levels: managed policy (can't be overridden) → project (shared) → user (you, everywhere) → local (you, this repo). They combine; the more specific wins on conflict.",
-  "A hook's matcher only selects the tool (e.g. Bash). To block specific commands, the script must read tool_input from stdin and exit 2; exit 1 doesn't block.",
+  "Instructions are usually followed; hooks always run. If a rule must hold every time, make it a hook.",
+  "**CLAUDE.md** holds short rules for every session. Keep it short: long files get diluted.",
+  "**To block a command,** a PreToolUse hook reads the command and exits with code 2. Exit code 1 doesn't block.",
+  "**CLAUDE.md files stack:** company policy, project, your own, then local. The most specific wins.",
 ]} />
 
 ## 3.4 Sharing a setup
@@ -645,12 +643,9 @@ Whether a person or Claude Code Review does the first pass, the reviewer decides
 Be specific and constructive: say what's wrong, why it matters, and what to do instead. A good review teaches the pattern, so the same mistake doesn't come back.
 
 <SectionSummary points={[
-  "Skills are portable procedures; custom commands are now skills; plugins bundle skills, hooks, subagents and MCP servers.",
-  "Use `$CLAUDE_PROJECT_DIR` and `${CLAUDE_PLUGIN_ROOT}`, never absolute paths.",
-  "Bundle every dependency and guardrail, and test the install on a clean machine.",
-  "Run it unattended: headless (`claude -p`) in your own CI, the GitHub Action (@claude), managed Code Review for PRs, or scheduled routines. Verify unattended work.",
-  "In PR review, block secrets in code, missing error/stop_reason handling, brittle parsing and security gaps; comment on style.",
-  "Skills load in three levels: name + description always (~100 tokens), SKILL.md body when triggered, bundled files and scripts only when used. The description is the trigger.",
-  "Skill name: lowercase, hyphens, 64 chars max. Description: what it does and when, 1,024 chars max.",
-  "Skills live in ~/.claude/skills (personal) or .claude/skills (project); via the API they go in container.skills with the code execution tool, with no network or package installs. They don't sync between surfaces.",
+  "A skill is a folder of instructions that loads only when its description matches the task, so the description is the trigger.",
+  "**When a skill never fires,** rewrite its description to say what it does and when to use it.",
+  "**Sharing a setup?** Bundle it as a plugin, use path variables instead of your own folders, and test on a clean machine.",
+  "**Running without a person watching** (CI, the GitHub Action, scheduled routines), check the results before trusting them.",
+  "**In code review,** block secrets, missing error handling and brittle parsing; comment on style.",
 ]} />
