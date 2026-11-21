@@ -10,6 +10,7 @@ objectives:
   - "Package a setup as a plugin that works on every teammate's machine"
 ---
 import Compare from '../../components/diagrams/Compare.astro';
+import Imagine from '../../components/Imagine.astro';
 import ExamRef from '../../components/ExamRef.astro';
 import CodeSwitch from '../../components/CodeSwitch.astro';
 import RoleLens from '../../components/RoleLens.astro';
@@ -24,6 +25,7 @@ import Resource from '../../components/Resource.astro';
 ## 3.1 How Claude Code works
 
 <ExamRef section="3.1" />
+<Imagine text={"An Acme developer must add tests to an old billing module nobody understands. Instead of reading 40 files, they ask a coding agent to explore the code, propose a plan, and then write and run the tests."} />
 
 
 
@@ -47,6 +49,8 @@ import Resource from '../../components/Resource.astro';
 - Run the tests after every change and fix failures before moving on.
 ```
 {/* /more */}
+
+
 
 
 
@@ -87,6 +91,8 @@ claude --permission-mode plan
 
 
 
+
+
 <SectionSummary points={[
   "Claude Code runs the agent loop in your terminal: explore, plan, then code.",
   "Plan mode holds it in exploration until you approve.",
@@ -96,6 +102,7 @@ claude --permission-mode plan
 ## 3.2 Permission modes and settings
 
 <ExamRef section="3.2" />
+<Imagine text={"That coding agent is about to run commands on a laptop that can reach production. How much should it be allowed to do before it has to ask?"} />
 
 
 
@@ -127,6 +134,9 @@ A **permission mode** sets how much Claude Code may do without asking you first.
 <RoleLens dev={"Permission modes decide what it may do without asking. Settings files (`settings.json`) let you allow `mvn test` but deny `git push`."} test={"In CI you want headless runs with a tight allow-list, so the agent can run tests but can't change pipeline config or push."} data={"Deny read access to `.env` and credentials folders in settings. Data engineers' repos are full of connection strings."} ba={"Permissions are a governance control: who signs off what the AI may change unaided? Record that decision like any other access policy."} />
 
 ### Settings layers
+
+<Imagine text={"You let Claude run tests on your laptop; the team wants everyone to have that; and security wants nobody, anywhere, to read `.env` files."} />
+
 
 Claude Code reads its settings, including **permission rules** (lists of actions that are always allowed or always blocked), from up to four files. Each layer can override the one before it.
 
@@ -174,6 +184,7 @@ Claude Code reads its settings, including **permission rules** (lists of actions
 ## 3.3 Durable context
 
 <ExamRef section="3.3" />
+<Imagine text={"Every session, the developer retypes \"build with ./mvnw verify, never touch db/migrations\". And once, late in a long session, Claude touched db/migrations anyway."} />
 
 
 
@@ -206,6 +217,9 @@ A **subagent** here is a helper agent with its own separate context (as in 1.5).
 <RoleLens dev={"`CLAUDE.md` holds the repo's standing instructions: build commands, conventions, \"use AssertJ, not JUnit asserts\". It's read at the start of every session."} test={"Put your test conventions in `CLAUDE.md`: Page Object pattern, naming, where fixtures live. Every generated test then follows them."} data={"Document the warehouse conventions there: schema naming, \"never `SELECT *` in models\", how to run the pipeline locally."} ba={"`CLAUDE.md` is effectively a living definition of done for the AI. A BA can help write the domain glossary section."} />
 
 ### Hook events
+
+<Imagine text={"You want the code formatter to run after every single edit, automatically, not \"whenever Claude remembers\"."} />
+
 
 A **hook** is your own script that Claude Code runs automatically at a set moment, called an **event**. Because your code runs it, not the model, it always happens. These are the main events:
 
@@ -267,6 +281,7 @@ fi
 ## 3.4 Sharing a setup
 
 <ExamRef section="3.4" />
+<Imagine text={"The setup works so well the whole team wants it: the same rules, the same release-notes command and the same safety checks, on every laptop, without copying files around."} />
 
 
 
@@ -301,6 +316,8 @@ description: Draft release notes from the commits since the last tag. Use when a
 
 
 
+
+
 {/* diagram */}
 <Compare caption="Three ways to share a setup, from smallest to biggest (Exam guide: Claude Code Operation)" columns={[
   { title: 'Skill', sub: 'SKILL.md', points: ['Loads when its description matches', 'Or invoked by name', 'Runs in Claude Code, API and Agent SDK'] },
@@ -311,6 +328,9 @@ description: Draft release notes from the commits since the last tag. Use when a
 <RoleLens dev={"Commit project settings, skills and `CLAUDE.md` to the repo, or bundle them as a plugin, so the whole team gets the same setup. Personal settings stay in your user config."} test={"Share a `test-review` skill so every tester gets the same review prompt and checklist."} data={"A shared `new-model` skill that scaffolds a dbt model plus tests keeps the whole team's output consistent."} ba={"Shared skills encode team process. Reviewing them is like reviewing a template or a checklist."} />
 
 ### Make it portable
+
+<Imagine text={"A teammate's shared plugin works perfectly on their machine and fails on everyone else's."} />
+
 
 A plugin that hard-codes `/Users/you/...` works for its author and fails for everyone else. Use the environment variables Claude Code sets for you instead: `$CLAUDE_PROJECT_DIR` (the project's folder) for project scripts and `${CLAUDE_PLUGIN_ROOT}` (the plugin's install folder) for scripts inside the plugin, bundle every file the plugin depends on, document and validate the environment variables it needs, and test the install on a clean machine. A deny rule or hook you relied on locally only travels with the plugin if it's bundled.
 

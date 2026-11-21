@@ -12,6 +12,7 @@ objectives:
 ---
 import Tiles from '../../components/diagrams/Tiles.astro';
 import Compare from '../../components/diagrams/Compare.astro';
+import Imagine from '../../components/Imagine.astro';
 import ExamRef from '../../components/ExamRef.astro';
 import RoleLens from '../../components/RoleLens.astro';
 import PictureIt from '../../components/PictureIt.astro';
@@ -190,6 +191,7 @@ Two HTTP calls, one tool run by **your** code, and the IDs tie them together.
 ## 8.2 Designing tools Claude picks correctly
 
 <ExamRef section="8.2" />
+<Imagine text={"Claude keeps calling the refund tool when customers ask where their order is. Both tools have one-line descriptions, so Claude is guessing."} />
 
 
 
@@ -268,6 +270,8 @@ const getOrderStatus: Anthropic.Tool = {
 
 
 
+
+
 {/* diagram */}
 <Compare caption="A tool Claude struggles with, and one it picks correctly (Exam guide: Tool Implementation)" columns={[
   { title: 'Vague tool', sub: 'run_sql(query)', points: ['One-line description', 'Free-text parameter', 'Overlaps other tools'] },
@@ -277,6 +281,9 @@ const getOrderStatus: Anthropic.Tool = {
 <RoleLens dev={"Clear names, detailed descriptions, tight schemas and enums. Claude picks tools by reading the descriptions, so write them like good Javadoc."} test={"If Claude picks the wrong tool, that's a test failure to fix in the description. Add the case to the eval set."} data={"Prefer `get_daily_sales(region, date)` over a generic `run_sql(query)` tool: it's safer and easier for Claude to call correctly."} ba={"Tool descriptions read like a service catalogue. A BA can review whether each one matches the business capability it represents."} />
 
 ### Errors go back to Claude
+
+<Imagine text={"The stock system times out, your tool quietly returns an empty list, and Claude tells a customer the router is out of stock. It isn't."} />
+
 
 Return failures as a `tool_result` with `is_error: true` and a useful message, so the model can retry, try another approach, ask the user or stop. An empty result is read as valid data ("no orders found"), and the model carries on confidently.
 
@@ -297,6 +304,7 @@ Return failures as a `tool_result` with `is_error: true` and a useful message, s
 ## 8.3 Client tools, server tools and tool_choice
 
 <ExamRef section="8.3" />
+<Imagine text={"Some questions need live information Acme doesn't hold, like \"is there a national outage on other networks?\". You don't want to build and maintain a web-search tool yourself."} />
 
 
 
@@ -342,6 +350,8 @@ Claude can ask for several tools in one reply (**parallel tool use**). Add `disa
 ]}
 ```
 {/* /more */}
+
+
 
 
 
@@ -394,6 +404,7 @@ const msg = await client.messages.create({
 ## 8.4 The Model Context Protocol
 
 <ExamRef section="8.4" />
+<Imagine text={"Three Acme apps (the chatbot, the staff dashboard and Claude Code) all need to check stock levels. Writing the same integration three times, and keeping three copies in sync, is wasted effort."} />
 
 
 
@@ -414,11 +425,16 @@ Wiring a tool straight into each app means three apps need three integrations. M
 
 
 
+
+
 <Hub center="MCP server" caption="An MCP server exposes three kinds of capability (Exam guide: MCP Server Development)" items={['Tools: actions the model calls', 'Resources: read-only data the client fetches', 'Prompts: templates the user invokes']} />
 
 <RoleLens dev={"MCP is a standard way to expose tools and data to Claude: build one MCP server, and every MCP-capable client can use it."} test={"MCP servers for Jira or your test management tool let an agent read requirements and log defects directly."} data={"An MCP server in front of the warehouse gives Claude governed, read-only access to agreed views."} ba={"With MCP, Claude can read Confluence or Jira directly, so it can draft stories from real context. Agree what it's allowed to see."} />
 
 ### Transports: how Claude connects to an MCP server
+
+<Imagine text={"One MCP server is a script on a developer's laptop; another is a shared service the whole company uses. They can't connect the same way."} />
+
 
 A **transport** is the channel the client and server use to exchange messages. There are two.
 
@@ -515,6 +531,7 @@ serveStdio(createServer);
 ## 8.5 MCP scope, permissions and auth
 
 <ExamRef section="8.5" />
+<Imagine text={"The team shares a Jira MCP server. Everyone should be able to read and create issues, nobody should be able to delete them, and the password must never end up in Git."} />
 
 
 
@@ -546,6 +563,9 @@ Transport and scope are separate decisions with linked consequences: a **stdio s
 
 ### Per-tool permissions
 
+<Imagine text={"The GitHub MCP server offers 40 tools. You want Claude to open issues freely but never merge a pull request."} />
+
+
 Connecting a server exposes its whole tool list. Permission rules can target one tool by name: `mcp__server__tool`. For example, allow `mcp__github__create_issue` without a prompt while other GitHub tools still prompt, or deny a write tool while read tools stay available. **A deny on one tool beats an allow on the server.** Through the API's **MCP connector** (remote servers called straight from the Messages API), an `mcp_toolset` can enable or disable each tool: a permission rule decides "can it run", enabling decides "can the model see it".
 
 {/* more:8-pertool */}
@@ -565,7 +585,12 @@ Connecting a server exposes its whole tool list. Permission rules can target one
 
 
 
+
+
 ### Authentication
+
+<Imagine text={"The Jira MCP server needs credentials. A password typed into the shared config file would leak to everyone who clones the repo."} />
+
 
 <MythReality rows={[
   { myth: 'Put the API key in .mcp.json so teammates can connect', reality: 'The key goes into git history for good: rotate it. Reference an environment variable; the file holds only the server address' },

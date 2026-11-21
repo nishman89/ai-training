@@ -1,0 +1,24 @@
+---
+/**
+ * "Imagine…": a short, concrete problem that opens a section, so the reader knows why it matters before the detail.
+ * All scenarios use the same fictional company, Acme Broadband, so they connect from section to section.
+ *   <Imagine text={"..."} />      **bold** and `code` work in the text.
+ */
+interface Props { text: string; }
+const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const fmt = (s: string) => esc(s).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/`([^`]+)`/g, '<code>$1</code>');
+---
+<aside class="imagine" data-testid="imagine">
+  <span class="imagine__icon" aria-hidden="true">🧩</span>
+  <div>
+    <p class="imagine__label">Imagine…</p>
+    <p class="imagine__text" set:html={fmt(Astro.props.text)} />
+  </div>
+</aside>
+
+<style>
+  .imagine { display: flex; gap: 0.9rem; align-items: flex-start; margin: 0 0 1.25rem; padding: 1rem 1.2rem; border-radius: var(--radius); background: linear-gradient(135deg, #eef4ff, #f6f0ff); border: 1px solid #d9e2f5; }
+  .imagine__icon { flex: none; display: grid; place-items: center; width: 2.4rem; height: 2.4rem; border-radius: 50%; background: #fff; font-size: 1.2rem; box-shadow: var(--shadow); }
+  .imagine__label { margin: 0 0 0.15rem; font: 800 0.78rem var(--font-body); letter-spacing: 0.06em; text-transform: uppercase; color: #3b4f8f; }
+  .imagine__text { margin: 0; font-size: 1.05rem; line-height: 1.55; color: var(--charcoal); }
+</style>

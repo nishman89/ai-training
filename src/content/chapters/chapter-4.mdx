@@ -9,6 +9,7 @@ objectives:
   - "Calibrate an LLM judge against human labels"
   - "Use test levels and traces to find where a failure happened"
 ---
+import Imagine from '../../components/Imagine.astro';
 import ExamRef from '../../components/ExamRef.astro';
 import RoleLens from '../../components/RoleLens.astro';
 import Gotcha from '../../components/Gotcha.astro';
@@ -67,6 +68,8 @@ Cover the unhappy paths too: ask Claude to brainstorm edge cases that could brea
 
 
 
+
+
 <SectionSummary points={[
   "Write the design doc first: success criteria, failures to survive, cost and latency budget, trust boundary.",
   "An eval = cases + expected behaviour + grader, averaged into one score.",
@@ -76,6 +79,7 @@ Cover the unhappy paths too: ask Claude to brainstorm edge cases that could brea
 ## 4.2 Choosing a grader
 
 <ExamRef section="4.2" />
+<Imagine text={"Acme's ticket classifier, reply drafter and outage summariser all need testing. A category is simply right or wrong; a reply can be more or less polite. They need different kinds of marking."} />
 
 
 
@@ -140,6 +144,8 @@ function passes(output: string): boolean {
 
 
 
+
+
 <SectionSummary points={[
   "Exact match for one correct form; code checks for format; an LLM judge for open-ended quality.",
   "Run cheap code checks on every commit and the judge on a schedule.",
@@ -150,6 +156,7 @@ function passes(output: string): boolean {
 ## 4.3 Calibrating an LLM judge
 
 <ExamRef section="4.3" />
+<Imagine text={"You use Claude to mark the reply drafter's answers out of 5, and it gives everything a 4 or 5. Is the drafter that good, or is the marker too generous?"} />
 
 
 
@@ -305,6 +312,7 @@ const score = Number(/SCORE:\s*(\d)/.exec(text)?.[1]);
 ## 4.4 Tests, traces and debugging
 
 <ExamRef section="4.4" />
+<Imagine text={"A customer complains the bot quoted the wrong refund amount. Every test passes. Where do you even start looking?"} />
 
 
 
@@ -313,6 +321,9 @@ const score = Number(/SCORE:\s*(\d)/.exec(text)?.[1]);
 
 
 ### Test levels
+
+<Imagine text={"The search step passes its tests and the answering step passes its tests, yet together they give wrong answers."} />
+
 
 The usual layers of testing still apply to a Claude feature. What changes is where the failures hide.
 
@@ -335,6 +346,9 @@ The usual layers of testing still apply to a Claude feature. What changes is whe
 <RoleLens dev={"Log every request and response with prompt version, `stop_reason` and token counts. Most bugs are visible in a trace."} test={"When a test fails, open the trace: was it the prompt, the tool result, or truncation? Attach the trace to the defect report."} data={"Traces are event data: ship them to the warehouse and query failure patterns by prompt version or model."} ba={"A trace shows exactly what the AI saw and said, which is great evidence for a defect triage or a stakeholder complaint."} />
 
 ### Tracing
+
+<Imagine text={"A wrong answer went out at 14:03 yesterday. Without a record of exactly what Claude was sent, you can't reproduce it."} />
+
 
 A **trace** is a step-by-step record of one run. Record each step: the prompt, tool calls, intermediate outputs and timing. When an eval case fails, the trace shows which step produced the bad result, and later confirms the fix.
 

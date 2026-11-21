@@ -12,6 +12,7 @@ objectives:
 ---
 import Compare from '../../components/diagrams/Compare.astro';
 import Tiles from '../../components/diagrams/Tiles.astro';
+import Imagine from '../../components/Imagine.astro';
 import ExamRef from '../../components/ExamRef.astro';
 import RoleLens from '../../components/RoleLens.astro';
 import PictureIt from '../../components/PictureIt.astro';
@@ -66,6 +67,7 @@ This domain is about getting Claude to finish jobs that take several steps. A **
 ## 1.2 The five workflow patterns
 
 <ExamRef section="1.2" />
+<Imagine text={"Acme wants every new support ticket handled automatically. Some steps never change (summarise it, then translate it for the overseas team); others depend on the ticket (billing or technical?). Before building an agent, check whether one of five standard shapes already fits."} />
 
 
 
@@ -116,6 +118,8 @@ const french = await ask(`Translate into French, keeping the tone:\n${draft}`); 
 
 
 
+
+
 {/* diagram */}
 <Tiles cols={5} caption="The five workflow patterns: you write the control flow (Exam guide: Agent Architecture)" tiles={[
   { label: '1', title: 'Prompt chaining', sub: 'Step → gate → step' },
@@ -129,9 +133,15 @@ const french = await ask(`Translate into French, keeping the tone:\n${draft}`); 
 
 ### Routing
 
+<Imagine text={"Billing questions need the account tools; technical ones need the line-test tools. Giving every ticket every tool makes Claude slower and more likely to pick the wrong one."} />
+
+
 **Routing** means sorting each request into a category first, then sending it to the handler built for that category, like a phone menu that says "press 1 for billing, 2 for technical support". In practice, one quick Claude call classifies the input, and your code then sends it to a specialised prompt, tool set or model. Example: route refund requests, technical questions and general queries to different handlers, or send easy questions to Haiku and hard ones to a bigger model.
 
 ### Parallelisation
+
+<Imagine text={"A code change needs a security review, a performance review and a style review. Doing them one after another takes three times as long as necessary."} />
+
 
 **Parallelisation** means running several Claude calls at the same time and combining the results. There are two kinds:
 
@@ -180,11 +190,19 @@ const reviews = await Promise.all(['security', 'performance', 'readability'].map
 
 
 
+
+
 ### Orchestrator-workers
+
+<Imagine text={"\"Research every competitor's broadband prices in 12 countries.\" Nobody knows in advance how to split that job up."} />
+
 
 One lead call, the **orchestrator**, decides the subtasks **at run time**, hands each one to a separate call (a **worker**), and merges what they return. It looks like parallelisation, but the subtasks aren't predefined. Anthropic reports multi-agent research runs using roughly **15× the tokens** of a single chat, so use it only for broad work that genuinely splits into independent parts. For tightly coupled work like coding, a single agent with good context wins.
 
 ### Evaluator-optimizer
+
+<Imagine text={"Acme's terms and conditions must be translated with legal precision. First drafts are close, but not quite right."} />
+
 
 One call generates an answer (the **optimizer**), another checks it against clear criteria (the **evaluator**), and the loop repeats until the check passes. Use it when you can state what "good" looks like and iteration measurably improves the result, such as literary translation or a search that needs several rounds.
 
@@ -223,6 +241,8 @@ for (let round = 0; round < 3; round++) {                         // always cap 
 
 </CodeSwitch>
 {/* /more */}
+
+
 
 
 
@@ -307,6 +327,7 @@ switch (category) {
 ## 1.3 The agent loop
 
 <ExamRef section="1.3" />
+<Imagine text={"A customer writes \"my broadband keeps dropping\". Nobody can say in advance which checks are needed: the line status? recent outages? the router logs? You give Claude those three lookups and let it decide, one step at a time, until it can explain the problem."} />
 
 
 
@@ -427,6 +448,9 @@ Builder method names can differ slightly between SDK versions. What the exam tes
 
 ### Exit conditions and human gates
 
+<Imagine text={"The agent decides a customer deserves a £300 refund. Should it just go ahead? And what stops it if it never decides it's finished?"} />
+
+
 An **exit condition** is a rule that stops the loop. Every agent needs one: a goal check, a maximum number of turns and a token or cost budget. A **human gate** is a point where a person must approve before the agent continues. Place one where the worst case is expensive.
 
 {/* more:1-exit */}
@@ -478,6 +502,8 @@ for (let turn = 0; turn < 15; turn++) {                              // 1. maxim
 
 
 
+
+
 <WhenThen whenLabel="Insert a human check…" thenLabel="…because" rows={[
   { when: 'Before a destructive tool call (write, delete, send, pay)', then: 'High risk: the action can\'t be undone' },
   { when: 'After a planning step, before execution', then: 'Medium risk: a wrong plan gives a wrong outcome even if executed perfectly' },
@@ -518,6 +544,9 @@ What was missing: an **iteration cap** (e.g. stop at 15 turns), a **budget**, an
 
 ### How many tools to give an agent
 
+<Imagine text={"The agent has 35 tools, several doing nearly the same thing, and it keeps picking the wrong one."} />
+
+
 How well an agent picks the right tool depends on how the tools are described and how many you give it. Too many overlapping tools make choices erratic; too few and the agent invents a path or returns an incomplete result. Start with the minimum set and add a tool only for a specific gap.
 
 <Gotcha
@@ -537,6 +566,7 @@ How well an agent picks the right tool depends on how the tools are described an
 ## 1.4 Three ways to wire an agent
 
 <ExamRef section="1.4" />
+<Imagine text={"Acme's Java developers and its Python data team both want to build that troubleshooting agent. Who should write the loop that runs it: your team, a ready-made library, or Anthropic?"} />
 
 
 
@@ -609,6 +639,8 @@ for await (const message of query({
 
 
 
+
+
 <Gotcha
   title={"The skill that silently did nothing"}
   scenario={"A code-review skill works in Claude Code. The same agent, run headless through the Agent SDK in CI, ignores it."}
@@ -634,6 +666,7 @@ for await (const message of query({
 ## 1.5 Memory and long-horizon work
 
 <ExamRef section="1.5" />
+<Imagine text={"Acme's migration agent is moving 40 database tables to a new system. It takes all afternoon, and halfway through, the session ends. Tomorrow, how does it know which tables are already done?"} />
 
 
 
@@ -695,6 +728,8 @@ writeFileSync('progress.json', newStateJson);  // e.g. {"done":["users","orders"
 
 
 
+
+
 {/* diagram */}
 <Cycle caption="Long-horizon work: state lives outside the context window (Exam guide: Agent Patterns and Frameworks)" center="Progress file / memory" steps={[
   { title: 'Read state', sub: 'memory + progress notes', tone: 'blue' },
@@ -713,6 +748,9 @@ writeFileSync('progress.json', newStateJson);  // e.g. {"done":["users","orders"
 <RoleLens dev={"Keep long-lived facts in a memory store or file the agent reads and writes, not in an ever-growing `messages` list. Compact or summarise history before it hits the context limit."} test={"Long-running agents need checkpoints you can assert on: after step 5, does the progress file say what it should? Resume-from-checkpoint is a test case on its own."} data={"Memory is just state: decide its scope (per user, per project) and retention like any table. A progress file is the agent's equivalent of a watermark column."} ba={"Ask what the agent must remember between sessions and for how long. That's a data-retention requirement, and it may have GDPR implications."} />
 
 ### Subagents for long tasks
+
+<Imagine text={"To find a bug, the agent must read 50 log files. If they all land in the main conversation, there's no room left to work on the fix."} />
+
 
 A **subagent** is a second agent that the main agent starts for one sub-task. It gets that task, the minimum context it needs, the tools for that task and clear exit conditions. It works in its own context window and returns only a summary, which keeps the parent's context small. You lose visibility of how it reached its answer.
 

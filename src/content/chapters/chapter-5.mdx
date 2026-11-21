@@ -11,6 +11,7 @@ objectives:
   - "Estimate and control token usage, including images and long contexts"
 ---
 import Hub from '../../components/diagrams/Hub.astro';
+import Imagine from '../../components/Imagine.astro';
 import ExamRef from '../../components/ExamRef.astro';
 import RoleLens from '../../components/RoleLens.astro';
 import PictureIt from '../../components/PictureIt.astro';
@@ -27,6 +28,7 @@ import Resource from '../../components/Resource.astro';
 ## 5.1 Choosing a model
 
 <ExamRef section="5.1" />
+<Imagine text={"Acme runs three AI jobs: tagging 2 million tickets a month, a customer chatbot, and an agent that investigates network faults. One model for all three would be too weak for the hard job or far too expensive for the easy one."} />
 
 
 
@@ -81,7 +83,12 @@ If Haiku passes your eval on a sample of real tickets, it does the job for about
 
 
 
+
+
 ### Routing: a default plus an override
+
+<Imagine text={"90% of chats are simple FAQs and 10% are complex faults. Running all of them on the most capable model wastes money on the 90%."} />
+
 
 **Routing** (the workflow pattern from 1.2) means sending each request to a different model depending on what kind of request it is, so simple ones go to a cheap model and hard ones to a capable one. You don't have to use one model for everything. The common production pattern sends most traffic to a balanced default and routes specific requests up or down by task type, input length or a difficulty classification.
 
@@ -131,6 +138,7 @@ for await (const m of client.models.list()) {
 ## 5.2 Reasoning and effort
 
 <ExamRef section="5.2" />
+<Imagine text={"The same model answers \"when is my bill due?\" and \"why does my line drop every evening at 7pm?\". The first needs no thought; the second needs real reasoning. Paying for deep thinking on both wastes money."} />
 
 
 
@@ -194,6 +202,7 @@ const msg = await client.messages.create({
 ## 5.3 Prompt caching
 
 <ExamRef section="5.3" />
+<Imagine text={"Every chatbot call sends the same 20,000-token policy handbook before the customer's question. You're paying to process identical text 10,000 times a day."} />
 
 
 
@@ -229,6 +238,9 @@ Think of a barista who remembers your usual order: the first visit takes longer 
 
 ### What it costs
 
+<Imagine text={"Caching sounds like free money, but the first call costs more than normal. When does it actually save?"} />
+
+
 | Operation | Price vs base input |
 |---|---|
 | Cache write, 5-minute **TTL** (time to live: how long the entry lasts; the default) | 1.25× |
@@ -238,6 +250,9 @@ Think of a barista who remembers your usual order: the first visit takes longer 
 Writes cost **more** than normal input, so caching pays only when reads outnumber writes. The 5-minute lifetime refreshes free on every hit. These multipliers stack with the Batch API discount. The minimum cacheable prefix is 512 tokens on the 5.x models; shorter prompts silently don't cache.
 
 ### What breaks the cache
+
+<Imagine text={"Caching is switched on, but the bill hasn't dropped at all. Something at the top of the prompt changes on every call."} />
+
 
 The prefix must be **byte-identical**. A change at one level invalidates that level and everything after it.
 
@@ -249,6 +264,9 @@ The prefix must be **byte-identical**. A change at one level invalidates that le
 ]} />
 
 ### Proving it works
+
+<Imagine text={"Your manager asks: \"Is caching actually working?\" You need numbers, not a hunch."} />
+
 
 Read the usage fields: `total input = cache_read_input_tokens + cache_creation_input_tokens + input_tokens`. Note that `input_tokens` counts only the uncached tokens **after** the last breakpoint. If both cache fields are 0, the prefix was too short or not identical.
 
@@ -436,6 +454,7 @@ A cache hit costs 0.05× on Sonnet 5.5: about **$0.002 per call, ≈ $20 a day**
 ## 5.4 Batch processing
 
 <ExamRef section="5.4" />
+<Imagine text={"Every night, Acme wants yesterday's 50,000 tickets tagged by category for the morning dashboard. Nobody is waiting for any single answer, so why pay for instant ones?"} />
 
 
 
@@ -461,6 +480,69 @@ For work that doesn't need an answer now (overnight classification, dataset back
 ]} />
 
 For high volume that **does** need fast answers, use the SDK's **async client** (`client.async()`, returning `CompletableFuture<Message>`), which sends many requests at once without blocking a thread per request.
+
+{/* more:5-batchwhen */}
+#### When should you batch? A three-question test
+
+1. Are there **lots of separate requests**?
+2. Does each one **stand alone** (no request needs another's answer)?
+3. Is **nobody waiting** at a screen for the result?
+
+Three yeses: batch it and pay half. Any no: use the normal Messages API.
+
+| | Messages API | Batch API |
+|---|---|---|
+| Like… | Ordering at the counter | Dropping off a big laundry bag |
+| You get the answer | Now, in seconds | Later: usually under an hour, at most 24 hours |
+| Price | Full | Half |
+| Use for | Chat, buttons a user clicked, agents | Overnight tagging, backfills, eval runs, reports |
+
+Claude never sends anything to customers: the batch results come back to **your code**, which decides what happens next.
+
+#### Putting it together: triage now, batch the rest
+
+Acme wants urgent incidents handled straight away, but drafting replies to routine tickets can wait until the morning. If everything went into a batch, a P1 outage would sit unnoticed for hours. So each ticket gets one quick, cheap call as it arrives (**routing**, 1.2), and only the routine ones go into tonight's batch.
+
+<CodeSwitch title="Real-time triage plus an overnight batch">
+
+```java
+// Runs the moment a ticket arrives: one fast, cheap Messages API call
+String priority = classifyWithHaiku(ticket);          // returns "P1".."P4"
+
+if (priority.equals("P1") || priority.equals("P2")) {
+    onCall.page(ticket);                              // urgent: people now
+} else {
+    tonightsBatch.add(ticket);                        // can wait: replies drafted overnight at 50% off
+}
+// A scheduled job submits tonightsBatch to the Batch API; staff review the drafts in the morning
+```
+
+```python
+# Runs the moment a ticket arrives: one fast, cheap Messages API call
+priority = classify_with_haiku(ticket)                # returns "P1".."P4"
+
+if priority in ("P1", "P2"):
+    on_call.page(ticket)                              # urgent: people now
+else:
+    tonights_batch.append(ticket)                     # can wait: replies drafted overnight at 50% off
+# A scheduled job submits tonights_batch to the Batch API; staff review the drafts in the morning
+```
+
+```typescript
+// Runs the moment a ticket arrives: one fast, cheap Messages API call
+const priority = await classifyWithHaiku(ticket);    // returns 'P1'..'P4'
+
+if (priority === 'P1' || priority === 'P2') {
+  await onCall.page(ticket);                          // urgent: people now
+} else {
+  tonightsBatch.push(ticket);                         // can wait: replies drafted overnight at 50% off
+}
+// A scheduled job submits tonightsBatch to the Batch API; staff review the drafts in the morning
+```
+
+</CodeSwitch>
+{/* /more */}
+
 
 {/* code:5.4 */}
 **In code:** submit many requests in one batch, each with your own `custom_id`, then read the results when the batch has ended. Results can come back in any order, so match them by `custom_id`.
@@ -545,6 +627,7 @@ for await (const r of await client.messages.batches.results(batch.id)) {
 ## 5.5 Token budgets
 
 <ExamRef section="5.5" />
+<Imagine text={"In testing, conversations were short. In production, customers paste whole email threads, chats run to 60 turns, and requests start failing or getting cut off."} />
 
 
 
@@ -568,6 +651,9 @@ In development the window rarely fills because test inputs are short. In product
 <RoleLens dev={"Count tokens before sending, trim history, cap `max_tokens`, and log usage. Tokens are your cost and latency drivers."} test={"Add a budget assertion: this flow must stay under N input tokens. That catches prompt bloat before it hits the bill."} data={"Model cost as tokens × price × volume, per pipeline. It's a simple fact table with a big impact on the forecast."} ba={"Put a cost ceiling in the requirements, e.g. \"under 1p per ticket\". It forces the right model and prompt choices early."} />
 
 ### Cost levers, in the order to reach for them
+
+<Imagine text={"Finance asks you to halve the AI bill without making the answers worse. Where do you start?"} />
+
 
 1. **Right-size the model**, with routing for mixed traffic.
 2. **Cache** stable prefixes: long system prompts, tool sets, reference documents.

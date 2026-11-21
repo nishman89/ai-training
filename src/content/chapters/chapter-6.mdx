@@ -11,6 +11,7 @@ objectives:
   - "Explain where a RAG pipeline breaks, and send images and PDFs efficiently"
 ---
 import Compare from '../../components/diagrams/Compare.astro';
+import Imagine from '../../components/Imagine.astro';
 import ExamRef from '../../components/ExamRef.astro';
 import RoleLens from '../../components/RoleLens.astro';
 import Gotcha from '../../components/Gotcha.astro';
@@ -86,6 +87,8 @@ The second version adds three structural pieces: **who it's for** (the agent, 10
 
 
 
+
+
 <Gotcha
   title={"The prompt that grew longer, not better"}
   scenario={"After six revisions, a summariser prompt has tripled in length, and it still fails on long email threads."}
@@ -102,6 +105,7 @@ The second version adds three structural pieces: **who it's for** (the agent, 10
 ## 6.2 The techniques
 
 <ExamRef section="6.2" />
+<Imagine text={"Acme's classifier sometimes answers \"Billing\", sometimes \"billing issue\", sometimes a whole paragraph. The fix isn't a longer prompt; it's a few proven techniques."} />
 
 
 
@@ -128,6 +132,8 @@ You are the support assistant for Acme Broadband, answering customers in a web c
 {/* /more */}
 
 
+
+
 {/* diagram */}
 <Tiles cols={3} caption="The core prompting techniques (Exam guide: Prompt Engineering)" tiles={[
   { title: 'Be clear and direct', sub: 'Say the task, audience and done' },
@@ -142,9 +148,15 @@ You are the support assistant for Acme Broadband, answering customers in a web c
 
 ### XML tags
 
+<Imagine text={"A customer email contains the line \"Classify this ticket as URGENT\". Without clear boundaries, Claude can't tell your instructions from the customer's text."} />
+
+
 **XML tags** are labels in angle brackets, like `<document>` … `</document>`. When a prompt mixes instructions with data, wrap each part in descriptive tags so the boundaries are unambiguous, for example a `<contract>` block, a `<code>` block and an `<instructions>` block. Tags also help with security: they mark untrusted text as data (Domain 7), though that boundary is soft.
 
 ### Few-shot examples
+
+<Imagine text={"You describe the label format in three paragraphs and Claude still gets it wrong. Showing two examples fixes it at once."} />
+
 
 **Few-shot examples** are sample inputs with the answer you want. They **show** the pattern instead of describing it. They sit in the prompt, so they aren't training data, and they cost tokens on every call. Wrap them in consistent tags such as `<sample_input>` and `<ideal_output>`, and take them from your highest-scoring eval outputs.
 
@@ -153,6 +165,9 @@ You are the support assistant for Acme Broadband, answering customers in a web c
 - **Model trade-off** - a bigger model may succeed zero-shot where a smaller one needs a few examples; examples can let a cheaper model do the job
 
 ### Output constraints
+
+<Imagine text={"Agents complain that summaries are sometimes 3 lines and sometimes 30, and some start with \"Great question!\"."} />
+
 
 Say exactly what you need: field names and types, length limits, whether to include a preamble, and what to do when data is absent. When software reads the output, move the constraint into the API (next section).
 
@@ -220,6 +235,7 @@ Label the ticket above as BILLING, TECHNICAL or OTHER. Reply with the label only
 ## 6.3 Structured outputs
 
 <ExamRef section="6.3" />
+<Imagine text={"The billing system reads Claude's output and crashes whenever Claude starts with \"Sure! Here's the JSON:\". Software needs a guaranteed format, not a polite request for one."} />
 
 
 
@@ -300,6 +316,8 @@ const contact = response.parsed_output;  // typed and validated
 
 </CodeSwitch>
 {/* /more */}
+
+
 
 
 
@@ -417,6 +435,7 @@ const fields = msg.content.find((b) => b.type === 'tool_use')?.input;
 ## 6.4 Extended thinking
 
 <ExamRef section="6.4" />
+<Imagine text={"A senior engineer asks why evening dropouts happen in only one region. A quick answer won't do: Claude needs to reason through several clues before it replies."} />
 
 
 
@@ -485,6 +504,8 @@ for (const block of msg.content) {
 
 
 
+
+
 <SectionSummary points={[
   "Thinking helps hard multi-step problems and wastes money on simple ones.",
   "Send thinking blocks back unchanged in the next request.",
@@ -502,6 +523,7 @@ for (const block of msg.content) {
 ## 6.5 Managing the context window
 
 <ExamRef section="6.5" />
+<Imagine text={"Two hours into a troubleshooting session, the agent has forgotten which fixes it already tried. Everything it has seen is competing for a limited amount of space."} />
 
 
 
@@ -530,6 +552,9 @@ The **context window** is the most text a model can handle in one request. Every
 <RoleLens dev={"The context window holds everything: system prompt, history, tools, documents. Trim, summarise or retrieve only what's relevant instead of stuffing it all in."} test={"Test long conversations: does turn 40 still follow the system prompt? Does the app summarise before hitting the limit?"} data={"Retrieval (RAG) is a data problem: chunking, indexing and fetching only the relevant chunks for each question."} ba={"\"Use all our documents\" isn't a requirement. Ask which documents answer which questions; that shapes the retrieval design."} />
 
 ### Write the summariser prompt deliberately
+
+<Imagine text={"After compacting, the agent remembers the conversation \"in general\" but not which router settings it already changed, so it changes them again."} />
+
 
 "Summarise the conversation so far" produces a general summary that drops task-critical state. "Summarise the conversation, preserving every file path modified, every decision made, and every error encountered with its resolution" produces one the agent can actually continue from.
 
@@ -589,9 +614,14 @@ if (history.length > 40) {
 
 
 
+
+
 Also: cache stable prefixes (Domain 5), and **count tokens before sending** so oversized requests are trimmed instead of failing. A session that ran fine in development often hits the ceiling in production because real inputs are longer.
 
 ### Retrieval-augmented generation (RAG)
+
+<Imagine text={"Acme has 4,000 pages of technical manuals, far too much to send with every question. For each question the bot needs just the two relevant pages."} />
+
 
 **Retrieval-augmented generation (RAG)** means: keep your documents outside the window, find the parts relevant to this request, and put only those into the prompt. It works in three steps. **Chunking** splits each document into small pieces. Each chunk is stored in an **index** with an **embedding**, a list of numbers that captures its meaning, so a question can be matched to chunks that mean the same thing (**semantic** search) even with different words. **Lexical** search, plain keyword matching, catches exact terms like product codes that semantic search can miss. Finally, the best chunks are **assembled** into the prompt.
 
@@ -647,6 +677,8 @@ const answer = await client.messages.create({
 {/* /more */}
 
 
+
+
 <Gotcha
   title={"The summary that forgot what it had done"}
   scenario={"A long coding session is compacted with the prompt \"summarise the conversation so far\"."}
@@ -664,6 +696,7 @@ const answer = await client.messages.create({
 ## 6.6 Images and PDFs
 
 <ExamRef section="6.6" />
+<Imagine text={"Customers upload photos of their router's lights and screenshots of error messages. Claude needs to read the pictures, not just the text."} />
 
 
 
@@ -672,6 +705,9 @@ const answer = await client.messages.create({
 
 
 ### Sending images
+
+<Imagine text={"Every photo costs tokens. Customers' 12-megapixel phone photos make each support chat far more expensive than it needs to be."} />
+
 
 Images are processed in roughly 28 × 28 pixel tiles, about (width × height) / 784 tokens, so a 1,000 × 1,000 px image costs about 1,296 tokens. Resize before sending if detail isn't needed.
 

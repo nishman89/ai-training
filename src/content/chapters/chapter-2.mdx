@@ -10,6 +10,7 @@ objectives:
   - "Classify any API error as retriable or terminal, and know what the SDK already retries"
   - "Place a Claude application in its lifecycle, choose a platform and pin what ships"
 ---
+import Imagine from '../../components/Imagine.astro';
 import ExamRef from '../../components/ExamRef.astro';
 import Compare from '../../components/diagrams/Compare.astro';
 import RoleLens from '../../components/RoleLens.astro';
@@ -277,6 +278,7 @@ console.log(`in=${msg.usage.input_tokens} out=${msg.usage.output_tokens}`);
 ## 2.2 Request parameters, explained
 
 <ExamRef section="2.2" />
+<Imagine text={"Acme's chatbot works, but some answers are cut off mid-sentence and the bill is higher than expected. The cause is in the handful of settings sent with every request."} />
 
 
 
@@ -298,6 +300,9 @@ You pick the contractor (`model`), hand over the standing brief (`system`) and t
 
 ### Tokens
 
+<Imagine text={"Acme's finance team asks why one chatbot conversation cost 3p and another 40p, when both were \"one chat\". The difference is how much text went in and came out, measured in **tokens**."} />
+
+
 A token is the unit Claude reads, writes and bills in: a chunk of text of roughly ¾ of an English word. Think of a taxi meter that ticks per chunk of road. Your prompt, the whole history, tool definitions, tool results and images all tick the **input** meter. Everything Claude writes ticks the **output** meter, which costs 5× more per token on every current model.
 
 {/* more:2-tokens */}
@@ -309,7 +314,12 @@ A token is the unit Claude reads, writes and bills in: a chunk of text of roughl
 
 
 
+
+
 ### model
+
+<Imagine text={"Acme's ticket tagger and its fault-finding agent use the same model. For the tagger it's overkill; the agent struggles. Each job needs a different size of Claude."} />
+
 
 Which Claude does the work. Think of choosing junior, mid or senior staff: seniors are better, slower and pricier.
 
@@ -335,6 +345,9 @@ model: 'claude-sonnet-5-5',      // pin the full ID in production
 </CodeSwitch>
 
 ### max_tokens
+
+<Imagine text={"You ask Claude for 150 product descriptions in one JSON list, and the reply stops halfway through item 61. No error, just a broken list."} />
+
 
 A hard ceiling on how many tokens Claude may **write** in this reply. It isn't a target, it doesn't limit the input, and you only pay for what's actually written. Think of a word limit on an essay.
 
@@ -368,6 +381,9 @@ HTTP status: **200 OK**. No exception. The text simply stops mid-word, so `JSON.
 </PictureIt>
 
 ### messages and system
+
+<Imagine text={"A customer asks \"What's your refund policy?\", then \"And without a receipt?\". The second question only makes sense if Claude can see the first, and Claude also needs Acme's rules for how to answer."} />
+
 
 <VsPair
   left={{ title: 'system', meaning: 'Standing rules for the whole conversation: role, scope, format. A top-level field.', example: '"You are Acme\'s support agent. Answer only about Acme products, in under 80 words."' }}
@@ -406,6 +422,9 @@ messages: [
 </CodeSwitch>
 
 ### stop_sequences, temperature and effort
+
+<Imagine text={"Acme's marketing team wants ten **different** names for a new tariff. The billing team wants the **same** category label every time. The fault agent should think hard; the FAQ bot shouldn't. Those are three different dials."} />
+
 
 - **stop_sequences** - strings that end the reply as soon as Claude writes them; stop_reason becomes stop_sequence · e.g. stop at a closing answer tag so no commentary follows
 - **temperature / top_p** - randomness settings that older models accepted, low = predictable · on the newest models you can't set them: steer with the prompt and test properties, not exact wording
@@ -464,7 +483,12 @@ const msg = await client.messages.create({
 
 
 
+
+
 ### Worked cost example
+
+<Imagine text={"The chatbot will handle 100,000 conversations a day. Before launch, finance wants the daily cost on one page."} />
+
 
 Sonnet 5.5 costs $2 per million input tokens and $10 per million output tokens. A support-bot call with a 3,000-token system prompt, 1,500 tokens of history and a 400-token answer:
 
@@ -508,6 +532,7 @@ Fixes: check `stop_reason` before parsing; raise `max_tokens` or, better, **spli
 ## 2.3 Streaming
 
 <ExamRef section="2.3" />
+<Imagine text={"Customers stare at an empty chat box for eight seconds while a long answer is generated, and some think it's broken. You want the words to appear as they're written, like someone typing."} />
 
 
 
@@ -537,6 +562,9 @@ A streamed reply arrives as a series of small, named messages called **events**.
 A `tool_use` block's input arrives as JSON fragments, so it isn't valid JSON until its `content_block_stop`. **Never act on a partial block.**
 
 ### Interrupted streams
+
+<Imagine text={"A customer's train goes into a tunnel halfway through a reply. The next time they type, the bot fails with a strange error about a tool."} />
+
 
 A stream *ending* isn't the same as a message *completing*. Only `message_stop` means the message is whole. If your handler saves a turn whenever its read loop exits, a dropped connection writes a half-built block into history, and the failure shows up on the **next** request.
 
@@ -626,6 +654,7 @@ The team spends a morning looking at the tool schema, which was never the proble
 ## 2.4 Errors, retries and rate limits
 
 <ExamRef section="2.4" />
+<Imagine text={"Monday, 9am: 10,000 customers report an outage at once. Your service floods Claude with requests, gets \"slow down\" errors and starts failing. Which errors should it retry, how, and which never?"} />
 
 
 
@@ -662,9 +691,15 @@ A **retriable** error might succeed if you wait and send the same request again 
 
 ### Rate limits
 
+<Imagine text={"A nightly job fires 5,000 requests in its first minute and most are rejected, even though Anthropic isn't down at all."} />
+
+
 Limits are set **per organisation, per model**, as requests per minute (RPM), input tokens per minute (ITPM) and output tokens per minute (OTPM). They work like a **token bucket**: your allowance refills at a steady rate rather than resetting once a minute. They rise with your **usage tier**, which Anthropic raises as your account's spending history grows. Cached input reads typically don't count against ITPM on current models, so caching raises throughput as well as cutting cost.
 
 ### What the SDK already does
+
+<Imagine text={"Your team wrapped every Claude call in its own 5-attempt retry loop, not knowing the SDK already retries. During a short blip, each request became 15."} />
+
 
 The official SDKs retry connection errors, 408, 409, 429 and 5xx automatically, **twice by default**, with exponential backoff, honouring `retry-after`. Don't wrap your own retry loop around that: it multiplies attempts. Tune `maxRetries`, then handle what's left.
 
@@ -701,6 +736,8 @@ const client = new Anthropic({
 
 </CodeSwitch>
 {/* /more */}
+
+
 
 
 
@@ -788,6 +825,7 @@ Python raises `anthropic.BadRequestError`, `RateLimitError`, `InternalServerErro
 ## 2.5 The lifecycle and deployment
 
 <ExamRef section="2.5" />
+<Imagine text={"The chatbot is ready to go live. Acme's data must stay in the UK, the company already runs on AWS, and the answers mustn't suddenly change next month when nobody touched anything."} />
 
 
 
@@ -817,6 +855,9 @@ A Claude application moves through the same lifecycle as any engineered system. 
 
 ### Choosing a platform
 
+<Imagine text={"Acme's biggest customer insists everything runs inside its own Google Cloud account, under its own access controls."} />
+
+
 Claude isn't only available from Anthropic directly: the big cloud providers also offer it, so a **platform** here means *where you call Claude from*. The customer's existing cloud, identity and compliance agreements usually decide the platform.
 
 | Platform | Identity and data | Choose when |
@@ -830,6 +871,9 @@ Claude isn't only available from Anthropic directly: the big cloud providers als
 Compare platforms on **latency** (measured from the customer's region), **compliance** (usually pass or fail) and **total cost** (tokens plus **egress**, the charge for data leaving a cloud, plus fees and integration effort), not token price alone.
 
 ### Pin the exact model version you release
+
+<Imagine text={"On Monday morning the chatbot's answers suddenly look different. Nobody deployed anything over the weekend."} />
+
 
 The **model ID** is the exact name you send in `model`. A full ID points at a fixed **snapshot**, a frozen version of the model that never changes. An **alias** is a nickname that's moved to newer snapshots over time, and it may point at different versions on different platforms. Pin the full ID in configuration, keep the previous version available for rollback, and promote a new model only after it matches or beats your **eval baseline**, the score your current version gets on your tests (Domain 4). A moving alias is fine for a throwaway prototype, never for production.
 
@@ -861,6 +905,8 @@ const msg = await client.messages.create({ model: MODEL, max_tokens: 1024,
 
 </CodeSwitch>
 {/* /more */}
+
+
 
 
 
