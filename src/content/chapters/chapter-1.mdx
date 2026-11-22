@@ -7,7 +7,7 @@ objectives:
   - "Decide between a single call, a workflow and an agent"
   - "Recognise the five workflow patterns and when each fits"
   - "Implement the agent loop with exit conditions and human-in-the-loop gates"
-  - "Compare the three ways to wire an agent: raw API, Agent SDK and Managed Agents"
+  - "Compare the four ways to run an agent loop: raw API, Agent SDK, Claude Code and Managed Agents"
   - "Choose a memory scope for state that survives sessions"
 ---
 import Compare from '../../components/diagrams/Compare.astro';
@@ -26,6 +26,7 @@ import SideBySide from '../../components/SideBySide.astro';
 import WhenThen from '../../components/WhenThen.astro';
 import Exercise from '../../components/Exercise.astro';
 import Resource from '../../components/Resource.astro';
+import RouteBar from '../../components/RouteBar.astro';
 
 ## 1.1 Workflow or agent?
 
@@ -40,6 +41,18 @@ This domain is about getting Claude to finish jobs that take several steps. A **
 **The rule:** use the simplest option that works.
 - **Agents** are powerful, but slower, pricier and less predictable than a fixed workflow.
 - **Multi-agent** systems (several agents splitting one job) are the most powerful and the most expensive of all.
+
+**The map of this domain.** Everything in Domain 1 follows from one question: **who decides the steps?**
+
+| Who decides the steps? | You're building | The next question | Section |
+|---|---|---|---|
+| Nobody: it's one step | A single call | None: you're done | 1.1 |
+| **Your code** | A **workflow** | Which of the five standard shapes fits? | 1.2 |
+| **Claude** | An **agent** | How does the agent loop work? | 1.3 |
+| **Claude** | An **agent** | Who runs that loop: you, a library, Claude Code or Anthropic? | 1.4 |
+| **Claude** | An **agent** | How does it cope with long jobs: memory, and handing work to subagents? | 1.5 |
+
+So 1.2 covers **workflows**, and 1.3 to 1.5 cover **agents**. "Who runs the loop?" is only an agent question: a workflow has no loop, just your code making calls in order.
 
 {/* more:1-three-table */}
 | | Single call | Workflow | Agent |
@@ -158,12 +171,16 @@ const draft = await runAgent('Find out why order 1234 is late and draft an email
 />
 
 <SectionSummary points={[
-  "Use the simplest option that works: one call, then a fixed workflow, then an agent, then several agents.",
+  "One question splits this domain: who decides the steps? Your code means a workflow (1.2); Claude means an agent (1.3 to 1.5).",
+  "**Use the simplest option that works:** one call, then a workflow, then an agent, then several agents.",
   "**When you can write the steps down,** build a workflow: it's predictable, cheaper and easy to test.",
   "**When you know the goal and the tools but not the steps,** use an agent, and accept less predictable results.",
+  "**\"Who runs it?\" is only an agent question:** a workflow has no loop, just your code making calls.",
 ]} />
 
 ## 1.2 The five workflow patterns
+
+<RouteBar at="1.2" />
 
 <ExamRef section="1.2" />
 <Imagine text={"Acme wants every new support ticket handled automatically. Some steps never change (summarise it, then translate it for the overseas team); others depend on the ticket (billing or technical?). Before building an agent, check whether one of five standard shapes already fits."} />
@@ -171,6 +188,15 @@ const draft = await runAgent('Find out why order 1234 is late and draft an email
 ### The five patterns at a glance
 
 Anthropic describes five standard ways to arrange Claude calls into a **workflow**. They're called **patterns** because, like design patterns in Java, they're reusable shapes you'll recognise again and again. In all five, *your code* decides the order of the steps.
+
+{/* diagram */}
+<Tiles cols={5} caption="The five workflow patterns: you write the control flow" tiles={[
+  { label: '1', title: 'Prompt chaining', sub: 'Step → gate → step' },
+  { label: '2', title: 'Routing', sub: 'Classify, then send to the right handler' },
+  { label: '3', title: 'Parallelisation', sub: 'Split into sections, or vote' },
+  { label: '4', title: 'Orchestrator-workers', sub: 'Lead splits work it can\'t predict' },
+  { label: '5', title: 'Evaluator-optimizer', sub: 'Generate, critique, repeat' },
+]} />
 
 {/* more:1-patterns-table */}
 These are **five separate patterns**, not variations of one. Each answers a different question:
@@ -186,9 +212,19 @@ These are **five separate patterns**, not variations of one. Each answers a diff
 Patterns can be combined: a router might send legal documents down an evaluator-optimizer path, and simple FAQs to a single call.
 {/* /more */}
 
+<RoleLens dev={"Routing = a `switch` on a cheap Haiku classification. Parallelisation = `CompletableFuture.allOf` over independent calls. Evaluator-optimiser = a generate/review loop with a max-iterations cap."} test={"Evaluator-optimiser is the pattern you already know: generate a test, run a checker, feed failures back, try again. Parallelisation is like running suites in parallel and voting on a flaky result."} data={"Prompt chaining is a DAG of tasks with a gate between them. Parallelisation is fan-out over partitions. Orchestrator-workers is a dynamic task mapping where the orchestrator decides how many workers to spawn."} ba={"Map each pattern to a process diagram: chaining = sequential swimlane, routing = decision diamond, parallel = fork/join, evaluator-optimiser = review loop with an approval step. It makes the AI design reviewable by non-engineers."} />
+
 ### Prompt chaining
 
-**Prompt chaining** is the simplest: a fixed sequence of calls, each using the previous output, with optional code checks ("gates") between steps. Example: write marketing copy, check it meets length and tone rules, then translate it. Use it when a task splits cleanly into steps and accuracy matters more than **latency** (how long the user waits).
+<Imagine text={"Acme needs a short description for every new product, translated into French for the overseas shop. The description has to be under 50 words before it's worth translating."} />
+
+**Prompt chaining** means splitting a job into a fixed sequence of calls, each one using the previous call's output. Think of an assembly line: each station does one job and passes the result along.
+
+- **How:** call 1 writes, your code checks the result (a **gate**), call 2 carries on from it. Each call has one small, clear job.
+- **Example:** write the product description → check it's under 50 words (shorten it if not) → translate it into French.
+- **Use it when:** the task splits cleanly into steps that never change, and accuracy matters more than **latency** (how long the user waits), since each step adds a call.
+
+**In code:** each step is an ordinary call, and the gate is a plain `if` in your own code.
 
 {/* more:1-chain */}
 <CodeSwitch title="Prompt chaining with a gate" fold>
@@ -252,17 +288,6 @@ const french = await ask(`Translate into French, keeping the tone:\n${draft}`); 
 </CodeSwitch>
 {/* /more */}
 
-{/* diagram */}
-<Tiles cols={5} caption="The five workflow patterns: you write the control flow" tiles={[
-  { label: '1', title: 'Prompt chaining', sub: 'Step → gate → step' },
-  { label: '2', title: 'Routing', sub: 'Classify, then send to the right handler' },
-  { label: '3', title: 'Parallelisation', sub: 'Split into sections, or vote' },
-  { label: '4', title: 'Orchestrator-workers', sub: 'Lead splits work it can\'t predict' },
-  { label: '5', title: 'Evaluator-optimizer', sub: 'Generate, critique, repeat' },
-]} />
-
-<RoleLens dev={"Routing = a `switch` on a cheap Haiku classification. Parallelisation = `CompletableFuture.allOf` over independent calls. Evaluator-optimiser = a generate/review loop with a max-iterations cap."} test={"Evaluator-optimiser is the pattern you already know: generate a test, run a checker, feed failures back, try again. Parallelisation is like running suites in parallel and voting on a flaky result."} data={"Prompt chaining is a DAG of tasks with a gate between them. Parallelisation is fan-out over partitions. Orchestrator-workers is a dynamic task mapping where the orchestrator decides how many workers to spawn."} ba={"Map each pattern to a process diagram: chaining = sequential swimlane, routing = decision diamond, parallel = fork/join, evaluator-optimiser = review loop with an approval step. It makes the AI design reviewable by non-engineers."} />
-
 ### Routing
 
 <Imagine text={"Billing questions need the account tools; technical ones need the line-test tools. Giving every ticket every tool makes Claude slower and more likely to pick the wrong one."} />
@@ -272,6 +297,7 @@ const french = await ask(`Translate into French, keeping the tone:\n${draft}`); 
 - **How:** one quick Claude call classifies the input; your code sends it to the matching prompt, tools or model.
 - **Example:** refunds, technical questions and general queries each go to their own handler.
 - **Also for cost:** easy questions go to Haiku, hard ones to a bigger model.
+- **Use it when:** requests fall into clear categories that each need a different prompt, tools or model.
 
 {/* code:1.2 */}
 **In code:** routing is just a cheap classification call, then a normal `switch` in your own code.
@@ -358,10 +384,12 @@ switch (category) {
 
 <Imagine text={"A code change needs a security review, a performance review and a style review. Doing them one after another takes three times as long as necessary."} />
 
-**Parallelisation** means running several Claude calls at the same time and combining the results. There are two kinds:
+**Parallelisation** means running several Claude calls at the same time and combining the results. Think of several checkout tills open at once. There are two kinds:
 
 - **Sectioning** - split the job into independent parts that run at once · e.g. one call answers the customer while another checks the message for policy problems
 - **Voting** - run the same task several times and combine the answers · e.g. ask three times whether some code has a security hole, and flag it if at least two say yes
+
+**Use it when:** the pieces don't depend on each other and you want the answer sooner, or you want more confidence than one answer gives.
 
 {/* more:1-parallel */}
 <CodeSwitch title="Parallelisation: three calls at once" fold>
@@ -424,17 +452,22 @@ const reviews = await Promise.all(['security', 'performance', 'readability'].map
 
 <Imagine text={"\"Research every competitor's broadband prices in 12 countries.\" Nobody knows in advance how to split that job up."} />
 
-One lead call, the **orchestrator**, decides the subtasks **at run time**, hands each one to a separate call (a **worker**), and merges the results. It looks like parallelisation, except the subtasks aren't fixed in advance.
+**Orchestrator-workers** means one lead call, the **orchestrator**, decides the subtasks **at run time**, hands each one to a separate call (a **worker**), and merges the results. Think of a project manager splitting up a job once they've seen it. It looks like parallelisation, except the subtasks aren't fixed in advance.
 
 - **Cost:** Anthropic reports multi-agent research runs using roughly **15× the tokens** of a single chat.
-- **Use it for:** broad work that splits into independent parts, such as researching several topics.
+- **Use it when:** the work is broad and splits into independent parts, such as researching several topics.
+- **Not the same as subagents (1.5):** here each **worker** is a single Claude call doing one task, and your code runs the whole thing. A **subagent** is a full agent with its own loop, tools and context.
 - **Avoid it for:** work where every part depends on the others, such as changing one module of code. A single agent that sees everything does better.
 
 ### Evaluator-optimizer
 
 <Imagine text={"Acme's terms and conditions must be translated with legal precision. First drafts are close, but not quite right."} />
 
-One call generates an answer (the **optimizer**), another checks it against clear criteria (the **evaluator**), and the loop repeats until the check passes. Use it when you can state what "good" looks like and iteration measurably improves the result, such as literary translation or a search that needs several rounds.
+**Evaluator-optimizer** means one call writes an answer (the **optimizer**) and another checks it against clear criteria (the **evaluator**), looping until the check passes. Think of a writer and an editor passing a draft back and forth.
+
+- **How:** generate → evaluate against the criteria → feed the feedback back → repeat, with a maximum number of rounds.
+- **Example:** translate the T&Cs, check them for legal precision, fix what the checker flagged, check again.
+- **Use it when:** you can state what "good" looks like, and a second pass measurably improves the result.
 
 {/* more:1-evalopt */}
 <CodeSwitch title="Evaluator-optimizer: write, check, repeat" fold>
@@ -527,14 +560,17 @@ Pick the simplest pattern for each:
 </Exercise>
 
 <SectionSummary points={[
-  "Pick the workflow pattern by the shape of the job; each one is just a few Claude calls joined by your code.",
+  "For a workflow, pick the pattern by the shape of the job; each one is just a few Claude calls joined by your code.",
   "**Steps in a fixed order:** prompt chaining, with code checks between steps.",
   "**Different kinds of request:** routing. Classify first, then send each to its own prompt or model.",
   "**Independent parts, or several opinions:** parallelisation. Run the calls at once, then combine.",
-  "**Subtasks only known at run time:** orchestrator and workers. Powerful, but about 15× the tokens.",
+  "**Subtasks only known at run time:** orchestrator and workers. Powerful, but about 15× the tokens. Each worker is one call, not an agent.",
+  "**Quality improves with a second pass:** evaluator-optimizer. Generate, check against criteria, repeat with a cap.",
 ]} />
 
 ## 1.3 The agent loop
+
+<RouteBar at="1.3" />
 
 <ExamRef section="1.3" />
 <Imagine text={"A customer writes \"my broadband keeps dropping\". Nobody can say in advance which checks are needed: the line status? recent outages? the router logs? You give Claude those three lookups and let it decide, one step at a time, until it can explain the problem."} />
@@ -835,13 +871,15 @@ How well an agent picks the right tool depends on how the tools are described an
 />
 
 <SectionSummary points={[
-  "An agent is Claude plus a harness plus tools. The harness is your code: call Claude, run the tools it asks for, send the results back, repeat.",
+  "An agent is Claude plus a harness plus tools. The harness runs the loop: call Claude, run the tools it asks for, send the results back, repeat.",
   "**When `stop_reason` is `tool_use`,** run the tools and send each `tool_result` with the matching ID.",
   "**Always set exits:** a goal check, a maximum number of turns and a token or cost budget.",
   "**Before anything risky or unexpected,** stop and ask a person to approve.",
 ]} />
 
-## 1.4 Three ways to wire an agent
+## 1.4 Who runs the agent loop?
+
+<RouteBar at="1.4" />
 
 <ExamRef section="1.4" />
 <Imagine text={"Acme's Java developers and its Python data team both want to build that troubleshooting agent. Who should write the harness that runs it: your team, a ready-made library, or Anthropic?"} />
@@ -850,12 +888,20 @@ How well an agent picks the right tool depends on how the tools are described an
 
 There are four ways to get the harness from 1.3 (the loop and everything around it): write it yourself, use a library, use a finished one, or let Anthropic run it.
 
-| | Raw Messages API | Agent SDK | Claude Code | Claude Managed Agents |
-|---|---|---|---|---|
-| **Who provides the harness** | You write it | A library, running inside your program | A finished harness for coding work | Anthropic, on its servers, in a **sandbox** (an isolated environment where the agent's actions can't touch anything else) |
-| **What you own** | Everything | Tool execution and the app around it | Your project, CLAUDE.md, settings and hooks (Domain 3) | The app layer and the agent definition |
-| **Choose when** | You need full control, or have constraints a library can't meet | You want a ready loop, context handling and tools in your own environment (Python or TypeScript; no Java version) | A developer working in a codebase, interactively or in CI | You want long-running execution and a managed sandbox |
-| **Watch out** | You maintain all of it | Set `settingSources` explicitly: whether CLAUDE.md and skills load by default has changed between SDK versions | It's built for coding; for your own product, use the Agent SDK (the same engine) | Public beta; sessions stored server-side, so **not** eligible for Zero Data Retention (Anthropic keeping none of your data) or HIPAA (the US health-data law) |
+{/* diagram */}
+<Compare phoneJoiner="" caption="Who provides the harness: more control on the left, less to run on the right" columns={[
+  { title: 'Raw API', sub: 'you write it', points: ['You own everything', 'Any language, including Java', 'Choose for full control', 'Watch: you maintain it all'] },
+  { title: 'Agent SDK', sub: 'a library in your app', points: ['Python or TypeScript', 'Ready loop, tools, context', 'You own tools and the app', 'Watch: set settingSources'] },
+  { title: 'Claude Code', sub: 'finished, for coding', points: ['Developers in a codebase', 'Interactive or in CI', 'You own CLAUDE.md, hooks', 'Not for your own product'] },
+  { title: 'Managed Agents', sub: 'Anthropic runs it', points: ['Anthropic\'s sandbox', 'Long-running sessions', 'You own the app layer', 'Watch: not ZDR or HIPAA'] },
+]} />
+
+A few terms from the diagram:
+
+- **Sandbox:** an isolated environment where the agent's actions can't touch anything else.
+- **`settingSources`:** an Agent SDK option. Set it explicitly, because whether CLAUDE.md and skills load by default has changed between SDK versions.
+- **ZDR and HIPAA:** Zero Data Retention (Anthropic keeping none of your data) and the US health-data law. Managed Agents store sessions on Anthropic's side (and are in public beta), so they don't qualify yet.
+- **Claude Code vs the Agent SDK:** they use the same engine. Claude Code is the finished tool for coding; for your own product, use the SDK.
 
 Whichever you choose, you still do the same four things: decide which tools the agent gets, write its system prompt, run the loop (or let something run it for you), and set exit conditions.
 
@@ -910,7 +956,14 @@ for await (const message of query({
 
 <Imagine text={"Your SDK-based agent can edit files. It must never touch `.env`, however the task is worded and whatever a web page it read says."} />
 
-The Agent SDK has the same **hooks** as Claude Code (3.3): your own functions that run at fixed points, such as **PreToolUse** (before a tool runs, and can block it) and **PostToolUse** (after it runs, for example to log or check the result). In the SDK they're ordinary functions in your code, passed in the options:
+A **hook** is your own code that runs **every time** at a fixed point in the loop. That makes it **deterministic**: the same situation always gets the same result. A line in the prompt ("always run the linter") is only a request, which Claude usually follows but might not (7.2).
+
+| Hook | When it runs | Example |
+|---|---|---|
+| **PreToolUse** | Before a tool runs, and it can **block** it | Refuse any edit to `.env` |
+| **PostToolUse** | After a tool runs. It can't undo the action, but it can check it and report back | Run the linter on every file Claude edits, and send any errors back so Claude fixes them |
+
+The Agent SDK has the same hooks as Claude Code (3.3). In the SDK they're ordinary functions in your code, passed in the options:
 
 <CodeSwitch title="An Agent SDK hook that blocks edits to .env" fold>
 
@@ -967,28 +1020,11 @@ for await (const message of query({
 
 </CodeSwitch>
 
-### What about LangGraph, Strands or PydanticAI?
+### Other agent frameworks
 
-Other agent **frameworks** can also run Claude. They're libraries that provide the loop, state and tool plumbing, and they work with several model providers:
+Other agent **frameworks**, such as LangGraph, Strands Agents and PydanticAI, can also run Claude, and they work with other model providers too. LangGraph, for example, draws the flow as a graph: steps (**nodes**), rules in code that pick the next step (**conditional edges**), and planned pauses for a person to approve (**interrupts**).
 
-| Framework | In one line | Consider it when |
-|---|---|---|
-| **LangGraph** | Agents as a graph of steps with saved state | You want explicit, inspectable control flow and checkpoints |
-| **Strands Agents** | AWS's open-source, model-driven agent SDK | You're building on AWS (for example with Bedrock) |
-| **PydanticAI** | Type-safe Python agents built around Pydantic models | You want validated, typed inputs and outputs in Python |
-| **Claude Agent SDK** | Anthropic's own: the engine behind Claude Code | You want Claude Code's tools, permissions, hooks and context handling |
-
-**Graph frameworks** such as LangGraph describe the flow as a diagram you can read in code. Three words come up a lot:
-
-| Term | Plain English | In a ticket pipeline |
-|---|---|---|
-| **Node** | One step in the flow | "Classify the ticket" |
-| **Conditional edge** | A rule in code that picks the next step | "If it's a refund, go to the refund handler" |
-| **Interrupt** | A planned pause until something outside the flow happens | Stop and wait for a person to approve the refund |
-
-Because the route and the pauses live in code, the flow is the same every time and easy to audit. A plain loop can do the same job if you write the branching and the approval gate in code yourself. What matters is that the control flow is in code, not left to the model's judgment.
-
-Whichever you pick, the point is the same: a framework doesn't remove the fundamentals. You still choose the tools, write the system prompt, set exit conditions, and enforce the hard rules in code.
+Whichever you pick, the fundamentals don't change: you still choose the tools, write the system prompt, set exit conditions, and enforce the hard rules in code.
 
 <Gotcha
   title={"The skill that silently did nothing"}
@@ -998,23 +1034,18 @@ Whichever you pick, the point is the same: a framework doesn't remove the fundam
 />
 
 <SectionSummary points={[
-  "The harness can be yours (raw API), a library's (Agent SDK), a finished one for coding (Claude Code), or Anthropic's (Managed Agents).",
+  "Only agents need a harness to run their loop. It can be yours (raw API), a library's (Agent SDK), a finished one for coding (Claude Code), or Anthropic's (Managed Agents).",
   "**Writing in Java?** There's no Agent SDK, so you write the loop or use the SDK's simple tool runner.",
   "**With the Agent SDK,** set `settingSources` explicitly, or CLAUDE.md and skills may silently not load.",
   "**When a rule must hold,** use an SDK hook: your code checks or blocks each tool call.",
   "**Need zero data retention or HIPAA?** Managed Agents don't qualify yet, because sessions are stored on Anthropic's side.",
 ]} />
 
-{/* diagram */}
-<Compare caption="Three ways to wire an agent: more control on the left, less to run on the right" columns={[
-  { title: 'Raw Messages API', sub: 'you write the loop', points: ['Any language, including Java', 'You own tools, history, retries', 'Most control, most code'] },
-  { title: 'Agent SDK', sub: 'the loop as a library', points: ['Python and TypeScript', 'Built-in tools and context management', 'Runs in your infrastructure'] },
-  { title: 'Managed Agents', sub: 'hosted by Anthropic', points: ['Anthropic runs the loop and sandbox', 'Long-running sessions', 'Least to operate'] },
-]} />
-
 <RoleLens dev={"Raw API in Java gives full control. The Agent SDK (Python/TS only) gives you the loop, tools and context management for free. Managed Agents runs the whole thing on Anthropic's side."} test={"With the raw API you own the loop, so you test the loop. With the Agent SDK or Managed Agents, test the behaviour: given this task and these tools, does it reach the right outcome within budget?"} data={"If your stack is Python already (Airflow, dbt hooks), the Agent SDK fits naturally. If you need jobs running without your own infrastructure, Managed Agents removes the hosting work."} ba={"This is a build-vs-buy decision: control and effort (raw API) against speed and less ops (SDK, Managed). Put it in the options appraisal with cost, skills and vendor lock-in."} />
 
 ## 1.5 Memory and long-horizon work
+
+<RouteBar at="1.5" />
 
 <ExamRef section="1.5" />
 <Imagine text={"Acme's migration agent is moving 40 database tables to a new system. It takes all afternoon, and halfway through, the session ends. Tomorrow, how does it know which tables are already done?"} />
@@ -1102,12 +1133,42 @@ writeFileSync('progress.json', newStateJson);  // e.g. {"done":["users","orders"
 
 A **subagent** is a second agent that the main agent starts for one sub-task. It gets that task, the minimum context it needs, the tools for that task and clear exit conditions. It works in its own context window and returns only a summary, which keeps the parent's context small. The trade-off: you see only its summary, not how it got there.
 
+**Subagent or worker?** They look alike, but one belongs to workflows and the other to agents:
+
+| | Worker (orchestrator-workers, 1.2) | Subagent (this section) |
+|---|---|---|
+| What it is | One Claude call | A whole agent, with its own loop and tools |
+| Who decides its steps | Your code | The subagent itself |
+| Part of | A workflow | An agent |
+
+### How a lead agent should brief its subagents
+
+<Imagine text={"A lead agent splits market research across four subagents. Each report is good, but two cover the same competitor, nobody covers pricing, and the final summary has holes. The subagents did their jobs; the briefs were vague."} />
+
+When one agent (the **lead**, also called a manager or supervisor) hands work to subagents, most failures come from **vague briefs**, not weak subagents. "Research the market" leaves each subagent to guess its own scope, so they overlap in some places and leave gaps in others. Anthropic saw exactly this in its own multi-agent research system.
+
+Each brief should state:
+
+| Part of the brief | Example |
+|---|---|
+| **Objective:** one specific job | "Find the current broadband prices of our three main competitors" |
+| **Boundaries:** what's yours and what isn't | "UK only. Another subagent covers customer reviews; don't" |
+| **Output format** | "A table: provider, package, monthly price, source link" |
+| **Tools and sources** | "Use web search; prefer the providers' own price pages" |
+
+Then the lead **checks the returned reports against its plan** before writing the final answer: is every topic covered once, and only once? If not, it sends a follow-up brief rather than papering over the gap.
+
+Bigger models, more subagents or a longer final prompt don't fix this. Clear briefs do.
+
 ### Further reading
 
 <Resource kind="article" href="https://www.anthropic.com/engineering/building-effective-agents" title="Building effective agents" text="Anthropic's guide to workflows vs agents and the five workflow patterns." />
+<Resource kind="article" href="https://www.anthropic.com/engineering/multi-agent-research-system" title="How we built our multi-agent research system" text="Anthropic's lessons from a lead agent with subagents, including how to brief them." />
 
 <SectionSummary points={[
-  "Decide at design time what the agent must remember, and where that memory lives.",
+  "For long agent jobs, decide at design time what the agent must remember, and where that memory lives.",
   "**When state must survive a restart or be shared,** keep it outside the conversation: a file or a database.",
   "**When a side task would clutter the context,** give it to a subagent. It works in a fresh context and returns only a summary.",
+  "**Subagent vs worker:** a subagent is a whole agent with its own loop; a worker (1.2) is one call your code runs.",
+  "**When subagents overlap or leave gaps,** fix the lead's briefs: objective, boundaries, output format and tools for each, then check coverage before the final answer.",
 ]} />

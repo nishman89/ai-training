@@ -27,36 +27,39 @@ import VsPair from '../../components/VsPair.astro';
 import MythReality from '../../components/MythReality.astro';
 import Exercise from '../../components/Exercise.astro';
 import Resource from '../../components/Resource.astro';
+import RouteBar from '../../components/RouteBar.astro';
 
-## 8.1 How tool use works
+## 8.1 How does a tool call work?
 
 <ExamRef section="8.1" />
 
 ### In plain English
 
-This domain is about letting Claude **do** things, not just talk:
-
-- **Tool use** (also called function calling): you describe a function ("get_order_status takes an order ID"). Claude replies "please run get_order_status with A-1234". **Your** code runs it and sends back the answer, and Claude continues.
-- **MCP** (the **Model Context Protocol**): an open standard for packaging tools so they plug into any Claude app, like USB for tools. A program that offers tools this way is an **MCP server**; an app that connects to it is an **MCP client**.
-
-**Real-life example:** connect the GitHub MCP server once, and Claude can search code and open issues in any app that supports MCP.
+This domain is about letting Claude **do** things, not just talk. With **tool use** (also called function calling), you describe a function, such as "get_order_status takes an order ID". Claude replies "please run get_order_status with A-1234". **Your** code runs it, sends back the answer, and Claude carries on.
 
 <RoleLens dev={"You define tools with a JSON schema. Claude replies with `tool_use`, your code runs it, and you send back a `tool_result` with the same id. Claude never runs anything itself."} test={"Unit test each tool function on its own, then test the round trip with a mocked model that requests the tool."} data={"A \"query the warehouse\" tool is common: Claude writes the parameters, your code runs a safe, parameterised query."} ba={"Tools are the AI's access to your systems. Each one is effectively an integration requirement: what it can read or change, and under what rules."} />
 
-### The round trip
+### The map of this domain
 
-First, the words you'll see in this chapter. They're all parts of Claude's reply (2.1 shows a full one):
+Everything in Domain 8 follows one question: **where does the tool live?**
 
-| Word | What it means | Example |
+| Where does the tool live? | What you build | Sections |
 |---|---|---|
-| **Content block** | Claude's reply is a list of pieces called blocks, each with a `type` | A `text` block, then a `tool_use` block |
-| `text` block | Words for the user | "Let me check that order." |
-| `tool_use` block | Claude asking you to run a tool: the tool's `name`, the `input` it chose, and an `id` | `get_order_status`, `{"order_id": "A-1234"}`, `toolu_01A...` |
-| `tool_result` block | What **you** send back after running it, quoting the same `id` | "Out for delivery, arriving today" |
-| `stop_reason` | A field on every reply saying **why Claude stopped**. Your code checks it to know what to do next | `end_turn`: finished, show the answer. `tool_use`: it wants a tool, so run it and reply |
-| **Tool definition** | What you send in the `tools` field of **every** request: a `name`, a `description`, and an `input_schema`. If a tool isn't listed, Claude doesn't know it exists | Step 1 below |
-| **JSON schema** | A standard way to describe the shape of some data: which fields, what type, which are required | `order_id` must be a string |
+| **In your app** | A tool you list in each request, plus the code that runs it | 8.1 How a call works · 8.2 Design it well · 8.3 Who runs it |
+| **In a shared server** | An **MCP server** (Model Context Protocol) that any MCP-capable app can plug into | 8.4 How MCP works · 8.5 Run it safely |
 
+**Tool in your app, or MCP server?** Both end up as tools Claude can call. The difference is whether you wire the tool into one app, or build it once and plug it into many.
+
+| | Tool in your app | MCP server |
+|---|---|---|
+| **Who can use it** | Only that app | Any MCP app: Claude Code, the Claude apps, your own agents |
+| **Analogy** | A cable soldered into one device | A USB-C port: anything with the port can plug in |
+| **Extra parts** | None: just your code | A server to run, and a way to connect to it (8.4) |
+| **Choose it when** | One app needs it, or the logic is private to that app | Several apps need the same system, or a ready-made server exists (GitHub, Slack, Jira…) |
+
+MCP doesn't make Claude smarter or the tool faster. It standardises how tools are described and connected, so you don't rebuild the same connection in every app.
+
+### The round trip
 
 <Flow caption="Claude never runs your tools: it asks, your code runs them" steps={[
   { title: 'Send tools + question', sub: 'name, description, input_schema' },
@@ -69,6 +72,19 @@ First, the words you'll see in this chapter. They're all parts of Claude's reply
 **Claude never runs your code.** It only sees a description of each tool, and asks *you* to run it. Then you repeat until Claude stops asking: that's the **agent loop** (1.3).
 
 **Where it usually goes wrong:** a `tool_use` with no `tool_result`, the wrong ID, or a failure your code hid instead of reporting it to Claude.
+
+**The words you'll see.** They're all parts of a request or of Claude's reply (2.1 shows a full one):
+
+| Word | What it means | Example |
+|---|---|---|
+| **Content block** | Claude's reply is a list of pieces called blocks, each with a `type` | A `text` block, then a `tool_use` block |
+| `text` block | Words for the user | "Let me check that order." |
+| `tool_use` block | Claude asking you to run a tool: the tool's `name`, the `input` it chose, and an `id` | `get_order_status`, `{"order_id": "A-1234"}`, `toolu_01A...` |
+| `tool_result` block | What **you** send back after running it, quoting the same `id` | "Out for delivery, arriving today" |
+| `stop_reason` | A field on every reply saying **why Claude stopped**. Your code checks it to know what to do next | `end_turn`: finished, show the answer. `tool_use`: it wants a tool, so run it and reply |
+| **Tool definition** | What you send in the `tools` field of **every** request: a `name`, a `description`, and an `input_schema`. If a tool isn't listed, Claude doesn't know it exists | Step 1 below |
+| **JSON schema** | A standard way to describe the shape of some data: which fields, what type, which are required | `order_id` must be a string |
+
 
 <Running thread="tool" step={1} adds="an ordinary method that looks up an order, and the description Claude will see." />
 
@@ -298,7 +314,9 @@ Two HTTP calls, one tool run by **your** code, and the IDs tie them together.
   "**Most tool bugs happen at the hand-over:** a missing result, the wrong ID, or a failure your code hid.",
 ]} />
 
-## 8.2 Designing tools Claude picks correctly
+## 8.2 How do I design a tool Claude uses well?
+
+<RouteBar at="8.2" />
 
 <ExamRef section="8.2" />
 <Imagine text={"Claude keeps calling the refund tool when customers ask where their order is. Both tools have one-line descriptions, so Claude is guessing."} />
@@ -612,12 +630,24 @@ Every tool result goes into the context window and is resent on every later call
   "**Fewer, clearer tools work better.** Keep results small, and make tools that change things safe to run twice.",
 ]} />
 
-## 8.3 Client tools, server tools and tool_choice
+## 8.3 Who runs the tool, and when does Claude use it?
+
+<RouteBar at="8.3" />
 
 <ExamRef section="8.3" />
 <Imagine text={"Some questions need live information Acme doesn't hold, like \"is there a national outage on other networks?\". You don't want to build and maintain a web-search tool yourself."} />
 
-### Client tools vs server tools: where the tool runs
+### Three questions about every tool
+
+Three settings shape how a tool is used. Each has its own part below.
+
+| Question | Your options | Default |
+|---|---|---|
+| **Who runs it?** | Your code (a **client tool**), or Anthropic (a **server tool**, such as web search) | Your code |
+| **Must Claude call a tool?** | `tool_choice`: let Claude decide, or no tools this turn | Claude decides (`auto`) |
+| **How many at once?** | Several in one reply (**parallel tool use**), or one at a time | Several allowed |
+
+### Who runs it: client tools vs server tools
 
 Tools differ in *who runs them*. Most are yours, but Anthropic also runs some tools for you on its own servers.
 
@@ -631,43 +661,7 @@ Tools differ in *who runs them*. Most are yours, but Anthropic also runs some to
 | **Cost** | Just tokens | Tokens, and some charge per use |
 {/* /more */}
 
-<VsPair
-  left={{ title: 'Client tools', meaning: 'Defined by you (or tools whose definition Anthropic provides, like bash and text_editor) and run in YOUR application.', example: 'Response stops with stop_reason tool_use; you run it and send tool_result.' }}
-  right={{ title: 'Server tools', meaning: 'Run on Anthropic\'s side, e.g. web search, web fetch, code execution. Declared in the request; nothing to implement.', example: 'May cost extra per use. A long server loop returns pause_turn.' }}
-/>
-
-`tool_choice` is a request setting that controls whether Claude may, must or must not call a tool.
-
-| `tool_choice` | Meaning |
-|---|---|
-| `auto` (default) | Claude decides whether to call a tool |
-| `any` | Must call some tool |
-| `tool` + name | Must call that specific tool (forced) |
-| `none` | Must not call tools |
-
-**Model check:** Claude Opus 5.5 rejects the forcing options (`any` and `tool`) with a 400 error, so code that forced a tool breaks when you upgrade. On that model, keep `auto`, make the tool `strict`, and say in the prompt when it applies. For a guaranteed JSON shape, use structured outputs (`output_config.format`).
-
-Claude can ask for several tools in one reply (**parallel tool use**). Add `disable_parallel_tool_use: true` if you want at most one tool call per reply.
-
 Server tools such as web search can run several times in a row on Anthropic's side. If that goes on for too long, the API pauses and returns `stop_reason: pause_turn`. To let it carry on, send the conversation back exactly as it is; don't add a "please continue" message.
-
-{/* more:8-parallel */}
-**Example of parallel tool use:** the customer asks *"Where are orders A-1 and A-2?"*. Claude can ask for both lookups in one reply, and you answer both in **one** user message, each `tool_result` with its own matching ID:
-
-```json
-// Claude's reply
-{ "role": "assistant", "content": [
-  { "type": "tool_use", "id": "toolu_01", "name": "get_order_status", "input": { "order_id": "A-1" } },
-  { "type": "tool_use", "id": "toolu_02", "name": "get_order_status", "input": { "order_id": "A-2" } }
-]}
-// Your next message: both results together
-{ "role": "user", "content": [
-  { "type": "tool_result", "tool_use_id": "toolu_01", "content": "Delivered yesterday" },
-  { "type": "tool_result", "tool_use_id": "toolu_02", "content": "Out for delivery" }
-]}
-```
-<Explain steps={["Claude's reply contains **two** `tool_use` blocks, each with its own ID.", "Your code runs both lookups.", "Your next message sends **both** results together, each `tool_result` pointing at its request by `tool_use_id`."]} />
-{/* /more */}
 
 {/* code:8.3 */}
 **In code:** a server tool is declared, not implemented. Claude runs the search on Anthropic's side and the reply comes back with `server_tool_use` and `web_search_tool_result` blocks, plus a cited answer.
@@ -716,9 +710,9 @@ const msg = await client.messages.create({
 </CodeSwitch>
 {/* /code */}
 
-### Other Anthropic-defined tools: computer use, and the "batch tool" pattern
+**Computer use** is a special case: Anthropic defines the tool, but **your code** runs it, so it's a client tool.
 
-**Computer use** lets Claude operate a desktop through screenshots.
+It lets Claude operate a desktop through screenshots.
 
 - **How:** Claude looks at a screenshot and replies with actions ("click at 420, 310", "type 'refund'"). **Your code** performs them in a sandboxed virtual machine and sends back a new screenshot.
 - **Who runs it:** Anthropic defines the tool but you run it, so it's a client tool (like the text editor and bash tools).
@@ -727,10 +721,45 @@ const msg = await client.messages.create({
 
 **Check the result, don't assume it.** An agent that acted should **inspect the environment** afterwards: take a new screenshot, re-read the file, run the tests, query the record. Then it knows the action worked, rather than trusting its own report.
 
-**The "batch tool" pattern.** When Claude needs several independent lookups, it can ask for them in one turn as several `tool_use` blocks (8.1). Some older models were reluctant to do that, so one workaround is a single `batch` tool whose input is a *list* of tool calls, which your code runs together. Either way the aim is the same: fewer round trips, so the job finishes faster.
+### Must Claude call a tool? tool_choice
+
+`tool_choice` is a request setting that controls whether Claude may, must or must not call a tool.
+
+| `tool_choice` | Meaning |
+|---|---|
+| `auto` (default) | Claude decides whether to call a tool |
+| `any` | Must call some tool |
+| `tool` + name | Must call that specific tool (forced) |
+| `none` | Must not call tools |
+
+**Model check:** Claude Opus 5.5 rejects the forcing options (`any` and `tool`) with a 400 error, so code that forced a tool breaks when you upgrade. On that model, keep `auto`, make the tool `strict`, and say in the prompt when it applies. For a guaranteed JSON shape, use structured outputs (`output_config.format`).
+
+### How many at once? Parallel tool use
+
+Claude can ask for several tools in one reply (**parallel tool use**). Add `disable_parallel_tool_use: true` if you want at most one tool call per reply.
+
+{/* more:8-parallel */}
+**Example of parallel tool use:** the customer asks *"Where are orders A-1 and A-2?"*. Claude can ask for both lookups in one reply, and you answer both in **one** user message, each `tool_result` with its own matching ID:
+
+```json
+// Claude's reply
+{ "role": "assistant", "content": [
+  { "type": "tool_use", "id": "toolu_01", "name": "get_order_status", "input": { "order_id": "A-1" } },
+  { "type": "tool_use", "id": "toolu_02", "name": "get_order_status", "input": { "order_id": "A-2" } }
+]}
+// Your next message: both results together
+{ "role": "user", "content": [
+  { "type": "tool_result", "tool_use_id": "toolu_01", "content": "Delivered yesterday" },
+  { "type": "tool_result", "tool_use_id": "toolu_02", "content": "Out for delivery" }
+]}
+```
+<Explain steps={["Claude's reply contains **two** `tool_use` blocks, each with its own ID.", "Your code runs both lookups.", "Your next message sends **both** results together, each `tool_result` pointing at its request by `tool_use_id`."]} />
+{/* /more */}
+
+Older models were sometimes reluctant to ask for several tools at once, so you may see a workaround: a single "batch" tool whose input is a list of calls. Current models make parallel calls on their own.
 
 <SectionSummary points={[
-  "Client tools run in your app; server tools (web search, web fetch, code execution) run on Anthropic's side.",
+  "Three questions shape every tool: who runs it (your code or Anthropic), must Claude call one (`tool_choice`), and how many at once (parallel).",
   "**Forcing a tool** with `tool_choice` is rejected on Opus 5.5. Use `auto` with a clear description instead.",
   "**When `stop_reason` is `pause_turn`,** send the request again as it is to let the server tool continue.",
   "**Computer use** suits systems with no API: it's slower, so run it isolated with approval for risky steps.",
@@ -738,7 +767,9 @@ const msg = await client.messages.create({
 
 <RoleLens dev={"Client tools run in your code; server tools (such as web search) run on Anthropic's side. `tool_choice` can force a specific tool, any tool, or none."} test={"For structured-output tests, assert the reply matches the schema. Note that Opus 5.5 rejects forced `tool_choice`, so don't build tests that rely on forcing."} data={"Structured outputs (`output_config.format`) give you schema-shaped extraction for every row, every time."} ba={"Ask which actions the AI must always take and which are optional. \"Always\" means a rule enforced in code or a fixed workflow step, not a prompt instruction."} />
 
-## 8.4 The Model Context Protocol
+## 8.4 How do I share tools across apps with MCP?
+
+<RouteBar at="8.4" />
 
 <ExamRef section="8.4" />
 <Imagine text={"Three Acme apps (the chatbot, the staff dashboard and Claude Code) all need to check stock levels. Writing the same integration three times, and keeping three copies in sync, is wasted effort."} />
@@ -758,23 +789,44 @@ const msg = await client.messages.create({
 
 **Where the picture holds:** build a server once and it works with any MCP host, with no custom wiring.
 
-**Where it breaks:** plugging in an unknown USB stick is risky, and so is connecting an unknown MCP server. Its tool descriptions and results go straight into Claude's context, so a malicious server can try prompt injection (7.1). Connect only servers you trust, and limit what each tool may do (8.5). And unlike a cable, MCP doesn't decide anything: your app (or Claude) still runs the loop and chooses which tools to call.
+**Where it breaks:** unlike a cable, MCP doesn't decide anything: your app (or Claude) still runs the loop and chooses which tools to call. And like an unknown USB stick, an unknown server is a risk (8.5).
 
-Wiring a tool straight into each app means three apps need three integrations. MCP moves the tool into a **server** that any **MCP client**, meaning any app that speaks MCP (Claude Code, Claude apps, your own app), can attach to, so you build the integration once. Think JDBC: one driver standard, many databases and clients.
-
-{/* more:8-mcpcaps-table */}
-An MCP server can offer three kinds of thing. The difference is **who decides to use it**:
-
-| Capability | Who uses it | What it is | Example (an inventory server) |
-|---|---|---|---|
-| **Tool** | Claude decides to call it | An action with parameters | `get_stock(sku)` |
-| **Resource** | The app attaches it to the conversation | Read-only data | `inventory://warehouses`, a list of warehouses |
-| **Prompt** | The user picks it from a menu | A ready-made template | `restock-report` (in Claude Code it appears as a slash command) |
-{/* /more */}
-
-<Hub center="MCP server" caption="An MCP server exposes three kinds of capability" items={['Tools: actions the model calls', 'Resources: read-only data the client fetches', 'Prompts: templates the user invokes']} />
+**Java developers:** think JDBC. One driver standard, many databases, and any app that speaks it can connect.
 
 <RoleLens dev={"MCP is a standard way to expose tools and data to Claude: build one MCP server, and every MCP-capable client can use it."} test={"MCP servers for Jira or your test management tool let an agent read requirements and log defects directly."} data={"An MCP server in front of the warehouse gives Claude governed, read-only access to agreed views."} ba={"With MCP, Claude can read Confluence or Jira directly, so it can draft stories from real context. Agree what it's allowed to see."} />
+
+### Tools, resources and prompts
+
+<Hub center="MCP server" caption="An MCP server offers three kinds of thing, called its primitives" items={['Tools: actions Claude calls', 'Resources: read-only data to attach', 'Prompts: templates the user picks']} />
+
+An MCP server can offer three kinds of thing, called its **primitives**. To choose one, first ask **what is it?**
+
+| Primitive | What it is | Ask yourself | Example (an inventory server) | Who decides to use it |
+|---|---|---|---|---|
+| **Tool** | An action, often with side effects | "Does it *do* something?" | `get_stock(sku)`, `create_ticket` | Claude (the model) |
+| **Resource** | Read-only data, such as documents or records | "Is it something to *read*?" | `inventory://warehouses`, an API spec, a style guide | Your app attaches it |
+| **Prompt** | A reusable, ready-made template | "Is it a workflow users start on purpose?" | `restock-report` (a slash command in Claude Code) | The user picks it |
+
+**What it is comes first, who decides second.** Reference documents are resources and "create ticket" is a tool, even if Claude reads the documents "on demand". Only reach for a tool to fetch data when Claude must *search* or *filter* it itself, such as `search_orders(customer_id)`.
+
+**Resources in detail.** A resource has a **URI** (an address) and a **MIME type** that says what kind of content it is (`application/json`, `text/plain`), so the client knows how to read it. There are two kinds:
+
+- **Direct (fixed) resources** have a fixed URI: `inventory://warehouses`.
+- **Templated resources** have a parameter in the URI: `inventory://products/{sku}`. One definition serves every product.
+
+```python
+@mcp.resource("inventory://products/{sku}", mime_type="application/json")
+def product(sku: str) -> str:
+    """Stock and price for one product."""                  # templated: {sku} comes from the URI
+    return json.dumps(inventory_api.product(sku))
+
+@mcp.prompt()
+def restock_report(warehouse: str) -> str:
+    """Weekly restock report for one warehouse."""          # the user picks this from a menu
+    return f"Using the inventory tools, list every SKU in {warehouse} below its reorder level..."
+```
+
+<Explain title="Reading it" steps={["`@mcp.resource` with `{sku}` in the URI is a **templated** resource: the client asks for `inventory://products/RTR-500` and `sku` becomes `RTR-500`.", "`mime_type` tells the client the content is JSON.", "`@mcp.prompt` defines a ready-made prompt the **user** chooses. In Claude Code it appears as a slash command.", "Docstrings and parameter descriptions become the descriptions clients see, so write them as carefully as tool descriptions (8.2)."]} />
 
 ### Transports: how Claude connects to an MCP server
 
@@ -788,6 +840,10 @@ A **transport** is the channel the client and server use to exchange messages. T
 />
 
 SSE (Server-Sent Events) is the older remote transport and isn't recommended for new servers. Each connected server's tool definitions cost context, so connect only the servers a task needs. Claude Code defers loading tool definitions until they're needed.
+
+
+
+### Build one: the order tool as an MCP server
 
 {/* code:8.4 */}
 **In code:** an MCP server is a small program that registers tools. These follow the official MCP quickstart: Python's `MCPServer`, TypeScript's `@modelcontextprotocol/server`, and Spring AI for Java. Here it's the same order tool from 8.1, now shared.
@@ -873,35 +929,6 @@ serveStdio(createServer);   // ← new: run it for a local client
 **What changed:** with plain tool use (steps 1–4), the description and the round trip live in **your app**. With MCP, they live in **the server**: an MCP client lists the server's tools, sends their descriptions to Claude, and calls the server when Claude asks. You still add the error handling and input checks from steps 3 and 4 inside the tool function.
 {/* /code */}
 
-### Who controls each primitive, and resources in detail
-
-The three things a server offers (tools, resources and prompts) are called its **primitives**. The table above shows who uses each one. Put another way, each is **controlled** by a different party, and that decides which one to build:
-
-| Primitive | Controlled by | Build one when… |
-|---|---|---|
-| **Tool** | the **model**: Claude decides to call it | Claude should decide *when* to act or fetch something |
-| **Resource** | the **application**: your app decides what to attach | Your app already knows which data is relevant (for example, the document the user opened) |
-| **Prompt** | the **user**: they pick it, often as a slash command | Users run a well-tested workflow on purpose ("/restock-report") |
-
-A resource has a **URI** (an address) and a **MIME type** that says what kind of content it is (`application/json`, `text/plain`), so the client knows how to read it. There are two kinds:
-
-- **Direct (fixed) resources** have a fixed URI: `inventory://warehouses`.
-- **Templated resources** have a parameter in the URI: `inventory://products/{sku}`. One definition serves every product.
-
-```python
-@mcp.resource("inventory://products/{sku}", mime_type="application/json")
-def product(sku: str) -> str:
-    """Stock and price for one product."""                  # templated: {sku} comes from the URI
-    return json.dumps(inventory_api.product(sku))
-
-@mcp.prompt()
-def restock_report(warehouse: str) -> str:
-    """Weekly restock report for one warehouse."""          # the user picks this from a menu
-    return f"Using the inventory tools, list every SKU in {warehouse} below its reorder level..."
-```
-
-<Explain title="Reading it" steps={["`@mcp.resource` with `{sku}` in the URI is a **templated** resource: the client asks for `inventory://products/RTR-500` and `sku` becomes `RTR-500`.", "`mime_type` tells the client the content is JSON.", "`@mcp.prompt` defines a ready-made prompt the **user** chooses. In Claude Code it appears as a slash command.", "Docstrings and parameter descriptions become the descriptions clients see, so write them as carefully as tool descriptions (8.2)."]} />
-
 ### Testing a server: the MCP Inspector
 
 <Imagine text={"Your new MCP server starts without errors, but Claude never calls its tool. Is the tool even being listed, and does it return what you expect?"} />
@@ -914,7 +941,11 @@ npx @modelcontextprotocol/inspector python inventory_server.py
 
 Check it in this order: is the tool listed? Is its description clear? Does it return the right result for a good input, and a clear error for a bad one? Only then connect it to Claude.
 
-### Under the hood: messages, the handshake and sessions
+### Going deeper: messages, sessions and advanced features
+
+You don't need this to build a working server, but it explains odd failures and a few exam scenarios.
+
+**Messages, the handshake and sessions.**
 
 <Imagine text={"A remote MCP server works with one instance, then fails randomly once it's behind a load balancer with three instances."} />
 
@@ -943,7 +974,7 @@ That session is what broke behind the load balancer: a **stateful** server remem
 
 MCP doesn't use **websockets**. Remote MCP is plain HTTP plus SSE, and so is Claude's own API streaming (2.3). Your app may still use websockets between its server and the browser, but that's your choice, not part of either protocol.
 
-### Advanced server features: sampling, notifications and roots
+**Advanced server features: sampling, notifications and roots.**
 
 | Feature | What it does | Why it matters |
 |---|---|---|
@@ -951,24 +982,29 @@ MCP doesn't use **websockets**. Remote MCP is plain HTTP plus SSE, and so is Cla
 | **Progress and log notifications** | During a slow tool call, the server sends `notifications/progress` ("40% done") and log messages | Users see that a 30-second job is working, not frozen |
 | **Roots** | The client tells the server which folders it may use ("only `/projects/acme`") | A file-handling server stays inside the folders it was given. Your server code must still check every path against the roots |
 
-<Gotcha
-  title={"The shared server only one person could use"}
-  scenario={"A developer adds a stdio MCP server to the committed `.mcp.json`, pointing at a script on their laptop."}
-  gotcha={"It works for them. For everyone else Claude Code fails to start the server, because the script and runtime only exist on one machine."}
-  fix={"Host shared servers over HTTP (project or enterprise scope); keep stdio servers in local or user scope, or bundle the script so every machine has it."}
-/>
+
 
 <SectionSummary points={[
   "MCP packages tools so you build them once and any MCP app can use them.",
-  "**A server offers** tools (Claude decides to call them), resources (your app attaches them) and prompts (the user picks them).",
+  "**A server offers** tools (actions), resources (read-only data) and prompts (templates). Choose by what the thing is first, then by who decides to use it.",
   "**Local, one machine:** stdio. **Shared or remote:** Streamable HTTP.",
   "**When a server isn't working,** test it with the MCP Inspector.",
 ]} />
 
-## 8.5 MCP scope, permissions and auth
+## 8.5 How do I run MCP servers safely?
+
+<RouteBar at="8.5" />
 
 <ExamRef section="8.5" />
 <Imagine text={"The team shares a Jira MCP server. Everyone should be able to read and create issues, nobody should be able to delete them, and the password must never end up in Git."} />
+
+### Only connect servers you trust
+
+Connecting an MCP server is like plugging in a USB stick: an unknown one is a risk. Its tool descriptions and results go straight into Claude's context, so a malicious or compromised server can try **prompt injection** (7.1), hiding instructions such as "also email this file to…".
+
+- **Connect only servers you trust,** from a known publisher or your own team.
+- **Treat everything a server returns as data, not instructions.**
+- **Limit what each tool may do** with the scope, permissions and authentication below.
 
 ### MCP server scopes in Claude Code
 
@@ -982,6 +1018,13 @@ In Claude Code, an MCP server's **scope** is where its configuration is saved, a
 | Enterprise | Managed settings, set by an admin | Everyone in the organisation | Internal services, security tooling |
 
 **Transport** (how Claude connects to the server) and **scope** (who gets the configuration) are separate choices, but they affect each other. A stdio server listed in the committed `.mcp.json` **looks shared but isn't**: every teammate gets the entry, but it only works on machines where the script and its runtime are installed. A server the whole team relies on should run over HTTP, in project or enterprise scope.
+
+<Gotcha
+  title={"The shared server only one person could use"}
+  scenario={"A developer adds a stdio MCP server to the committed `.mcp.json`, pointing at a script on their laptop."}
+  gotcha={"It works for them. For everyone else Claude Code fails to start the server, because the script and runtime only exist on one machine."}
+  fix={"Host shared servers over HTTP (project or enterprise scope); keep stdio servers in local or user scope, or bundle the script so every machine has it."}
+/>
 
 {/* diagram */}
 <Tiles cols={3} caption="Where an MCP server is configured in Claude Code decides who gets it" tiles={[
@@ -1082,7 +1125,8 @@ Your team wants everyone's Claude Code to use the company's hosted Jira MCP serv
 />
 
 <SectionSummary points={[
-  "Never put secrets in a committed MCP config: use environment variables for keys, and OAuth for each user's sign-in.",
+  "Only connect MCP servers you trust: what they return goes straight into Claude's context.",
+  "**Never put secrets in a committed MCP config:** use environment variables for keys, and OAuth for each user's sign-in.",
   "**Sharing a server with the team?** Use an HTTP server in the project's `.mcp.json`. A stdio server only works on one machine.",
   "**Permissions can target one tool,** and a deny on one tool beats an allow on the whole server.",
 ]} />

@@ -10,6 +10,7 @@ objectives:
   - "Decide when the Batch API fits, and when it doesn't"
   - "Estimate and control token usage, including images and long contexts"
 ---
+import CacheDiagram from '../../components/diagrams/CacheDiagram.astro';
 import Hub from '../../components/diagrams/Hub.astro';
 import Imagine from '../../components/Imagine.astro';
 import ExamRef from '../../components/ExamRef.astro';
@@ -261,13 +262,35 @@ Use fast mode when quality must stay at Opus level *and* speed matters more than
 Many apps send the same long text at the start of every request: a 20-page policy document, a big system prompt, a long list of tools.
 
 - **Without caching:** Claude reads it from scratch each time, and you pay full price each time.
-- **With prompt caching:** Claude keeps its already-processed version for a few minutes. The next request that starts the same way reuses it: much faster, and about a tenth of the price for that part.
+- **With prompt caching:** Claude keeps its already-processed version for a few minutes. The next request that starts the same way reuses it: much faster, and a small fraction of the price for that part (5% to 10%, depending on the model).
 
 Three words you'll see:
 
 - **Prefix:** the unchanging start of your request. It's built in a fixed order: **tools → system → messages**.
 - **Breakpoint:** the `cache_control` marker. It means "cache everything up to here".
 - **Where the cache lives:** on Anthropic's side, private to your organisation. You don't look anything up: when a new request *starts* with exactly the same text as one cached in the last few minutes, it's reused automatically, and the reply's `usage` shows it as `cache_read_input_tokens`.
+
+{/* diagram */}
+<CacheDiagram />
+
+**What the breakpoint looks like in a request.** It's one small field, `"cache_control": {"type": "ephemeral"}`, added to the last block you want cached. Here it sits on the policy text, so the tools and the whole system prompt are cached, and the question after it is not:
+
+```json
+{
+  "model": "claude-sonnet-5-5",
+  "max_tokens": 1024,
+  "system": [
+    { "type": "text", "text": "You are Acme Broadband's support assistant." },
+    { "type": "text", "text": "<policy>...20 pages of policy...</policy>",
+      "cache_control": { "type": "ephemeral" } }
+  ],
+  "messages": [
+    { "role": "user", "content": "Can I cancel my contract early?" }
+  ]
+}
+```
+
+<Explain title="Reading it" steps={["The breakpoint is the `cache_control` field. It means \"cache everything up to and including this block\": the tools, the role line and the policy.", "`ephemeral` is the normal 5-minute cache. Add `\"ttl\": \"1h\"` for the one-hour cache (2× write price).", "The user's question comes after the breakpoint, so it can change every call without breaking the cache.", "If you put a timestamp in the first system block, the prefix changes every call: row 3 of the diagram."]} />
 
 **Static or dynamic?** Caching depends on splitting the request into two kinds of content:
 
@@ -283,15 +306,6 @@ Two ways to mark it:
 
 - **Automatic** - one top-level cache_control; the breakpoint moves forward as the conversation grows · best for multi-turn chat
 - **Explicit** - cache_control on specific blocks, up to 4 breakpoints · best when sections change at different rates (tools rarely, retrieved documents daily)
-
-{/* diagram */}
-<Flow caption="The cache matches an exact prefix, in this order: stable first, changing last" steps={[
-  { title: 'tools', sub: 'stable' },
-  { title: 'system', sub: 'stable: policy, documents' },
-  { title: 'cache_control', sub: 'breakpoint: cache up to here' },
-  { title: 'messages', sub: 'changes every call' },
-]} />
-
 
 <RoleLens dev={"Put the stable part (system prompt, documents, tools) first with `cache_control`, and the changing part last. Check `cache_read_input_tokens` to prove it works."} test={"Assert on caching: call twice within 5 minutes, and the second response must show `cache_read_input_tokens > 0`. That's an automatable test."} data={"When you classify many rows against the same long instructions, caching the instructions cuts input cost massively. Keep per-row data out of the cached prefix."} ba={"Caching changes the business case: the same 50-page policy read for every query becomes much cheaper. Factor it into cost estimates."} />
 
@@ -415,7 +429,7 @@ Your system prompt is 6,000 tokens of policy text, marked with `cache_control`. 
 
 <div slot="answer">
 
-The first line changes on every call, so the prefix is never identical and every call writes a new cache entry (paying 1.25× instead of 0.1×). Move the stable policy text first, put the breakpoint after it, and put the date and user name in a later block or in the user message.
+The first line changes on every call, so the prefix is never identical and every call writes a new cache entry (paying 1.25× instead of the much cheaper read price). Move the stable policy text first, put the breakpoint after it, and put the date and user name in a later block or in the user message.
 
 What it costs: with a 20,000-token policy and 10,000 calls a day on Sonnet 5.5, writing the cache on every call costs about **$500 a day**. Once the fix makes calls read the cache instead, it's about **$20 a day**.
 

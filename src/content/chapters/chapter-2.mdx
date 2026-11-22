@@ -67,12 +67,12 @@ A request to `POST /v1/messages` needs three fields and two headers. Everything 
 
 | Part | What it is | Required? |
 |---|---|---|
-| `x-api-key` header | Your secret key; proves who you are and who pays | Yes |
+| Auth header: `Authorization: Bearer <key>` (current docs) or `x-api-key: <key>` (older, still works) | Your secret key; proves who you are and who pays | Yes (one of the two) |
 | `anthropic-version` header | Which version of the API you're writing against, as a date (the current docs' examples use `2026-10-21`); the SDKs set it for you. Beta features add an `anthropic-beta` header | Yes |
 | `model` | Which Claude does the work, e.g. `claude-sonnet-5-5` | Yes |
 | `max_tokens` | Ceiling on the reply length, in tokens | Yes |
 | `messages` | The conversation: alternating `user` and `assistant` turns | Yes |
-| `system` | Standing instructions for the whole conversation (a top-level field, **not** a role) | No |
+| `system` | Standing instructions for the whole conversation (a top-level field, **not** the first message; see the note below) | No |
 | `tools`, `tool_choice` | Functions Claude may ask you to run (Domain 8) | No |
 | `stream` | Receive the reply piece by piece as **server-sent events** (a standard way for a server to push data over one open HTTP connection; see 2.3) | No |
 
@@ -80,7 +80,7 @@ A request to `POST /v1/messages` needs three fields and two headers. Everything 
 
 ```http
 POST https://api.anthropic.com/v1/messages
-x-api-key: sk-ant-...your key...
+Authorization: Bearer sk-ant-...your key...
 anthropic-version: 2026-10-21
 content-type: application/json
 ```
@@ -100,11 +100,13 @@ content-type: application/json
 
 Reading it:
 
-- **The two required headers** are `x-api-key` and `anthropic-version`. `content-type` is the usual "this body is JSON" header that any JSON request carries.
+- **The two required headers** are the key (`Authorization: Bearer …`, or the older `x-api-key`) and `anthropic-version`. `content-type` is the usual "this body is JSON" header that any JSON request carries.
 - **The three required fields** are `model`, `max_tokens` and `messages`. Delete `system` and the request still works.
 - **`system` sits at the top level**, next to `model`, not inside `messages`.
 - **`messages` holds the whole conversation so far**, not just "Red.". The earlier user and assistant turns are resent, because the API remembers nothing between calls.
 - **The SDKs build exactly this for you.** You never write the headers by hand.
+
+**A note on `role: "system"`.** Instructions that apply from the start always go in the top-level `system` field. Current models also accept a message with `"role": "system"` **later** in the `messages` array, to change the rules part-way through a conversation (for example, "from now on, include type annotations"). It can never be the first message: that returns a 400 error. Because these messages carry the same authority as your system prompt, never put untrusted text (web pages, tool output) in one.
 
 The API is **stateless**: it keeps no conversation. Your app stores the history and resends it every turn, which is why long chats get slower and pricier.
 
@@ -329,7 +331,7 @@ const reply = await client.messages.create({
 
 #### 3. What actually goes over the wire
 
-The SDK turns that into one HTTPS POST to `https://api.anthropic.com/v1/messages`, with your key in the `x-api-key` header and this JSON body:
+The SDK turns that into one HTTPS POST to `https://api.anthropic.com/v1/messages`, with your key in an auth header (`Authorization: Bearer …`, or the older `x-api-key`) and this JSON body:
 
 ```json
 {

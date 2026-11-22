@@ -68,7 +68,7 @@ export const TIP_CARDS: TipCard[] = [
     id: 'request', icon: '📨', title: 'The three required request fields', question: 'Which THREE fields are required in every Messages API request body?',
     tips: [
       { text: 'Every request body must contain exactly these three: **`model`**, **`max_tokens`** and **`messages`**. Leave one out and the API returns **400 invalid_request_error**.' },
-      { text: 'Everything else is optional, including `system`. Common distractors in the exam:', sub: ['`system`: optional; it is a top-level field, not a message with role "system"', '`temperature`: optional, and rejected on Opus 5.5 / Sonnet 5.5 if not the default', '`stream`, `tools`, `stop_sequences`: all optional', '`anthropic-version` and `x-api-key`: required, but they are **headers**, not body fields'] },
+      { text: 'Everything else is optional, including `system`. Common distractors in the exam:', sub: ['`system`: optional; a top-level field, never the first item of `messages` (current models allow a `role: "system"` message only later in the conversation)', '`temperature`: optional, and rejected on Opus 5.5 / Sonnet 5.5 if not the default', '`stream`, `tools`, `stop_sequences`: all optional', '`anthropic-version` and the key (`Authorization: Bearer`, or the older `x-api-key`): required, but they are **headers**, not body fields'] },
       { text: 'Smallest valid body: `{"model": "claude-sonnet-5-5", "max_tokens": 1024, "messages": [{"role": "user", "content": "Hello"}]}`' },
     ],
     table: { head: ['Field', 'What it is'], rows: [
@@ -105,7 +105,7 @@ export const TIP_CARDS: TipCard[] = [
     ],
     table: { head: ['Scenario says…', 'Best lever', 'Why'], rows: [
       ['Big job, nobody waiting (overnight, backfill, evals)', 'Batch API', '50% off; results within 24 h'],
-      ['Same long prefix on every call (policy, tools, documents)', 'Prompt caching', 'Repeated part costs ~10% and is processed faster'],
+      ['Same long prefix on every call (policy, tools, documents)', 'Prompt caching', 'Repeated part costs 5–10% (by model) and is processed faster'],
       ['Mixed traffic: mostly easy, some hard', 'Routing', 'Cheap model for easy requests, capable one for hard'],
       ['Simple tasks, too slow or costly', 'Lower effort, then a smaller model', 'Effort first; switch model only if evals still pass'],
       ['Users waiting, it "feels slow"', 'Streaming', 'Words appear at once; total time unchanged'],

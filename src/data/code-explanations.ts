@@ -335,7 +335,7 @@ export const CODE_EXPLANATIONS: Record<string, string[]> = {
     "Loads Acme's long policy document, which is the same on every call.",
     "Sends the system prompt as two blocks, the short instruction and the policy, and marks the end of the policy with `cache_control`.",
     "The customer's question comes after the cached part, so changing it doesn't break the cache.",
-    "Reads the usage fields: the first call writes the cache, and calls in the next 5 minutes read it at a tenth of the price.",
+    "Reads the usage fields: the first call writes the cache, and calls in the next 5 minutes read it at a small fraction of the price (5–10%, depending on the model).",
   ],
   "Acme assistant, step 5: get a fixed shape back": [
     "Describes the answer you want as a normal type: the reply text, a category from a fixed list, and whether a person should take over.",

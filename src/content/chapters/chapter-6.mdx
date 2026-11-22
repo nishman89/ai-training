@@ -850,7 +850,9 @@ In the API, **context editing** is switched on per request. This is a beta featu
 "Summarise the conversation so far" produces a general summary that drops task-critical state. "Summarise the conversation, preserving every file path modified, every decision made, and every error encountered with its resolution" produces one the agent can actually continue from.
 
 {/* more:6-compact */}
-**In code:** compaction is just one extra Claude call that turns the old turns into a summary, which then replaces them.
+**Let the API do it:** Anthropic recommends **server-side compaction** (beta) for long conversations and agents. Add `{"type": "compact_20260112"}` to the same `context_management.edits` list, with the header `anthropic-beta: compact-2026-01-12`. Once the input crosses a threshold you set, the API summarises the older turns itself and returns a `compaction` block, which you send back with the rest of the history. Its `instructions` setting replaces the default summary prompt, which is where the "keep file paths, decisions and errors" wording above goes.
+
+**By hand:** compaction is just one extra Claude call that turns the old turns into a summary, which then replaces them. The example shows that version, so you can see each step.
 
 <CodeSwitch title="Compact a long conversation" fold>
 

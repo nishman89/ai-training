@@ -1020,7 +1020,7 @@
    "n": 21,
    "chapter": 1,
    "lo": "Use the Agent SDK instead of a hand-built loop",
-   "ref": "1.4 Wiring",
+   "ref": "1.4 Who runs the loop",
    "k": "Apply",
    "select": 1,
    "blocks": [
@@ -2194,7 +2194,7 @@
    "n": 44,
    "chapter": 1,
    "lo": "Choose the Agent SDK for complex agents",
-   "ref": "1.4 Wiring",
+   "ref": "1.4 Who runs the loop",
    "k": "Recall",
    "select": 1,
    "blocks": [

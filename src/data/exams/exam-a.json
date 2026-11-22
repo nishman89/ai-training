@@ -308,7 +308,7 @@
    "n": 7,
    "chapter": 1,
    "lo": "Compare wiring paths",
-   "ref": "1.4 Wiring",
+   "ref": "1.4 Who runs the loop",
    "k": "Recall",
    "select": 1,
    "blocks": [
@@ -358,7 +358,7 @@
    "n": 8,
    "chapter": 1,
    "lo": "Know Agent SDK configuration",
-   "ref": "1.4 Wiring",
+   "ref": "1.4 Who runs the loop",
    "k": "Recall",
    "select": 1,
    "blocks": [
@@ -378,7 +378,7 @@
     },
     {
      "key": "c",
-     "text": "settingSources wasn't set, so skills and CLAUDE.md never loaded"
+     "text": "settingSources left out the project, so skills and CLAUDE.md never loaded"
     },
     {
      "key": "d",
@@ -389,7 +389,7 @@
     "c"
    ],
    "explanation": {
-    "intro": "Set settingSources (setting_sources in Python) explicitly to the sources you want loaded.",
+    "intro": "Set settingSources (setting_sources in Python) explicitly to the sources you want loaded. The default for settingSources has changed between SDK versions (older versions loaded nothing), so set it explicitly, including \"project\".",
     "options": {
      "b": "Skills work in the SDK and API too.",
      "c": "Correct.",
@@ -645,11 +645,11 @@
     "c"
    ],
    "explanation": {
-    "intro": "system is a separate top-level parameter. The messages array alternates user and assistant turns.",
+    "intro": "Instructions that apply from the start go in the top-level system field. Current models also accept a role \"system\" message later in the conversation, to change the rules part-way, but never as the first item: that returns a 400 error.",
     "options": {
-     "b": "Other APIs work this way, but the Claude Messages API doesn't.",
+     "b": "A system message can't be the first item in messages; opening instructions belong in the top-level system field.",
      "c": "Correct.",
-     "a": "Position isn't the issue; system isn't a valid role.",
+     "a": "It isn't about being last: a system message can't come first, and later in the conversation it doesn't have to be last.",
      "d": "System prompts work with or without streaming."
     }
    },

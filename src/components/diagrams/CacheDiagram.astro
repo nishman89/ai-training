@@ -1,0 +1,97 @@
+---
+/**
+ * Prompt caching, shown as three calls in three set-ups: no caching, caching done right, and caching broken by
+ * something that changes at the top of the prompt. Each bar is one request, read left to right in prefix order.
+ */
+import Figure from '../Figure.astro';
+
+type Kind = 'full' | 'write' | 'read' | 'miss';
+interface Seg { label: string; kind: Kind; grow: number; bad?: boolean; }
+interface Row { title: string; note: string; verdict: string; good?: boolean; calls: Seg[][]; bp?: number; }
+
+const prefix = (kind: Kind, stamp?: string): Seg[] => [
+  { label: 'tools', kind, grow: 2 },
+  ...(stamp ? [{ label: stamp, kind, grow: 3, bad: true }] : []),
+  { label: 'system prompt + policy', kind, grow: stamp ? 6 : 8 },
+];
+const q = (text: string): Seg => ({ label: text, kind: 'full', grow: 3 });
+
+const rows: Row[] = [
+  {
+    title: '1. No caching', note: 'Every call processes the whole policy again.',
+    verdict: 'Full price, every call', calls: [
+      [...prefix('full'), q('Q1')], [...prefix('full'), q('Q2')], [...prefix('full'), q('Q3')],
+    ],
+  },
+  {
+    title: '2. Caching, done right', note: 'Static content first, then the breakpoint, then the question.',
+    verdict: 'Call 1 writes once; calls 2 and 3 read at 5–10% of the price', good: true, bp: 2, calls: [
+      [...prefix('write'), q('Q1')], [...prefix('read'), q('Q2')], [...prefix('read'), q('Q3')],
+    ],
+  },
+  {
+    title: '3. Caching, done wrong', note: 'A timestamp sits inside the prefix, so the prefix is different every call.',
+    verdict: 'Every call is a miss and pays the 1.25× write price', bp: 3, calls: [
+      [...prefix('miss', '14:03:01'), q('Q1')], [...prefix('miss', '14:03:09'), q('Q2')], [...prefix('miss', '14:03:15'), q('Q3')],
+    ],
+  },
+];
+const legend: [Kind, string][] = [['full', 'Full price'], ['write', 'Cache write (1.25×)'], ['read', 'Cache read (5–10%)'], ['miss', 'Miss: written again (1.25×)']];
+---
+<Figure caption="The same three calls three ways. The dashed line is the breakpoint, the cache_control marker: everything to its left is the prefix that gets cached.">
+  <div class="cd" role="img" aria-label="Prompt caching compared: no caching pays full price every call; caching done right writes once then reads cheaply; a timestamp in the prefix makes every call a miss.">
+    <div class="cd__legend">
+      {legend.map(([k, t]) => <span class="cd__li"><span class:list={['cd__key', `k-${k}`]}></span>{t}</span>)}
+      <span class="cd__li"><span class="cd__key cd__key--bp"></span>Breakpoint</span>
+    </div>
+    {rows.map((r) => (
+      <section class="cd__row">
+        <p class="cd__title"><strong>{r.title}</strong> <span>{r.note}</span></p>
+        {r.calls.map((call, ci) => (
+          <div class="cd__call">
+            <span class="cd__n">Call {ci + 1}</span>
+            <div class="cd__bar">
+              {call.map((s, si) => (
+                <>
+                  {r.bp !== undefined && si === r.bp && <span class="cd__bp" aria-hidden="true">{ci === 0 && <span class="cd__bptag">cache_control</span>}</span>}
+                  <span class:list={['cd__seg', `k-${s.kind}`, { 'is-bad': s.bad }]} style={`flex-grow:${s.grow}`}>{s.label}</span>
+                </>
+              ))}
+            </div>
+          </div>
+        ))}
+        <p class:list={['cd__verdict', { 'is-good': r.good }]}>{r.good ? '✓' : '✗'} {r.verdict}</p>
+      </section>
+    ))}
+  </div>
+</Figure>
+
+<style>
+  .cd { display: grid; gap: 1.1rem; font-size: 0.85rem; }
+  .cd__legend { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; color: var(--grey); }
+  .cd__li { display: inline-flex; align-items: center; gap: 0.4rem; }
+  .cd__key { width: 1.1rem; height: 0.8rem; border-radius: 3px; display: inline-block; }
+  .cd__key--bp { width: 0; height: 1rem; border-left: 2px dashed var(--charcoal); border-radius: 0; }
+  .cd__row { display: grid; gap: 0.35rem; }
+  .cd__title { margin: 0; line-height: 1.35; }
+  .cd__title span { color: var(--grey); }
+  .cd__call { display: grid; grid-template-columns: 3.4rem 1fr; align-items: center; gap: 0.5rem; }
+  .cd__n { color: var(--grey); font-weight: 700; font-size: 0.78rem; }
+  .cd__bar { display: flex; align-items: stretch; gap: 2px; min-width: 0; }
+  .cd__seg { flex-basis: 0; min-width: 0; padding: 0.3rem 0.4rem; border-radius: 4px; font-weight: 700; font-size: 0.74rem; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cd__bp { position: relative; flex: none; align-self: stretch; margin: -0.2rem 0.15rem; border-left: 2px dashed var(--charcoal); }
+  .cd__bptag { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 0.25rem; padding: 0.05rem 0.4rem; border-radius: 999px; background: var(--charcoal); color: #fff; font: 700 0.68rem/1.4 var(--font-body); white-space: nowrap; }
+  .cd__row:has(.cd__bptag) .cd__call:first-of-type { margin-top: 1.3rem; }
+  .k-full { background: var(--charcoal); color: #fff; }
+  .k-write { background: var(--pink-soft); color: var(--charcoal); }
+  .k-read { background: var(--success-tint); color: var(--success); outline: 1.5px solid var(--success); outline-offset: -1.5px; }
+  .k-miss { background: var(--pink-tint); color: var(--pink-dark); outline: 1.5px dashed var(--pink); outline-offset: -1.5px; }
+  .cd__seg.is-bad { background: var(--pink); color: #fff; }
+  .cd__verdict { margin: 0.1rem 0 0 3.9rem; font-weight: 700; color: var(--pink-dark); }
+  .cd__verdict.is-good { color: var(--success); }
+  @media (max-width: 40rem) {
+    .cd__call { grid-template-columns: 1fr; gap: 0.15rem; }
+    .cd__verdict { margin-left: 0; }
+    .cd__seg { font-size: 0.68rem; padding: 0.25rem 0.3rem; }
+  }
+</style>

@@ -43,7 +43,7 @@
     "options": {
      "a": "Each parallel request still pays for its share, and you lose the single answer that draws on all the policies.",
      "b": "Where the text sits doesn't change how many tokens are read or what they cost.",
-     "c": "Correct: a large prefix that never changes is exactly what caching is for. Cached reads cost about a tenth of normal input and the first words arrive sooner.",
+     "c": "Correct: a large prefix that never changes is exactly what caching is for. Cached reads cost a small fraction of normal input (0.05× to 0.1×, depending on the model) and the first words arrive sooner.",
      "d": "Batch halves the price but can take hours, which is no use to an employee waiting for an answer."
     }
    },
@@ -108,7 +108,7 @@
    "n": 3,
    "chapter": 8,
    "lo": "Choose stdio or Streamable HTTP",
-   "ref": "8.4 The Model Context Protocol",
+   "ref": "8.4 MCP",
    "k": "Apply",
    "select": 1,
    "blocks": [
@@ -258,7 +258,7 @@
    "n": 6,
    "chapter": 1,
    "lo": "Choose the Agent SDK over a custom loop",
-   "ref": "1.4 Three ways to wire an agent",
+   "ref": "1.4 Who runs the agent loop?",
    "k": "Apply",
    "select": 1,
    "blocks": [
@@ -908,7 +908,7 @@
    "n": 19,
    "chapter": 8,
    "lo": "Pick a custom tool when nothing is shared",
-   "ref": "8.5 MCP scope, permissions and auth",
+   "ref": "8.5 Running MCP safely",
    "k": "Apply",
    "select": 1,
    "blocks": [
@@ -1058,7 +1058,7 @@
    "n": 22,
    "chapter": 8,
    "lo": "Write a full tool description",
-   "ref": "8.2 Designing tools Claude picks correctly",
+   "ref": "8.2 Design",
    "k": "Apply",
    "select": 1,
    "blocks": [
@@ -1308,7 +1308,7 @@
    "n": 27,
    "chapter": 8,
    "lo": "Return clear errors so Claude can fix its call",
-   "ref": "8.1 How tool use works",
+   "ref": "8.1 Round trip",
    "k": "Apply",
    "select": 1,
    "blocks": [
@@ -1358,7 +1358,7 @@
    "n": 28,
    "chapter": 8,
    "lo": "Least privilege for database tools",
-   "ref": "8.5 MCP scope, permissions and auth",
+   "ref": "8.5 Running MCP safely",
    "k": "Apply",
    "select": 1,
    "blocks": [
@@ -1682,19 +1682,19 @@
     },
     {
      "key": "d",
-     "text": "Turn one pays a write premium; later turns pay about 10%"
+     "text": "Turn one pays a write premium; later turns pay a small fraction"
     }
    ],
    "answer": [
     "d"
    ],
    "explanation": {
-    "intro": "Cache pricing: pay a little more once, then much less on every hit.",
+    "intro": "Cache pricing: pay a little more once, then much less on every hit. The read discount varies by model, so look it up rather than memorising one number.",
     "options": {
-     "a": "It misses the first-turn write premium, and reads cost about 10%, not 50%.",
+     "a": "It misses the first-turn write premium, and reads cost 5–10% of normal input, not 50%.",
      "b": "Cache reads are cheaper, not free, so this understates the bill.",
      "c": "Caching cuts input cost as well as delay, so this overstates the bill.",
-     "d": "Correct: a 5-minute cache write costs 1.25× normal input, and reads within the time limit cost about 0.1×, each read resetting the timer."
+     "d": "Correct: a 5-minute cache write costs 1.25× normal input, and reads within the time limit cost 0.05× to 0.1× (it depends on the model: check the pricing page), each read resetting the timer."
     }
    },
    "source": {
@@ -1708,7 +1708,7 @@
    "n": 35,
    "chapter": 1,
    "lo": "Use a graph framework for fixed, auditable flows",
-   "ref": "1.4 Three ways to wire an agent",
+   "ref": "1.4 Who runs the agent loop?",
    "k": "Apply",
    "select": 1,
    "blocks": [
@@ -1858,7 +1858,7 @@
    "n": 38,
    "chapter": 1,
    "lo": "Choose a managed deployment",
-   "ref": "1.4 Three ways to wire an agent",
+   "ref": "1.4 Who runs the agent loop?",
    "k": "Apply",
    "select": 1,
    "blocks": [
@@ -2108,7 +2108,7 @@
    "n": 43,
    "chapter": 1,
    "lo": "Pause and resume with checkpoints",
-   "ref": "1.4 Three ways to wire an agent",
+   "ref": "1.4 Who runs the agent loop?",
    "k": "Apply",
    "select": 1,
    "blocks": [
