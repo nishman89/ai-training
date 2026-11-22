@@ -132,6 +132,19 @@ export const TIP_CARDS: TipCard[] = [
     read: ['2.4', '2.5'],
   },
   {
+    id: 'which-pattern', icon: '🧭', title: 'Which workflow pattern?', question: 'Several options name a pattern (chaining, parallelisation, orchestrator, agent). How do you pick?',
+    tips: [
+      { text: 'Ask four questions. The task\'s wording usually answers them: "independent", "latency matters", "then", "unknown in advance", "open-ended".' },
+    ],
+    table: { head: ['Question', 'Yes', 'No'], rows: [
+      ['Are the subtasks known **before** you start?', '**Parallelisation** (if independent) or **chaining** (if in order)', '**Orchestrator and workers**: the work discovers them'],
+      ['Does each step need the previous step\'s result?', '**Prompt chaining**', '**Parallelisation**: one after another only adds time'],
+      ['Could you write all the steps down in advance?', 'A **workflow** (one of the five patterns)', 'An **agent**'],
+      ['Is the work tightly connected (one code module, one document)?', '**One agent** that sees everything', '**Several agents** can split it, at about 15× the tokens'],
+    ] },
+    read: ['1.2', '1.1', '1.3'],
+  },
+  {
     id: 'distractors', icon: '🪤', title: 'Tempting wrong answers', question: 'Which options keep appearing as distractors, and why are they wrong?',
     tips: [
       { text: 'When a question asks for the BEST mitigation, these are usually wrong:' },

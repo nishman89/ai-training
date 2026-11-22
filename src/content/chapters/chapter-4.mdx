@@ -395,6 +395,8 @@ run 7f3a · prompt v12 · claude-sonnet-5-5 · 14:03:11
 
 <Explain title="Reading it" steps={["Each numbered line is one step: what was sent to Claude, what Claude asked for, what your tool returned, and the final reply.", "Step 4 is where the customer saw the problem, but it isn't where it started. Claude was answering honestly from the error it was given.", "Step 2 is the real cause: Claude passed `1234` without the `A-` prefix. The fix is input checking in the tool (8.2, step 4) plus a clearer tool description, then a new eval case for \"order number without A-\".", "The header (prompt version, model, time) lets you reproduce the run exactly."]} />
 
+The code that writes each of these lines is in **Log enough to debug later**, just below.
+
 ### Is it your code or the model?
 
 <Imagine text={"The app crashes parsing Claude's JSON. One developer wants to rewrite the prompt; another says the parser is the problem. Who's right?"} />

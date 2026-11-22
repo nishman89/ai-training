@@ -745,6 +745,21 @@ const msg = await client.messages.create({
 
 ### Why MCP
 
+**The picture to keep in mind: MCP is "a USB-C port for AI".** That's the official description. Before USB, every device needed its own cable and its own driver. MCP does the same job for AI apps and the tools they use: one agreed way to plug things in.
+
+| USB world | MCP world |
+|---|---|
+| The USB standard: the agreed rules | **MCP** itself: the protocol, the agreed format of the messages |
+| A device: printer, keyboard, drive | An **MCP server**: ticketing, Postgres, GitHub |
+| The computer you plug into | The **MCP host**: Claude Desktop, Claude Code, your own app |
+| Each port on the computer | An **MCP client**: a connector inside the host, one per connected server |
+| The cable: plugged in, or over the network | The **transport**: stdio (local, on the same machine) or Streamable HTTP (remote) |
+| The computer asks "what are you, and what can you do?" | The **handshake**: the client starts the connection and asks the server to list its tools, resources and prompts |
+
+**Where the picture holds:** build a server once and it works with any MCP host, with no custom wiring.
+
+**Where it breaks:** plugging in an unknown USB stick is risky, and so is connecting an unknown MCP server. Its tool descriptions and results go straight into Claude's context, so a malicious server can try prompt injection (7.1). Connect only servers you trust, and limit what each tool may do (8.5). And unlike a cable, MCP doesn't decide anything: your app (or Claude) still runs the loop and chooses which tools to call.
+
 Wiring a tool straight into each app means three apps need three integrations. MCP moves the tool into a **server** that any **MCP client**, meaning any app that speaks MCP (Claude Code, Claude apps, your own app), can attach to, so you build the integration once. Think JDBC: one driver standard, many databases and clients.
 
 {/* more:8-mcpcaps-table */}
@@ -1054,18 +1069,6 @@ Your team wants everyone's Claude Code to use the company's hosted Jira MCP serv
 </div>
 {/* /code */}
 
-### Putting it together: which mechanism when?
-
-<Imagine text={"Acme wants Claude to search the web, look up orders in its own database, follow the company's 12-step refund procedure, and reach the same stock system from three different apps. That's four different needs."} />
-
-| You need… | Use | Why |
-|---|---|---|
-| A common capability Anthropic already provides: web search, web fetch, code execution | A **built-in (server) tool** | Nothing to build or host |
-| Claude to call **your own** function in **one** app | A **custom (client) tool** (8.1) | Simplest: a definition plus your code |
-| Claude to follow a repeatable **procedure** or use your know-how (instructions, templates, scripts) | A **Skill** | Loaded only when relevant, so it costs little context; reusable across calls and in Claude Code |
-| The **same** integration in **several** apps or clients | An **MCP server** (8.4, 8.5) | Build once, connect anywhere |
-| A rule that must **always** hold, whatever Claude decides | A **hook** or a check in the tool's code (3.3, 7.2) | Enforced outside the model |
-
 ### Further reading
 
 <Resource kind="docs" href="https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview" title="Tool use with Claude" text="Client and server tools, the loop, tool_choice, pause_turn and pricing." />
@@ -1082,5 +1085,4 @@ Your team wants everyone's Claude Code to use the company's hosted Jira MCP serv
   "Never put secrets in a committed MCP config: use environment variables for keys, and OAuth for each user's sign-in.",
   "**Sharing a server with the team?** Use an HTTP server in the project's `.mcp.json`. A stdio server only works on one machine.",
   "**Permissions can target one tool,** and a deny on one tool beats an allow on the whole server.",
-  "**Which mechanism:** a built-in tool if Anthropic has one, your own tool for one app, a skill for a procedure, MCP to reuse it everywhere.",
 ]} />

@@ -76,6 +76,36 @@ A request to `POST /v1/messages` needs three fields and two headers. Everything 
 | `tools`, `tool_choice` | Functions Claude may ask you to run (Domain 8) | No |
 | `stream` | Receive the reply piece by piece as **server-sent events** (a standard way for a server to push data over one open HTTP connection; see 2.3) | No |
 
+**What the request actually looks like.** Here is one complete request, as it goes over the wire: the headers first, then the JSON body.
+
+```http
+POST https://api.anthropic.com/v1/messages
+x-api-key: sk-ant-...your key...
+anthropic-version: 2026-10-21
+content-type: application/json
+```
+
+```json
+{
+  "model": "claude-sonnet-5-5",
+  "max_tokens": 1024,
+  "system": "You are Acme Broadband's support assistant. Be brief and friendly.",
+  "messages": [
+    { "role": "user", "content": "My router light is flashing. What colour should it be?" },
+    { "role": "assistant", "content": "It should be solid white. What colour is it flashing?" },
+    { "role": "user", "content": "Red." }
+  ]
+}
+```
+
+Reading it:
+
+- **The two required headers** are `x-api-key` and `anthropic-version`. `content-type` is the usual "this body is JSON" header that any JSON request carries.
+- **The three required fields** are `model`, `max_tokens` and `messages`. Delete `system` and the request still works.
+- **`system` sits at the top level**, next to `model`, not inside `messages`.
+- **`messages` holds the whole conversation so far**, not just "Red.". The earlier user and assistant turns are resent, because the API remembers nothing between calls.
+- **The SDKs build exactly this for you.** You never write the headers by hand.
+
 The API is **stateless**: it keeps no conversation. Your app stores the history and resends it every turn, which is why long chats get slower and pricier.
 
 ### Where each part of the request comes from

@@ -98,7 +98,7 @@ const mainCount = (await getQuestions(MAIN_SET, data.number)).length;
       <div class="section-controls no-print">
         <button type="button" class="link" id="expand-all" data-testid="expand-all" data-expand="open">Expand all sections</button>
         <button type="button" class="link" id="collapse-all" data-testid="collapse-all" data-expand="close">Collapse all</button>
-        <label class="first-read" title="Hides code, role examples and exam-guide boxes so you can get the ideas first">
+        <label class="first-read" title="Hides the Java, Python and TypeScript code, role examples and exam-guide boxes, so you can get the ideas first. Examples such as traces, replies and prompts stay visible.">
           <input type="checkbox" data-first-read data-testid="first-read" /> <span><strong>First read</strong>: hide code and extras</span>
         </label>
       </div>
@@ -249,7 +249,11 @@ const mainCount = (await getQuestions(MAIN_SET, data.number)).length;
   .first-read { display: inline-flex; align-items: center; gap: 0.4rem; margin-left: auto; padding: 0.3rem 0.75rem; border-radius: 999px; background: var(--pink-tint); cursor: pointer; font-size: 0.9rem; }
   .first-read input { accent-color: var(--pink); width: 1.05rem; height: 1.05rem; }
   :global(html.first-read .prose .code-switch),
-  :global(html.first-read .prose pre.astro-code),
+  :global(html.first-read .prose pre.astro-code[data-language='java']),
+  :global(html.first-read .prose pre.astro-code[data-language='python']),
+  :global(html.first-read .prose pre.astro-code[data-language='typescript']),
+  :global(html.first-read .prose pre.astro-code[data-language='bash']),
+  :global(html.first-read .prose pre.astro-code[data-language='sql']),
   :global(html.first-read .prose .lens),
   :global(html.first-read .prose .exref__box),
   :global(html.first-read .prose .exref__line) { display: none !important; }

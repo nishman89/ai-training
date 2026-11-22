@@ -95,11 +95,18 @@ const chapters = await getChapters();
     cont.querySelector('[data-continue-title]')!.textContent = `Domain ${chapter} · ${title}`;
     cont.hidden = false;
   }
-  document.querySelector('[data-reset]')?.addEventListener('click', () => {
-    if (confirm('Clear all saved progress and quiz scores on this device?')) {
-      resetProgress();
-      location.reload();
+  // Two clicks instead of a confirm() pop-up, which embedded previews block.
+  const resetBtn = document.querySelector<HTMLButtonElement>('[data-reset]');
+  let armed = false;
+  resetBtn?.addEventListener('click', () => {
+    if (!armed) {
+      armed = true;
+      resetBtn.textContent = 'Click again to clear all progress and quiz scores on this device';
+      window.setTimeout(() => { armed = false; resetBtn.textContent = 'Reset my progress'; }, 5000);
+      return;
     }
+    resetProgress();
+    location.reload();
   });
   const overall = document.querySelector<HTMLElement>('[data-overall]');
   if (overall) {

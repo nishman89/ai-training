@@ -1,7 +1,9 @@
 ---
 import type { Question } from '../content.config';
 import QuestionBody from './QuestionBody.astro';
-import { PASS_MARK, MINUTES_PER_K, EXAM_MINUTES } from '../lib/site';
+import { PASS_MARK, MINUTES_PER_K, EXAM_MINUTES, url } from '../lib/site';
+import { getChapters } from '../lib/data';
+import { getSummaries } from '../lib/summaries';
 
 /**
  * Udemy-style quiz: answer everything, submit, then see a score and a full review
@@ -18,9 +20,20 @@ interface Props {
 }
 const { questions, quizId, examMode = false, examMinutes = EXAM_MINUTES } = Astro.props;
 const fullExam = examMinutes === EXAM_MINUTES;
-const chapterTotals = Object.entries(
-  questions.reduce<Record<number, number>>((acc, q) => ({ ...acc, [q.chapter]: (acc[q.chapter] ?? 0) + 1 }), {}),
-);
+// Results breakdown: by domain on mock exams, by section on a single-domain quiz.
+const chapters = await getChapters();
+const sections = (await getSummaries()).flatMap((d) => d.sections.map((x) => ({ ...x, chapter: d.number })));
+const SHORT: Record<number, string> = { 1: 'Agents and workflows', 2: 'API and apps', 3: 'Claude Code', 4: 'Evals and debugging', 5: 'Models and cost', 6: 'Prompts and context', 7: 'Security', 8: 'Tools and MCP' };
+const groupOf = (q: Question) => (examMode ? String(q.chapter) : q.ref.split(' ')[0]);
+const groups = [...new Set(questions.map(groupOf))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).map((g) => {
+  const n = questions.filter((q) => groupOf(q) === g).length;
+  if (examMode) {
+    const ch = chapters.find((c) => c.data.number === Number(g));
+    return { key: g, n, label: `${g}. ${SHORT[Number(g)] ?? ch?.data.title ?? ''}`, weight: ch?.data.weight ?? 0, href: url(`chapters/${g}/#domain-summary`) };
+  }
+  const sec = sections.find((x) => x.number === g);
+  return { key: g, n, label: `${g} ${sec?.title ?? ''}`, weight: n, href: sec ? url(`chapters/${sec.chapter}/#${sec.slug}`) : '#' };
+});
 const total = questions.length;
 const passScore = Math.ceil(total * PASS_MARK);
 const minutes = Math.ceil(questions.reduce((m, q) => m + MINUTES_PER_K[q.k], 0));
@@ -37,6 +50,13 @@ const minutes = Math.ceil(questions.reduce((m, q) => m + MINUTES_PER_K[q.k], 0))
     <label class="paged-toggle no-print"><input type="checkbox" id="one-at-a-time" name="one-at-a-time" data-testid="one-at-a-time-toggle" data-paged-toggle checked={total > 20} /> Show one question at a time</label>
     <p class="last-attempt" id="last-attempt" data-testid="last-attempt" hidden data-last-attempt></p>
     {examMode && (
+      <div class="resume" data-resume hidden data-testid="exam-resume">
+        <p><strong>You have an exam in progress.</strong> <span data-resume-text></span></p>
+        <div class="resume__btns">
+          <button class="btn" type="button" data-resume-yes data-testid="resume-exam">Resume where I left off</button>
+          <button class="link-btn" type="button" data-resume-no data-testid="restart-exam">Start again</button>
+        </div>
+      </div>
       <div class="start" id="exam-start" data-testid="exam-start" data-start>
         <label for="time-limit">Time limit
           <select id="time-limit" name="time-limit" data-testid="time-limit" data-time-limit>
@@ -58,16 +78,23 @@ const minutes = Math.ceil(questions.reduce((m, q) => m + MINUTES_PER_K[q.k], 0))
       <p class="score__pct" id="score-percent" data-testid="score-percent" data-percent></p>
       <p class="score__time" id="time-taken" data-testid="time-taken" data-time-taken hidden></p>
     </div>
-    {examMode && (
-      <table class="breakdown" id="chapter-breakdown" data-testid="chapter-breakdown" data-breakdown>
-        <caption class="visually-hidden">Score by domain</caption>
-        <thead><tr><th scope="col">Domain</th><th scope="col">Score</th><th scope="col"><span class="visually-hidden">Bar</span></th></tr></thead>
-        <tbody>
-          {chapterTotals.map(([ch, n]) => (
-            <tr data-testid={`breakdown-chapter-${ch}`} data-chapter-row={ch}><th scope="row">Domain {ch}</th><td data-testid={`breakdown-chapter-${ch}-score`} data-chapter-score>0 / {n}</td><td><span class="mini"><span data-chapter-bar></span></span></td></tr>
-          ))}
-        </tbody>
-      </table>
+    {groups.length > 1 && (
+      <div class="breakdown-wrap" data-breakdown-wrap>
+        <table class="breakdown" id="chapter-breakdown" data-testid="chapter-breakdown" data-breakdown>
+          <caption class="visually-hidden">Score by {examMode ? 'domain' : 'section'}</caption>
+          <thead><tr><th scope="col">{examMode ? 'Domain' : 'Section'}</th><th scope="col">Score</th><th scope="col"><span class="visually-hidden">Bar</span></th></tr></thead>
+          <tbody>
+            {groups.map((g) => (
+              <tr data-testid={`breakdown-chapter-${g.key}`} data-group-row={g.key} data-weight={g.weight} data-label={g.label} data-href={g.href}>
+                <th scope="row"><a href={g.href}>{g.label}</a>{examMode && <span class="breakdown__w">{g.weight}% of the exam</span>}</th>
+                <td data-testid={`breakdown-chapter-${g.key}-score`} data-chapter-score>0 / {g.n}</td>
+                <td><span class="mini"><span data-chapter-bar></span></span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p class="focus" data-focus hidden></p>
+      </div>
     )}
     <div class="results__actions no-print">
       <label class="toggle"><input type="checkbox" id="only-wrong" name="only-wrong" data-testid="only-wrong-toggle" data-only-wrong /> Show only questions I got wrong</label>
@@ -78,7 +105,7 @@ const minutes = Math.ceil(questions.reduce((m, q) => m + MINUTES_PER_K[q.k], 0))
   <form class="questions" id="quiz-form" name="quiz" data-testid="quiz-form" data-form novalidate hidden={examMode}>
     <ol>
       {questions.map((q, i) => (
-        <li class="q card" id={`question-${q.id}`} data-testid={`question-${i + 1}`} data-question={q.id} data-answer={q.answer.join(',')} data-select={q.select} data-chapter={q.chapter}>
+        <li class="q card" id={`question-${q.id}`} data-testid={`question-${i + 1}`} data-question={q.id} data-answer={q.answer.join(',')} data-select={q.select} data-chapter={q.chapter} data-group={groupOf(q)}>
           <header class="q__head">
             <span class="q__num" data-testid={`question-${i + 1}-number`}>Question {i + 1}<span class="muted"> of {total}</span></span>
             <span class="q__tags">
@@ -124,8 +151,25 @@ const minutes = Math.ceil(questions.reduce((m, q) => m + MINUTES_PER_K[q.k], 0))
       <button type="button" class="link-btn" id="jump-to-unanswered" data-testid="jump-to-unanswered" data-jump>Jump to unanswered</button>
       {examMode && <span class="timer" id="timer" data-testid="timer" data-timer hidden aria-live="off"></span>}
       <button class="btn" type="submit" id="submit-answers" data-testid="submit-answers">Submit answers</button>
+      <div class="confirm-bar" data-confirm hidden role="alert">
+        <span data-confirm-text></span>
+        <button type="button" class="btn btn--small" data-confirm-yes data-testid="confirm-submit">Submit anyway</button>
+        <button type="button" class="link-btn" data-confirm-no data-testid="confirm-cancel">Keep going</button>
+      </div>
     </div>
   </form>
+  {examMode && (
+    <div class="leave no-print" data-leave hidden role="alertdialog" aria-labelledby="leave-title" data-testid="leave-dialog">
+      <div class="leave__box card">
+        <p id="leave-title"><strong>Are you sure you want to leave?</strong></p>
+        <p>You can resume where you left off when you come back and select the same test, or start again.</p>
+        <div class="leave__btns">
+          <button type="button" class="btn" data-leave-stay data-testid="leave-stay">Stay in the exam</button>
+          <button type="button" class="link-btn" data-leave-go data-testid="leave-go">Leave</button>
+        </div>
+      </div>
+    </div>
+  )}
 </section>
 
 <script>
@@ -220,11 +264,38 @@ const minutes = Math.ceil(questions.reduce((m, q) => m + MINUTES_PER_K[q.k], 0))
     let tick: number | undefined;
     const fmt = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 
-    function startExam() {
-      const limit = Number(quiz.querySelector<HTMLSelectElement>('[data-time-limit]')!.value) * 60;
+    // ---- An exam in progress is saved, so leaving the page doesn't lose it.
+    const SAVE_KEY = `ccdvf-exam-in-progress-${id}`;
+    type Saved = { answers: Record<string, string[]>; elapsed: number; limit: number; current: number };
+    let running = false;
+    let limitSecs = 0;
+    const readSaved = (): Saved | null => { try { const r = localStorage.getItem(SAVE_KEY); return r ? JSON.parse(r) : null; } catch { return null; } };
+    const clearSaved = () => { try { localStorage.removeItem(SAVE_KEY); } catch { /* storage unavailable */ } };
+    function save() {
+      if (!isExam || !running) return;
+      const answers = Object.fromEntries(items.map((i) => [i.dataset.question!, chosen(i)]));
+      const data: Saved = { answers, elapsed: Math.round((Date.now() - startedAt) / 1000), limit: limitSecs, current };
+      try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch { /* storage unavailable */ }
+    }
+    form.addEventListener('change', save);
+
+    function startExam(resume?: Saved) {
+      const limit = resume ? resume.limit : Number(quiz.querySelector<HTMLSelectElement>('[data-time-limit]')!.value) * 60;
+      limitSecs = limit;
       quiz.querySelector<HTMLElement>('[data-start]')!.hidden = true;
+      quiz.querySelector<HTMLElement>('[data-resume]')!.hidden = true;
       form.hidden = false;
-      startedAt = Date.now();
+      startedAt = Date.now() - (resume ? resume.elapsed * 1000 : 0);
+      if (resume) {
+        for (const item of items) {
+          const picked = resume.answers[item.dataset.question!] ?? [];
+          item.querySelectorAll<HTMLInputElement>('input').forEach((input) => { input.checked = picked.includes(input.value); });
+        }
+        updateCount();
+        show(resume.current ?? 0, false);
+      }
+      running = true;
+      save();
       if (limit && timerEl) {
         timerEl.hidden = false;
         const update = () => {
@@ -232,26 +303,78 @@ const minutes = Math.ceil(questions.reduce((m, q) => m + MINUTES_PER_K[q.k], 0))
           timerEl.textContent = `⏱ ${fmt(Math.max(left, 0))} left`;
           timerEl.classList.toggle('is-low', left <= 300);
           if (left <= 0) { window.clearInterval(tick); submit(true); }
+          else save();
         };
         update();
         tick = window.setInterval(update, 1000);
       }
-      items[0]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (!limit) tick = window.setInterval(save, 5000);
+      (resume ? items[resume.current ?? 0] : items[0])?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-    quiz.querySelector('[data-start-btn]')?.addEventListener('click', startExam);
+    quiz.querySelector('[data-start-btn]')?.addEventListener('click', () => { clearSaved(); startExam(); });
+
+    // Offer to resume a saved exam.
+    const resumeBox = quiz.querySelector<HTMLElement>('[data-resume]');
+    const saved = isExam ? readSaved() : null;
+    if (resumeBox && saved) {
+      const done = Object.values(saved.answers).filter((a) => a.length).length;
+      const left = saved.limit ? ` · ${fmt(Math.max(saved.limit - saved.elapsed, 0))} left on the clock` : '';
+      resumeBox.querySelector('[data-resume-text]')!.textContent = `${done} of ${items.length} answered${left}. The clock stopped while you were away.`;
+      resumeBox.hidden = false;
+      quiz.querySelector<HTMLElement>('[data-start]')!.hidden = true;
+      resumeBox.querySelector('[data-resume-yes]')!.addEventListener('click', () => startExam(saved));
+      resumeBox.querySelector('[data-resume-no]')!.addEventListener('click', () => {
+        clearSaved();
+        resumeBox.hidden = true;
+        quiz.querySelector<HTMLElement>('[data-start]')!.hidden = false;
+      });
+    }
+
+    // Warn before leaving an exam that's under way. Browser pop-ups are blocked in embedded previews, so ask on the page.
+    const leaveEl = quiz.querySelector<HTMLElement>('[data-leave]');
+    let leaveTo = '';
+    document.addEventListener('click', (e) => {
+      if (!running || !leaveEl) return;
+      const a = (e.target as HTMLElement).closest<HTMLAnchorElement>('a[href]');
+      if (!a || a.target === '_blank' || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      const dest = new URL(a.href, location.href);
+      if (dest.pathname === location.pathname && dest.hash) return;
+      e.preventDefault();
+      save();
+      leaveTo = a.href;
+      leaveEl.hidden = false;
+      leaveEl.querySelector<HTMLButtonElement>('[data-leave-stay]')!.focus();
+    }, true);
+    leaveEl?.querySelector('[data-leave-stay]')!.addEventListener('click', () => { leaveEl.hidden = true; });
+    leaveEl?.querySelector('[data-leave-go]')!.addEventListener('click', () => { running = false; location.href = leaveTo; });
+    leaveEl?.addEventListener('keydown', (e) => { if (e.key === 'Escape') leaveEl.hidden = true; });
+    quiz.querySelectorAll('[data-prev], [data-next]').forEach((b) => b.addEventListener('click', save));
+    window.addEventListener('beforeunload', (e) => { if (running) { save(); e.preventDefault(); } });
 
     function fillBreakdown(attempt: QuizAttempt) {
-      for (const row of quiz.querySelectorAll<HTMLElement>('[data-chapter-row]')) {
-        const ch = row.dataset.chapterRow!;
-        const qs = items.filter((i) => i.dataset.chapter === ch);
+      const stats: { label: string; href: string; pct: number; weight: number }[] = [];
+      for (const row of quiz.querySelectorAll<HTMLElement>('[data-group-row]')) {
+        const key = row.dataset.groupRow!;
+        const qs = items.filter((i) => i.dataset.group === key);
         const right = qs.filter((i) => {
           const correct = i.dataset.answer!.split(',');
           const picked = attempt.answers[i.dataset.question!] ?? [];
           return picked.length === correct.length && picked.every((k) => correct.includes(k));
         }).length;
-        row.querySelector('[data-chapter-score]')!.textContent = `${right} / ${qs.length}`;
-        row.querySelector<HTMLElement>('[data-chapter-bar]')!.style.width = `${(right / qs.length) * 100}%`;
+        const pct = Math.round((right / qs.length) * 100);
+        row.querySelector('[data-chapter-score]')!.textContent = `${right} / ${qs.length} (${pct}%)`;
+        row.querySelector<HTMLElement>('[data-chapter-bar]')!.style.width = `${pct}%`;
+        row.classList.toggle('is-weak', pct < passMark * 100);
+        stats.push({ label: row.dataset.label!, href: row.dataset.href!, pct, weight: Number(row.dataset.weight) });
       }
+      // Suggest where to revise: the weakest areas, giving more weight to the ones worth more of the exam.
+      const focus = quiz.querySelector<HTMLElement>('[data-focus]');
+      if (!focus) return;
+      const weak = stats.filter((x) => x.pct < passMark * 100).sort((a, b) => (100 - b.pct) * b.weight - (100 - a.pct) * a.weight).slice(0, 2);
+      focus.hidden = false;
+      focus.innerHTML = weak.length
+        ? 'Revise next: ' + weak.map((w) => `<a href="${w.href}">${w.label}</a> (${w.pct}%)`).join(' and ') + '.' + (isExam ? ' <span class="focus__why">Picked by low score and by how much of the exam each domain covers.</span>' : '')
+        : 'Every area is at or above the practice target. Well done.';
     }
 
     function showResults(attempt: QuizAttempt) {
@@ -274,10 +397,23 @@ const minutes = Math.ceil(questions.reduce((m, q) => m + MINUTES_PER_K[q.k], 0))
       results.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    function submit(timeUp = false) {
+    const confirmBar = quiz.querySelector<HTMLElement>('[data-confirm]')!;
+    const confirmText = quiz.querySelector<HTMLElement>('[data-confirm-text]')!;
+    confirmBar.querySelector('[data-confirm-yes]')!.addEventListener('click', () => submit(false, true));
+    confirmBar.querySelector('[data-confirm-no]')!.addEventListener('click', () => { confirmBar.hidden = true; });
+    function submit(timeUp = false, force = false) {
       const unanswered = items.filter((i) => !isAnswered(i)).length;
-      if (!timeUp && unanswered && !confirm(`You have ${unanswered} unanswered question(s). Submit anyway?`)) return;
+      if (!timeUp && unanswered && !force) {
+        // Browser pop-ups (confirm) are blocked inside embedded previews, so ask on the page instead.
+        confirmText.textContent = `You have ${unanswered} unanswered question${unanswered === 1 ? '' : 's'}.`;
+        confirmBar.hidden = false;
+        confirmBar.querySelector<HTMLButtonElement>('[data-confirm-yes]')!.focus();
+        return;
+      }
+      confirmBar.hidden = true;
       window.clearInterval(tick);
+      running = false;
+      clearSaved();
       const answers = Object.fromEntries(items.map((i) => [i.dataset.question!, chosen(i)]));
       const score = mark(answers);
       const percent = Math.round((score / items.length) * 100);
@@ -288,7 +424,11 @@ const minutes = Math.ceil(questions.reduce((m, q) => m + MINUTES_PER_K[q.k], 0))
       };
       saveQuizAttempt(id, attempt);
       showResults(attempt);
-      if (timeUp) alert("Time's up - your exam has been marked.");
+      if (timeUp) {
+        const timeEl = quiz.querySelector<HTMLElement>('[data-time-taken]')!;
+        timeEl.hidden = false;
+        timeEl.textContent = "Time's up: your exam has been marked. " + timeEl.textContent;
+      }
     }
 
     form.addEventListener('submit', (e) => {
@@ -297,6 +437,7 @@ const minutes = Math.ceil(questions.reduce((m, q) => m + MINUTES_PER_K[q.k], 0))
     });
 
     quiz.querySelector('[data-retake]')!.addEventListener('click', () => {
+      clearSaved();
       quiz.classList.remove('is-marked', 'only-wrong');
       onlyWrong.checked = false;
       results.hidden = true;
@@ -358,7 +499,15 @@ const minutes = Math.ceil(questions.reduce((m, q) => m + MINUTES_PER_K[q.k], 0))
   .start label { display: grid; gap: 0.3rem; font-weight: 700; font-size: 0.9rem; }
   .start select { font: inherit; padding: 0.55rem 0.75rem; border-radius: 10px; border: 2px solid var(--line); }
   .score__time { margin: 0.25rem 0 0; color: #ccc; }
-  .breakdown { width: auto; min-width: 18rem; flex: 1; max-width: 26rem; font-size: 0.9rem; }
+  .breakdown-wrap { flex: 1; min-width: 18rem; max-width: 34rem; }
+  .breakdown { width: 100%; font-size: 0.9rem; }
+  .breakdown a { color: #fff; text-decoration: none; }
+  .breakdown a:hover { text-decoration: underline; }
+  .breakdown__w { display: block; font-size: 0.75rem; font-weight: 400; color: #bbb; }
+  .breakdown tr.is-weak [data-chapter-score] { color: var(--pink-soft); font-weight: 700; }
+  .focus { margin: 0.6rem 0 0; font-size: 0.95rem; }
+  .focus a { color: var(--pink-soft); font-weight: 700; }
+  .focus :global(.focus__why) { display: block; font-size: 0.8rem; color: #bbb; margin-top: 0.2rem; }
   .breakdown th, .breakdown td { border-color: #555; padding: 0.3rem 0.5rem; background: none; color: #fff; }
   .breakdown thead th { color: var(--pink-soft); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; }
   .mini { display: block; width: 8rem; height: 0.6rem; background: #555; border-radius: 99px; overflow: hidden; }
@@ -406,8 +555,18 @@ const minutes = Math.ceil(questions.reduce((m, q) => m + MINUTES_PER_K[q.k], 0))
   .is-paged:not(.is-marked) .pager-controls { display: inline-flex; }
   .pager-btn { width: 2.2rem; height: 2.2rem; border-radius: 50%; border: 2px solid #777; background: none; color: #fff; font-size: 1rem; cursor: pointer; }
   .pager-btn:hover { border-color: var(--pink); background: var(--pink); }
+  .confirm-bar { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; padding: 0.5rem 0.25rem 0.15rem; border-top: 1px solid rgb(255 255 255 / 0.2); }
+  .confirm-bar[hidden] { display: none; }
+  .resume { margin-top: 1rem; padding: 0.9rem 1rem; border-radius: var(--radius); background: var(--pink-tint); border: 2px solid var(--pink); }
+  .resume p { margin: 0 0 0.6rem; }
+  .resume__btns, .leave__btns { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
+  .leave { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 1rem; background: rgb(0 0 0 / 0.45); }
+  .leave[hidden] { display: none; }
+  .leave__box { max-width: 30rem; width: 100%; }
+  .leave__box p { margin: 0 0 0.75rem; }
+  .btn--small { padding: 0.4rem 0.9rem; font-size: 0.9rem; }
   .submit-bar .link-btn { background: none; border: 0; color: var(--pink-soft); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
-  .submit-bar { position: sticky; bottom: 1rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; background: var(--charcoal); color: #fff; padding: 0.75rem 0.75rem 0.75rem 1.5rem; border-radius: 999px; box-shadow: var(--shadow); margin-top: 1.25rem; }
+  .submit-bar { position: sticky; bottom: 1rem; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; background: var(--charcoal); color: #fff; padding: 0.75rem 0.75rem 0.75rem 1.5rem; border-radius: 999px; box-shadow: var(--shadow); margin-top: 1.25rem; }
   @media (max-width: 40rem) {
     .q { padding: 1.1rem; }
     .opt { grid-template-columns: auto 2rem 1fr; padding: 0.7rem 0.8rem; gap: 0.6rem; }

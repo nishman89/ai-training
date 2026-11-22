@@ -11,6 +11,7 @@ import { url } from '../lib/site';
 interface Props { chapter: number; }
 const { chapter } = Astro.props;
 const fit = DOMAIN_FIT[chapter];
+const head = fit?.choose?.head ?? ['If the task…', 'Use', 'Example'];
 
 // Section number -> { title, slug, chapter }, read from the chapter files (same slug rules as the headings).
 const dir = path.resolve('src/content/chapters');
@@ -48,6 +49,22 @@ const label = (sec: string) => (SECTIONS[sec] ? `${sec} ${SECTIONS[sec].title}` 
         ))}
       </ol>
     </div>
+    {fit.choose && (
+      <div class="fit__choose" data-testid="fit-choose">
+        <p class="fit__case-title"><span aria-hidden="true">🧭</span> {fit.choose.title}</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>{head[0]}</th><th>{head[1]}</th><th>{head[2]}</th></tr></thead>
+            <tbody>
+              {fit.choose.rows.map((r) => (
+                <tr><td data-label={head[0]}>{r.when}</td><td data-label={head[1]}><a href={href(r.sec)}><strong>{r.use}</strong></a> <span class="fit__sec">({r.sec})</span></td><td data-label={head[2]}>{r.example}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {fit.choose.rule && <p class="fit__choose-rule">{fit.choose.rule}</p>}
+      </div>
+    )}
     {code && code.java && code.python && code.typescript && (
       <details class="fold fit__code">
         <summary><span aria-hidden="true">&lt;/&gt;</span> Show the code: the whole domain in one example</summary>
@@ -78,6 +95,8 @@ const label = (sec: string) => (SECTIONS[sec] ? `${sec} ${SECTIONS[sec].title}` 
   .fit h2 { margin: 0.2rem 0 0.6rem; }
   .fit__story { font-size: 1.05rem; }
   .fit__steps { padding-left: 1.3rem; }
+  .fit__choose { margin: 1.2rem 0; }
+  .fit__choose-rule { margin: 0.5rem 0 0; font-weight: 600; }
   .fit__case { background: #f3f5ff; border: 1px solid #d9def7; border-radius: 12px; padding: 1rem 1.1rem; margin: 1.2rem 0; }
   .fit__case-title { font-weight: 800; margin: 0 0 0.3rem; color: #2b3a8c; }
   .fit__case-intro { margin: 0 0 0.5rem; font-style: italic; }

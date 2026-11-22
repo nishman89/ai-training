@@ -1,0 +1,2156 @@
+{
+ "set": "D",
+ "version": "0.1",
+ "questions": [
+  {
+   "id": "d-1",
+   "exam": "D",
+   "n": 1,
+   "chapter": 5,
+   "lo": "Cache a large static prefix",
+   "ref": "5.3 Prompt caching",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A benefits helpdesk sends the same 20,000-token block of HR policy text at the start of every request, followed by one short employee question. The finance team says the monthly bill is too high, and employees say they wait too long for the first words of each answer. What should the developers change first?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Split the policies across several parallel requests"
+    },
+    {
+     "key": "b",
+     "text": "Move the policy text into the user message instead"
+    },
+    {
+     "key": "c",
+     "text": "Cache the policy block so later requests reuse it"
+    },
+    {
+     "key": "d",
+     "text": "Send the questions through the Batch API at half price"
+    }
+   ],
+   "answer": [
+    "c"
+   ],
+   "explanation": {
+    "intro": "Two problems, one cause: 20,000 identical tokens are processed from scratch on every call.",
+    "options": {
+     "a": "Each parallel request still pays for its share, and you lose the single answer that draws on all the policies.",
+     "b": "Where the text sits doesn't change how many tokens are read or what they cost.",
+     "c": "Correct: a large prefix that never changes is exactly what caching is for. Cached reads cost about a tenth of normal input and the first words arrive sooner.",
+     "d": "Batch halves the price but can take hours, which is no use to an employee waiting for an answer."
+    }
+   },
+   "source": {
+    "title": "Prompt caching",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+   }
+  },
+  {
+   "id": "d-2",
+   "exam": "D",
+   "n": 2,
+   "chapter": 7,
+   "lo": "Limit the blast radius of injection",
+   "ref": "7.1 Injection and jailbreaks",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A browser assistant summarises web pages that users paste in, and it also has a tool that sends email. One page hides white-on-white text telling the assistant to forward the user's last ten emails to an outside address. What is the most effective protection against this kind of attack?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Fine-tune a model on examples of injection attempts"
+    },
+    {
+     "key": "b",
+     "text": "Tell Claude in the system prompt to ignore page instructions"
+    },
+    {
+     "key": "c",
+     "text": "Strip hidden and invisible text out of each fetched page"
+    },
+    {
+     "key": "d",
+     "text": "Keep browsing apart from sending, and approve every email"
+    }
+   ],
+   "answer": [
+    "d"
+   ],
+   "explanation": {
+    "intro": "Prompt injection can't be fully prevented, so the defence is to limit the damage it can do.",
+    "options": {
+     "a": "It may make the model harder to fool, but it guarantees nothing, and the email tool is still there to be misused.",
+     "b": "A useful extra layer, but it's a request, not a control. A well-written injection can still get through.",
+     "c": "It blocks one trick only. Visible text, images and encoded text can carry the same instruction.",
+     "d": "Correct: you can't stop every injection, so limit what an injected instruction can do. A browsing session can't send mail, and a person approves anything outgoing."
+    }
+   },
+   "source": {
+    "title": "Mitigate jailbreaks and prompt injections",
+    "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks"
+   }
+  },
+  {
+   "id": "d-3",
+   "exam": "D",
+   "n": 3,
+   "chapter": 8,
+   "lo": "Choose stdio or Streamable HTTP",
+   "ref": "8.4 The Model Context Protocol",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A developer is building one MCP server that must run two ways: on each person's laptop, launched by their desktop Claude app, and as a single shared service the whole team connects to over the network. Which transport plan fits best?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "WebSockets everywhere, since MCP needs a live socket"
+    },
+    {
+     "key": "b",
+     "text": "stdio on laptops, Streamable HTTP for the shared one"
+    },
+    {
+     "key": "c",
+     "text": "stdio everywhere, tunnelled to the shared one over SSH"
+    },
+    {
+     "key": "d",
+     "text": "Streamable HTTP on laptops too, with a local web server"
+    }
+   ],
+   "answer": [
+    "b"
+   ],
+   "explanation": {
+    "intro": "Match the transport to where the server runs: same machine or over the network.",
+    "options": {
+     "a": "MCP doesn't need WebSockets. Its standard transports are stdio and Streamable HTTP.",
+     "b": "Correct: stdio is the standard for a server the app launches on the same machine; Streamable HTTP is the standard for a remote server many people share.",
+     "c": "Fragile and hard to scale to a team; it isn't a supported way to run a remote server.",
+     "d": "It works, but it adds a web server where stdio would be simpler and is what's expected."
+    }
+   },
+   "source": {
+    "title": "Model Context Protocol: introduction",
+    "url": "https://modelcontextprotocol.io/docs/getting-started/intro"
+   }
+  },
+  {
+   "id": "d-4",
+   "exam": "D",
+   "n": 4,
+   "chapter": 3,
+   "lo": "Package know-how as a skill",
+   "ref": "3.4 Sharing a setup",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "An accounts team wants Claude to follow its 40-page house style guide whenever it drafts a financial report. Most requests have nothing to do with reports, so they don't want the guide in every conversation, and no outside system needs to be called. What's the best way to provide it?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Package the guide as a skill that loads only when needed"
+    },
+    {
+     "key": "b",
+     "text": "Paste the full style guide into the system prompt"
+    },
+    {
+     "key": "c",
+     "text": "Add a check_style tool for Claude to call before writing"
+    },
+    {
+     "key": "d",
+     "text": "Build an MCP server that returns the rules as results"
+    }
+   ],
+   "answer": [
+    "a"
+   ],
+   "explanation": {
+    "intro": "Know-how that's needed only sometimes belongs in a skill, which loads on demand.",
+    "options": {
+     "a": "Correct: only the skill's short description sits in context. The full guide loads when a report is being written.",
+     "b": "That puts 40 pages into every request, raising cost and delay: exactly what they want to avoid.",
+     "c": "Tools are for actions. A style guide is reference knowledge, and a tool adds round trips for no gain.",
+     "d": "MCP is for connecting to outside systems. This is static knowledge, so a server is needless infrastructure."
+    }
+   },
+   "source": {
+    "title": "Agent Skills",
+    "url": "https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview"
+   }
+  },
+  {
+   "id": "d-5",
+   "exam": "D",
+   "n": 5,
+   "chapter": 6,
+   "lo": "Send only relevant context",
+   "ref": "6.5 Managing the context window",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A document chatbot adds the ten best-matching documents, about 40,000 tokens, to every request \"to be safe\", although most answers need only one or two passages. Input costs are running at three times the budget. What should the team do?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Put the documents at the end, where tokens cost less"
+    },
+    {
+     "key": "b",
+     "text": "Tell the model in the prompt to skip irrelevant documents"
+    },
+    {
+     "key": "c",
+     "text": "Strip whitespace and common words from each document"
+    },
+    {
+     "key": "d",
+     "text": "Retrieve fewer, better chunks and send only the top few"
+    }
+   ],
+   "answer": [
+    "d"
+   ],
+   "explanation": {
+    "intro": "You pay for every token you send, so send less.",
+    "options": {
+     "a": "Tokens cost the same wherever they sit in the prompt. That discount doesn't exist.",
+     "b": "Instructions don't change billing: every token sent is charged whether it's used or not.",
+     "c": "Saves very little, and can make the passages harder to read and less accurate.",
+     "d": "Correct: every input token is billed, relevant or not. Sending only the best passages cuts cost and often improves answers, as there's less noise."
+    }
+   },
+   "source": {
+    "title": "Prompting best practices",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+   }
+  },
+  {
+   "id": "d-6",
+   "exam": "D",
+   "n": 6,
+   "chapter": 1,
+   "lo": "Choose the Agent SDK over a custom loop",
+   "ref": "1.4 Three ways to wire an agent",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A team wants a coding agent that can edit files, run shell commands, compact its context when it gets long, and ask permission before risky steps. Half the team wants to write its own loop on the raw API; the rest want the Claude Agent SDK. What's the strongest reason to pick the SDK?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "It makes the agent behave the same way on every run"
+    },
+    {
+     "key": "b",
+     "text": "It already includes those parts, saving months of work"
+    },
+    {
+     "key": "c",
+     "text": "It means the agent no longer needs permission controls"
+    },
+    {
+     "key": "d",
+     "text": "A hand-written loop can't call tools; only the SDK can"
+    }
+   ],
+   "answer": [
+    "b"
+   ],
+   "explanation": {
+    "intro": "Build vs buy: the SDK gives you a production harness instead of rebuilding one.",
+    "options": {
+     "a": "Agents stay non-deterministic whatever harness runs them; the SDK doesn't change how the model behaves.",
+     "b": "Correct: the SDK is the harness behind Claude Code, with tools, compaction, permissions and the loop built in and proven.",
+     "c": "The SDK provides permission controls. It doesn't make them unnecessary.",
+     "d": "Any loop on the Messages API can use tools. The SDK just saves you writing it."
+    }
+   },
+   "source": {
+    "title": "Agent SDK overview",
+    "url": "https://code.claude.com/docs/en/agent-sdk/overview"
+   }
+  },
+  {
+   "id": "d-7",
+   "exam": "D",
+   "n": 7,
+   "chapter": 1,
+   "lo": "Parallelise independent subtasks",
+   "ref": "1.2 The five workflow patterns",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A marketing team needs a product description translated into five languages, and each translation then checked against the brand style guide. No translation depends on another, and the team needs the results quickly. Which pattern fits best?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "An orchestrator agent that picks which language is next"
+    },
+    {
+     "key": "b",
+     "text": "Run the five translations at once, then check each"
+    },
+    {
+     "key": "c",
+     "text": "A single prompt asking for all five plus their reviews"
+    },
+    {
+     "key": "d",
+     "text": "A chain: translate one, check it, then start the next"
+    }
+   ],
+   "answer": [
+    "b"
+   ],
+   "explanation": {
+    "intro": "Independent tasks that must be fast: run them side by side.",
+    "options": {
+     "a": "A dynamic orchestrator adds cost and unpredictability when the five tasks are fixed and known.",
+     "b": "Correct: independent subtasks plus a need for speed is the classic case for parallelisation (sectioning).",
+     "c": "One huge reply lowers the quality of each language and can't run in parallel or isolate a failure.",
+     "d": "Running them one after another adds waiting time when nothing depends on the step before."
+    }
+   },
+   "source": {
+    "title": "Building effective agents",
+    "url": "https://www.anthropic.com/engineering/building-effective-agents"
+   }
+  },
+  {
+   "id": "d-8",
+   "exam": "D",
+   "n": 8,
+   "chapter": 2,
+   "lo": "Design decisions are costly to change later",
+   "ref": "2.5 The lifecycle and deployment",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A startup is planning a document-review feature built on Claude. The product manager wants to skip design reviews and \"iterate live with users\", arguing that prompts are easy to change. Which risk does this plan underestimate most?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Early choices on data and tool access are hard to undo"
+    },
+    {
+     "key": "b",
+     "text": "Prompt changes are slow because each needs a redeploy"
+    },
+    {
+     "key": "c",
+     "text": "Prompts written for Claude can't be used with other models"
+    },
+    {
+     "key": "d",
+     "text": "Design reviews mainly exist to keep token spending down"
+    }
+   ],
+   "answer": [
+    "a"
+   ],
+   "explanation": {
+    "intro": "Fast prompt changes don't remove the need to design data access and permissions up front.",
+    "options": {
+     "a": "Correct: prompts change easily, but what data the system can reach, which tools it can call and what it logs are hard to retrofit, and have security consequences.",
+     "b": "Prompts can often be changed without a redeploy, and this misses the real risk.",
+     "c": "Prompts usually adapt across models; lock-in isn't the main lifecycle risk here.",
+     "d": "Design reviews deal with architecture and risk, not mainly cost."
+    }
+   },
+   "source": {
+    "title": "Develop tests (evals)",
+    "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+   }
+  },
+  {
+   "id": "d-9",
+   "exam": "D",
+   "n": 9,
+   "chapter": 4,
+   "lo": "Measure with an eval set before changing prompts",
+   "ref": "4.1 Evals",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A support team's ticket classifier looks fine when people check a few tickets by hand, but nobody knows its real accuracy in production. The team wants to improve the prompt and be confident each version is better before release. What should they do first?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Set the temperature to 0 so outputs are easier to check"
+    },
+    {
+     "key": "b",
+     "text": "Add \"be accurate\" to the system prompt and spot-check again"
+    },
+    {
+     "key": "c",
+     "text": "Build a labelled eval set from real tickets and score each"
+    },
+    {
+     "key": "d",
+     "text": "Switch to a larger model, since errors mean too little capacity"
+    }
+   ],
+   "answer": [
+    "c"
+   ],
+   "explanation": {
+    "intro": "You can't improve what you don't measure: start with an eval set.",
+    "options": {
+     "a": "It wouldn't measure accuracy, and current models reject non-default temperature values anyway.",
+     "b": "A vague instruction plus a few hand checks still gives no real measurement.",
+     "c": "Correct: a labelled set from real traffic gives a baseline, so every prompt change becomes a number you can compare.",
+     "d": "It adds cost without finding or measuring the actual problem."
+    }
+   },
+   "source": {
+    "title": "Develop tests (evals)",
+    "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+   }
+  },
+  {
+   "id": "d-10",
+   "exam": "D",
+   "n": 10,
+   "chapter": 7,
+   "lo": "Keep keys and settings out of the code",
+   "ref": "7.3 Secrets",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A developer has hardcoded the Claude API key and the model name in the application's source code. The team now needs a different model in each environment and wants the key handled securely. What's the best change?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Keep the key in a private Git repository the team can see"
+    },
+    {
+     "key": "b",
+     "text": "Encrypt the key in the code and decrypt it when it runs"
+    },
+    {
+     "key": "c",
+     "text": "Put the key in a config file committed with the code"
+    },
+    {
+     "key": "d",
+     "text": "Load the key and model from env vars or a secrets manager"
+    }
+   ],
+   "answer": [
+    "d"
+   ],
+   "explanation": {
+    "intro": "Secrets and per-environment settings belong outside the code.",
+    "options": {
+     "a": "Everyone with access can read it, every clone copies it, and rotating it is harder.",
+     "b": "The decryption key has to live somewhere, so the problem just moves; it also doesn't solve per-environment settings.",
+     "c": "Committed files put the secret in version history: the same problem as before.",
+     "d": "Correct: configuration outside the code lets each environment set its own model, and the key never enters version control."
+    }
+   },
+   "source": {
+    "title": "Authentication",
+    "url": "https://platform.claude.com/docs/en/manage-claude/authentication"
+   }
+  },
+  {
+   "id": "d-11",
+   "exam": "D",
+   "n": 11,
+   "chapter": 6,
+   "lo": "Get consistent labels with an enum schema",
+   "ref": "6.3 Structured outputs",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A pipeline asks Claude to label each support email with one of six categories. The same kind of email sometimes comes back as \"Billing\", sometimes as \"billing issue\", which breaks the parser downstream. A colleague suggests setting the temperature to 0. What's the better fix?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Use structured outputs with an enum of the six labels"
+    },
+    {
+     "key": "b",
+     "text": "Set the temperature to 0 so every reply is identical"
+    },
+    {
+     "key": "c",
+     "text": "Retry each request until the label happens to parse"
+    },
+    {
+     "key": "d",
+     "text": "Move to a larger model, which words labels consistently"
+    }
+   ],
+   "answer": [
+    "a"
+   ],
+   "explanation": {
+    "intro": "Don't hope for consistency: constrain the output with a schema.",
+    "options": {
+     "a": "Correct: the reply must match the schema, so only the six allowed values can come back.",
+     "b": "It wouldn't guarantee identical output, and current models reject changing temperature.",
+     "c": "It wastes calls and time, and a run of bad replies can still get through.",
+     "d": "A bigger model still has no rule forcing it to use exactly the six labels."
+    }
+   },
+   "source": {
+    "title": "Structured outputs",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+   }
+  },
+  {
+   "id": "d-12",
+   "exam": "D",
+   "n": 12,
+   "chapter": 7,
+   "lo": "Enforce access in code, not the prompt",
+   "ref": "7.2 Enforce, don't ask",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A support bot looks up account details through a custom tool. In testing, carefully worded user messages made Claude call the tool with other customers' account IDs, and it returned their data. What's the right fix?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Tell Claude in the system prompt to use only the user's ID"
+    },
+    {
+     "key": "b",
+     "text": "Add examples to the prompt showing the correct account ID"
+    },
+    {
+     "key": "c",
+     "text": "Take the account ID from the login session in your code"
+    },
+    {
+     "key": "d",
+     "text": "Log every tool call and alert when an ID doesn't match"
+    }
+   ],
+   "answer": [
+    "c"
+   ],
+   "explanation": {
+    "intro": "Treat model output as untrusted input: authorisation lives in code.",
+    "options": {
+     "a": "A crafted message can override an instruction; it isn't an access control.",
+     "b": "Examples nudge behaviour; they don't stop the wrong ID from being used.",
+     "c": "Correct: access is enforced in your code. Claude can ask for data, but it can only ever reach the signed-in customer's records.",
+     "d": "By the time the alert fires, the other customer's data has already been shown."
+    }
+   },
+   "source": {
+    "title": "Mitigate jailbreaks and prompt injections",
+    "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks"
+   }
+  },
+  {
+   "id": "d-13",
+   "exam": "D",
+   "n": 13,
+   "chapter": 2,
+   "lo": "Stream long replies to the screen",
+   "ref": "2.3 Streaming",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A customer chatbot writes long, detailed answers. Users complain the app seems to freeze for several seconds before any words appear, and some refresh the page and lose the answer. What's the best fix?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Add \"respond quickly\" to the system prompt"
+    },
+    {
+     "key": "b",
+     "text": "Stream the reply and show the text as it arrives"
+    },
+    {
+     "key": "c",
+     "text": "Raise max_tokens so each reply finishes in one pass"
+    },
+    {
+     "key": "d",
+     "text": "Lower the temperature so the model generates faster"
+    }
+   ],
+   "answer": [
+    "b"
+   ],
+   "explanation": {
+    "intro": "Long waits before the first word are fixed by streaming.",
+    "options": {
+     "a": "It might shorten answers, but the screen still stays blank until the reply is complete.",
+     "b": "Correct: the first words appear almost at once instead of after the whole answer is finished.",
+     "c": "max_tokens only caps length; raising it doesn't make the first words appear any sooner.",
+     "d": "Temperature affects randomness, not speed, and current models reject changing it."
+    }
+   },
+   "source": {
+    "title": "Streaming messages",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/streaming"
+   }
+  },
+  {
+   "id": "d-14",
+   "exam": "D",
+   "n": 14,
+   "chapter": 4,
+   "lo": "Trace every step of an agent",
+   "ref": "4.4 Tests, traces and debugging",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A production agent uses several tools and now and then gives a wrong answer. Its logs record only the final reply to the user. The developer needs to find out where the failures start. What should they do first?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Switch to a larger model, as the failures are only occasional"
+    },
+    {
+     "key": "b",
+     "text": "Add automatic retries so failed requests run again"
+    },
+    {
+     "key": "c",
+     "text": "Rewrite the system prompt with stricter rules for tools"
+    },
+    {
+     "key": "d",
+     "text": "Log a full trace: every tool call, its result and each step"
+    }
+   ],
+   "answer": [
+    "d"
+   ],
+   "explanation": {
+    "intro": "Before fixing an agent, make its steps visible.",
+    "options": {
+     "a": "Changing the model without a diagnosis is guesswork; the fault may be in a tool.",
+     "b": "Retries hide the symptom and add cost without showing the cause.",
+     "c": "Rewriting blind may not touch the step that is actually failing.",
+     "d": "Correct: you need to see the steps in between to tell a bad tool choice from a bad tool result or bad reasoning."
+    }
+   },
+   "source": {
+    "title": "Develop tests (evals)",
+    "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+   }
+  },
+  {
+   "id": "d-15",
+   "exam": "D",
+   "n": 15,
+   "chapter": 7,
+   "lo": "Approve destructive actions",
+   "ref": "7.2 Enforce, don't ask",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A team's agent can delete customer records through a tool. They're worried about accidental deletions in production, but still want the agent to be useful for everyday lookups. What's the best approach?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Require approval for deletions; let read-only calls run"
+    },
+    {
+     "key": "b",
+     "text": "Set the temperature to 0 so the agent acts the same way"
+    },
+    {
+     "key": "c",
+     "text": "Remove the delete tool and have Claude write SQL for staff"
+    },
+    {
+     "key": "d",
+     "text": "Add \"be careful with deletions\" to every tool description"
+    }
+   ],
+   "answer": [
+    "a"
+   ],
+   "explanation": {
+    "intro": "Put a human checkpoint on irreversible actions, and only there.",
+    "options": {
+     "a": "Correct: everyday reads stay automatic, and a person checks the one kind of action that can't be undone.",
+     "b": "Consistent isn't the same as correct, and current models reject non-default temperature.",
+     "c": "It loses most of the agent's value. It's an over-correction.",
+     "d": "A warning in a description is a request, not a control, for an action that can't be undone."
+    }
+   },
+   "source": {
+    "title": "Building effective agents",
+    "url": "https://www.anthropic.com/engineering/building-effective-agents"
+   }
+  },
+  {
+   "id": "d-16",
+   "exam": "D",
+   "n": 16,
+   "chapter": 1,
+   "lo": "Use a fixed workflow for a fixed process",
+   "ref": "1.1 Workflow or agent?",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A finance team must pull fields out of invoice PDFs, check the totals against a database, then write a short summary. The steps are always the same and always in the same order, and cost and response time must be predictable. Which design is best?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "One large prompt that does all three tasks at once"
+    },
+    {
+     "key": "b",
+     "text": "An autonomous agent with tools that chooses each step"
+    },
+    {
+     "key": "c",
+     "text": "A fixed chain: extract, then check, then summarise"
+    },
+    {
+     "key": "d",
+     "text": "An orchestrator that starts a subagent for each invoice"
+    }
+   ],
+   "answer": [
+    "c"
+   ],
+   "explanation": {
+    "intro": "When the path is known in advance, write it as a workflow.",
+    "options": {
+     "a": "Accuracy drops on multi-step work, and you can't check anything between steps.",
+     "b": "Autonomy adds cost and unpredictability when there's no decision to make.",
+     "c": "Correct: fixed, ordered steps are a prompt-chaining workflow, with code checks between steps; cheaper, predictable and easier to debug.",
+     "d": "Delegating dynamically adds complexity and cost; nothing here needs it."
+    }
+   },
+   "source": {
+    "title": "Building effective agents",
+    "url": "https://www.anthropic.com/engineering/building-effective-agents"
+   }
+  },
+  {
+   "id": "d-17",
+   "exam": "D",
+   "n": 17,
+   "chapter": 5,
+   "lo": "Test a smaller model against the bar",
+   "ref": "5.1 Choosing a model",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A team sorts 500,000 support tickets a day into 12 categories. Their prototype on Opus works well, but costs are unsustainable and replies are slow. Accuracy on their labelled test set must stay above 95%. What's the best first step?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Keep Opus and shorten the system prompt to save tokens"
+    },
+    {
+     "key": "b",
+     "text": "Test Haiku on the labelled set; switch if it reaches 95%"
+    },
+    {
+     "key": "c",
+     "text": "Split each ticket across several parallel Opus calls"
+    },
+    {
+     "key": "d",
+     "text": "Move to Haiku straight away, as classification is easy"
+    }
+   ],
+   "answer": [
+    "b"
+   ],
+   "explanation": {
+    "intro": "Change model on evidence: test the cheaper model against your bar first.",
+    "options": {
+     "a": "Saves a little, but Opus's per-token price is still the main cost.",
+     "b": "Correct: simple, high-volume classification is where a small model shines, and the test set proves it meets the bar before you switch.",
+     "c": "Parallel calls multiply cost and don't make a single short call faster.",
+     "d": "Switching without measuring risks a silent drop below 95% on a system that works."
+    }
+   },
+   "source": {
+    "title": "Choosing a model",
+    "url": "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model"
+   }
+  },
+  {
+   "id": "d-18",
+   "exam": "D",
+   "n": 18,
+   "chapter": 2,
+   "lo": "Split settings by how often they change",
+   "ref": "2.5 The lifecycle and deployment",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A team's Python service hardcodes the model ID, the system prompt and other settings. The product team wants to adjust the prompt every week without a redeploy, but the model ID must stay tied to tested releases. What's the best way to split the settings?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Put every setting in a database the product team can edit"
+    },
+    {
+     "key": "b",
+     "text": "Put every value in a JSON file bundled with each release"
+    },
+    {
+     "key": "c",
+     "text": "Make everything an environment variable anyone can change"
+    },
+    {
+     "key": "d",
+     "text": "Model ID in versioned config; prompt in a managed store"
+    }
+   ],
+   "answer": [
+    "d"
+   ],
+   "explanation": {
+    "intro": "Split configuration by how often each part changes and how risky a change is.",
+    "options": {
+     "a": "Moving the model ID out of version control makes releases impossible to reproduce.",
+     "b": "A bundled file still needs a redeploy for every prompt change.",
+     "c": "Untracked changes to the model ID skip testing and release control.",
+     "d": "Correct: the model ID changes tested behaviour, so it goes with releases; the prompt changes weekly, so it lives in a store with its own history."
+    }
+   },
+   "source": {
+    "title": "Develop tests (evals)",
+    "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+   }
+  },
+  {
+   "id": "d-19",
+   "exam": "D",
+   "n": 19,
+   "chapter": 8,
+   "lo": "Pick a custom tool when nothing is shared",
+   "ref": "8.5 MCP scope, permissions and auth",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "One application's agent needs to work out shipping costs with a private formula that must give exact, repeatable results. Speed matters, and no other application will ever use this logic. What's the best approach?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "A custom tool in the request that runs the formula in code"
+    },
+    {
+     "key": "b",
+     "text": "An MCP server, so later agents can discover the logic"
+    },
+    {
+     "key": "c",
+     "text": "The built-in code execution tool, writing the formula each time"
+    },
+    {
+     "key": "d",
+     "text": "A skill that explains the formula for Claude to work out"
+    }
+   ],
+   "answer": [
+    "a"
+   ],
+   "explanation": {
+    "intro": "Single app, exact logic: a custom tool that calls your code.",
+    "options": {
+     "a": "Correct: running your own code is exact and fast. With only one app using it, an MCP server would be overhead.",
+     "b": "MCP adds a server and protocol to run, with no reuse to justify it.",
+     "c": "Writing the code afresh every time is slower and may not be identical each run.",
+     "d": "Claude doing the arithmetic in its head risks mistakes; exact results need real code."
+    }
+   },
+   "source": {
+    "title": "Define tools",
+    "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+   }
+  },
+  {
+   "id": "d-20",
+   "exam": "D",
+   "n": 20,
+   "chapter": 2,
+   "lo": "Use the official SDK",
+   "ref": "2.1 The Messages API",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A team calls the Messages API with hand-written HTTP requests. They now need streaming, retries, timeouts and typed request and response objects, and are debating whether to build all of that themselves. What's the best approach?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Write an in-house client library so it's fully customisable"
+    },
+    {
+     "key": "b",
+     "text": "Stay on raw HTTP and parse the streamed events by hand"
+    },
+    {
+     "key": "c",
+     "text": "Adopt the official SDK, which already provides all of these"
+    },
+    {
+     "key": "d",
+     "text": "Move to WebSockets, as streaming needs a two-way connection"
+    }
+   ],
+   "answer": [
+    "c"
+   ],
+   "explanation": {
+    "intro": "Don't rebuild what the SDK already does well.",
+    "options": {
+     "a": "A permanent maintenance burden that adds nothing the SDK doesn't already do.",
+     "b": "Parsing the stream yourself is error-prone (split events, reconnects) and repeats solved work.",
+     "c": "Correct: the SDK wraps the API with streaming, automatic retries, timeouts and types, all tested and maintained.",
+     "d": "Streaming uses server-sent events over ordinary HTTP; no WebSocket is needed."
+    }
+   },
+   "source": {
+    "title": "Streaming messages",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/streaming"
+   }
+  },
+  {
+   "id": "d-21",
+   "exam": "D",
+   "n": 21,
+   "chapter": 7,
+   "lo": "Keep credentials out of the model's context",
+   "ref": "7.3 Secrets",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A developer's agent calls an internal billing API through a tool, and the tool needs an API token. Where should the token live so the tool works but Claude can never reveal the credential?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "In the tool description, so Claude passes it each call"
+    },
+    {
+     "key": "b",
+     "text": "In your tool handler, loaded from a secrets manager"
+    },
+    {
+     "key": "c",
+     "text": "In the system prompt, with an instruction never to reveal it"
+    },
+    {
+     "key": "d",
+     "text": "Encrypted in the user message, for Claude to decrypt"
+    }
+   ],
+   "answer": [
+    "b"
+   ],
+   "explanation": {
+    "intro": "Credentials never enter the model's context.",
+    "options": {
+     "a": "Descriptions and inputs are part of Claude's context, so the token would appear in requests and logs.",
+     "b": "Correct: the tool runs in your code, so the token is attached there. Claude only ever sees the tool's inputs and outputs.",
+     "c": "Anything in context can leak or be extracted; an instruction isn't protection.",
+     "d": "Claude can't keep a decryption key secret, and the plain token would still reach its context."
+    }
+   },
+   "source": {
+    "title": "Authentication",
+    "url": "https://platform.claude.com/docs/en/manage-claude/authentication"
+   }
+  },
+  {
+   "id": "d-22",
+   "exam": "D",
+   "n": 22,
+   "chapter": 8,
+   "lo": "Write a full tool description",
+   "ref": "8.2 Designing tools Claude picks correctly",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A search_orders tool worked in testing, but in production Claude often sends badly formatted date filters, or doesn't use the tool when it should. The whole description reads \"Searches orders.\" What's the best fix?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Switch to a larger model that's better at calling tools"
+    },
+    {
+     "key": "b",
+     "text": "Lower the temperature so tool inputs come out more consistent"
+    },
+    {
+     "key": "c",
+     "text": "Tell Claude to \"always use search_orders\" for order questions"
+    },
+    {
+     "key": "d",
+     "text": "Describe its purpose, when to use it, input formats and an example"
+    }
+   ],
+   "answer": [
+    "d"
+   ],
+   "explanation": {
+    "intro": "A tool is only as good as its description.",
+    "options": {
+     "a": "Costly, and even a strong model struggles with a three-word description.",
+     "b": "It doesn't tell Claude the date format or when to use the tool, and current models reject changing temperature.",
+     "c": "A blanket rule makes Claude over-use it and doesn't fix the date format.",
+     "d": "Correct: the description is how Claude decides when and how to call a tool, so a full one fixes both problems."
+    }
+   },
+   "source": {
+    "title": "Define tools",
+    "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+   }
+  },
+  {
+   "id": "d-23",
+   "exam": "D",
+   "n": 23,
+   "chapter": 6,
+   "lo": "Use structured outputs, not prefill",
+   "ref": "6.3 Structured outputs",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A pipeline parses JSON from Claude, but some replies begin with \"Here's the JSON:\" or come wrapped in markdown code fences, which breaks the parser. An older tutorial recommends prefilling the reply with \"{\". What's the best fix on current models?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Use structured outputs with a JSON schema for the reply"
+    },
+    {
+     "key": "b",
+     "text": "Prefill the assistant turn with \"{\", as the tutorial says"
+    },
+    {
+     "key": "c",
+     "text": "Retry the request until the reply parses without errors"
+    },
+    {
+     "key": "d",
+     "text": "Ask politely in the prompt for no text before the JSON"
+    }
+   ],
+   "answer": [
+    "a"
+   ],
+   "explanation": {
+    "intro": "Older advice says prefill. On current models, use structured outputs.",
+    "options": {
+     "a": "Correct: the reply is guaranteed to match the schema, with no preamble or fences.",
+     "b": "Current models reject a prefilled assistant turn with a 400 error; the conversation must end with a user message.",
+     "c": "Adds cost and delay without stopping the cause.",
+     "d": "Helps a little, but a request can't guarantee the format."
+    }
+   },
+   "source": {
+    "title": "Structured outputs",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+   }
+  },
+  {
+   "id": "d-24",
+   "exam": "D",
+   "n": 24,
+   "chapter": 1,
+   "lo": "Cap iterations and show past calls",
+   "ref": "1.3 The agent loop",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A research agent uses web search and file tools. Now and then it gets stuck repeating the same searches over and over, burning tokens until someone notices. What's the best fix?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Tell the agent in the system prompt not to repeat searches"
+    },
+    {
+     "key": "b",
+     "text": "Raise the temperature so it tries more varied searches"
+    },
+    {
+     "key": "c",
+     "text": "Set a maximum number of turns and keep past calls in view"
+    },
+    {
+     "key": "d",
+     "text": "Switch to a larger model that judges better when to stop"
+    }
+   ],
+   "answer": [
+    "c"
+   ],
+   "explanation": {
+    "intro": "Every agent loop needs an exit condition in code.",
+    "options": {
+     "a": "It helps, but it's no guarantee; the loop can still happen.",
+     "b": "Variety doesn't make a loop end, and current models reject changing temperature.",
+     "c": "Correct: a hard cap bounds the cost, and seeing earlier calls helps the model notice it's repeating itself.",
+     "d": "A bigger model loops less, not never, and each turn costs more."
+    }
+   },
+   "source": {
+    "title": "Building effective agents",
+    "url": "https://www.anthropic.com/engineering/building-effective-agents"
+   }
+  },
+  {
+   "id": "d-25",
+   "exam": "D",
+   "n": 25,
+   "chapter": 5,
+   "lo": "Evaluate before upgrading a model",
+   "ref": "5.1 Choosing a model",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A team moved its document-summary pipeline to a newer model version. Quality dropped for some kinds of document, but they have nothing to compare the old and new behaviour against. What should they have done before upgrading?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Tell the new model in the prompt to behave like the old one"
+    },
+    {
+     "key": "b",
+     "text": "Run both models on an eval set of typical documents first"
+    },
+    {
+     "key": "c",
+     "text": "Lower max_tokens to keep the new model's output in check"
+    },
+    {
+     "key": "d",
+     "text": "Pin the old model ID for good so nothing ever changes"
+    }
+   ],
+   "answer": [
+    "b"
+   ],
+   "explanation": {
+    "intro": "Upgrade on evidence: run the eval set on old and new first.",
+    "options": {
+     "a": "A prompt can't reliably copy another model's behaviour, and you still couldn't measure it.",
+     "b": "Correct: comparing old and new on representative documents catches regressions before cutover and makes rollback a decision, not a guess.",
+     "c": "max_tokens limits length, not quality; it neither finds nor prevents regressions.",
+     "d": "It only postpones the problem: old models retire, and you miss improvements."
+    }
+   },
+   "source": {
+    "title": "Develop tests (evals)",
+    "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+   }
+  },
+  {
+   "id": "d-26",
+   "exam": "D",
+   "n": 26,
+   "chapter": 5,
+   "lo": "Use adaptive thinking",
+   "ref": "5.2 Reasoning and effort",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "An API workload mixes simple lookups with occasional hard, multi-step problems. It uses a fixed thinking budget, budget_tokens, so simple requests waste tokens and hard ones sometimes don't think enough. What's the best change?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Turn thinking off and add worked examples for hard requests"
+    },
+    {
+     "key": "b",
+     "text": "Send everything to the largest model, with thinking off"
+    },
+    {
+     "key": "c",
+     "text": "Raise budget_tokens to the maximum for the hard cases"
+    },
+    {
+     "key": "d",
+     "text": "Use adaptive thinking and set the overall level with effort"
+    }
+   ],
+   "answer": [
+    "d"
+   ],
+   "explanation": {
+    "intro": "One fixed budget fits no one; adaptive thinking fits each request.",
+    "options": {
+     "a": "Examples show the format, not the reasoning; the hard cases would likely get worse.",
+     "b": "A bigger model doesn't fix the mismatch per request, and raises the cost of every call.",
+     "c": "The easy requests then cost even more; a fixed budget can't adapt per request.",
+     "d": "Correct: Claude decides per request how much to think, and effort is the general dial for depth and spend."
+    }
+   },
+   "source": {
+    "title": "Effort",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/effort"
+   }
+  },
+  {
+   "id": "d-27",
+   "exam": "D",
+   "n": 27,
+   "chapter": 8,
+   "lo": "Return clear errors so Claude can fix its call",
+   "ref": "8.1 How tool use works",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "An MCP server gives Claude a database query tool. Claude often sends SQL with mistakes in it, and the server returns raw stack traces that Claude can't make sense of. What's the best way to make the tool more reliable?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Return a clear, structured error saying what was wrong"
+    },
+    {
+     "key": "b",
+     "text": "Have the server retry failed queries automatically"
+    },
+    {
+     "key": "c",
+     "text": "Catch every error and return an empty result instead"
+    },
+    {
+     "key": "d",
+     "text": "Make the tool read-only so that errors can't happen"
+    }
+   ],
+   "answer": [
+    "a"
+   ],
+   "explanation": {
+    "intro": "Errors are information: give Claude enough to fix its call.",
+    "options": {
+     "a": "Correct: the result goes back into Claude's context, so a clear message lets it correct the query on its next try.",
+     "b": "The same broken query fails the same way; it's Claude that needs to fix it.",
+     "c": "A silent empty result hides the failure, and Claude may draw the wrong conclusion.",
+     "d": "Read-only access stops writes, not syntax errors; it solves a different problem."
+    }
+   },
+   "source": {
+    "title": "How tool use works",
+    "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/how-tool-use-works"
+   }
+  },
+  {
+   "id": "d-28",
+   "exam": "D",
+   "n": 28,
+   "chapter": 8,
+   "lo": "Least privilege for database tools",
+   "ref": "8.5 MCP scope, permissions and auth",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "Analysts use an agent with an MCP server that queries the production database. Sometimes they ask it to \"tidy up\" or \"fix\" records. What's the most reliable way to prevent changes to the data?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Tell Claude in the system prompt never to run UPDATE or DELETE"
+    },
+    {
+     "key": "b",
+     "text": "Rely on Claude's safety training to refuse risky operations"
+    },
+    {
+     "key": "c",
+     "text": "Offer only read-only tools, on a database role with no writes"
+    },
+    {
+     "key": "d",
+     "text": "Log all queries and review them each day for changes"
+    }
+   ],
+   "answer": [
+    "c"
+   ],
+   "explanation": {
+    "intro": "Least privilege, enforced outside the model.",
+    "options": {
+     "a": "A clever request or an injection can get around an instruction.",
+     "b": "Safety training targets harmful content, not your business rules about data.",
+     "c": "Correct: with read-only tools and a role that can't write, changes are impossible whatever is asked.",
+     "d": "Reviewing logs finds the damage after it's happened."
+    }
+   },
+   "source": {
+    "title": "Mitigate jailbreaks and prompt injections",
+    "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks"
+   }
+  },
+  {
+   "id": "d-29",
+   "exam": "D",
+   "n": 29,
+   "chapter": 2,
+   "lo": "Match the solution to the requirement",
+   "ref": "2.5 The lifecycle and deployment",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A product manager asks for \"an agent that automates invoice processing\". Interviews show 90% of invoices follow one template, and the odd ones need a person to check them. How should this be turned into requirements?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "A fully autonomous agent with tools for every invoice type"
+    },
+    {
+     "key": "b",
+     "text": "A fixed extraction workflow, routing unsure cases to people"
+    },
+    {
+     "key": "c",
+     "text": "A general chat tool so staff can process invoices with Claude"
+    },
+    {
+     "key": "d",
+     "text": "Make the PM list every unusual case before any work starts"
+    }
+   ],
+   "answer": [
+    "b"
+   ],
+   "explanation": {
+    "intro": "Match the solution to the real problem, not the request's wording.",
+    "options": {
+     "a": "Full autonomy over every odd case adds risk and complexity the data doesn't call for.",
+     "b": "Correct: a workflow handles the common case reliably, and low-confidence invoices go to a human.",
+     "c": "Ignores the goal of automating the 90% that are routine.",
+     "d": "Listing everything up front is unrealistic; a review route handles cases as they appear."
+    }
+   },
+   "source": {
+    "title": "Building effective agents",
+    "url": "https://www.anthropic.com/engineering/building-effective-agents"
+   }
+  },
+  {
+   "id": "d-30",
+   "exam": "D",
+   "n": 30,
+   "chapter": 1,
+   "lo": "Isolate exploration in subagents",
+   "ref": "1.5 Memory and long-horizon work",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "An analysis task needs deep exploration of five independent parts of a large codebase. A single agent doing it all fills its context with file contents from every part, and its final report gets worse. What's the best restructuring?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Tell the single agent to read fewer files from each part"
+    },
+    {
+     "key": "b",
+     "text": "Use a model with a bigger context window and keep one agent"
+    },
+    {
+     "key": "c",
+     "text": "Run five passes in a row, one per part, in the same chat"
+    },
+    {
+     "key": "d",
+     "text": "Give each part to a subagent that returns a short summary"
+    }
+   ],
+   "answer": [
+    "d"
+   ],
+   "explanation": {
+    "intro": "Subagents keep bulky exploration out of the main context.",
+    "options": {
+     "a": "Gives up depth to work around a design problem.",
+     "b": "Long contexts still degrade and cost more; it delays the problem.",
+     "c": "The same context still fills up with all five parts' files.",
+     "d": "Correct: each subagent explores in its own context and hands back only findings, keeping the lead agent's context clear."
+    }
+   },
+   "source": {
+    "title": "How we built our multi-agent research system",
+    "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+   }
+  },
+  {
+   "id": "d-31",
+   "exam": "D",
+   "n": 31,
+   "chapter": 5,
+   "lo": "Use the Batch API for overnight work",
+   "ref": "5.4 Batch processing",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A team must classify 80,000 support tickets every night. The results are needed by the morning, nobody waits on individual replies, and API cost is a concern. What's the best approach?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Submit a batch early, allowing for its 24-hour limit"
+    },
+    {
+     "key": "b",
+     "text": "Send ordinary requests in parallel, just under the rate limit"
+    },
+    {
+     "key": "c",
+     "text": "Put all the tickets into one request as a single prompt"
+    },
+    {
+     "key": "d",
+     "text": "Stream each request to lower its cost and avoid timeouts"
+    }
+   ],
+   "answer": [
+    "a"
+   ],
+   "explanation": {
+    "intro": "No one waiting and cost matters: batch it.",
+    "options": {
+     "a": "Correct: batches cost half as much and suit work nobody waits for. Most finish within an hour, but plan for the 24-hour limit.",
+     "b": "It works, but pays full price and needs throttling code.",
+     "c": "Risks the context limit, lowers accuracy per ticket, and one failure loses everything.",
+     "d": "Streaming helps long replies arrive; it doesn't change the price."
+    }
+   },
+   "source": {
+    "title": "Batch processing",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+   }
+  },
+  {
+   "id": "d-32",
+   "exam": "D",
+   "n": 32,
+   "chapter": 7,
+   "lo": "Rotate a committed key",
+   "ref": "7.3 Secrets",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A CI pipeline runs Claude Code to review pull requests, and the Anthropic API key has been committed to the repository in a .env file. A developer has to clean this up. Which plan is best?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Encrypt the .env file and commit the encrypted version"
+    },
+    {
+     "key": "b",
+     "text": "Delete the file, add it to .gitignore and merge the fix"
+    },
+    {
+     "key": "c",
+     "text": "Rotate the key, move the new one to CI secrets, purge history"
+    },
+    {
+     "key": "d",
+     "text": "Move the key to a private repo variable and close the issue"
+    }
+   ],
+   "answer": [
+    "c"
+   ],
+   "explanation": {
+    "intro": "A leaked key is a compromised key: rotate first.",
+    "options": {
+     "a": "The old key is still valid and still in the history, and now there's a passphrase to manage.",
+     "b": "The key still works and can still be read from the git history.",
+     "c": "Correct: a committed key must be treated as stolen, so replace it first, store the new one safely, then clean up the history.",
+     "d": "The old key is still live and still visible; nothing has been fixed."
+    }
+   },
+   "source": {
+    "title": "Authentication",
+    "url": "https://platform.claude.com/docs/en/manage-claude/authentication"
+   }
+  },
+  {
+   "id": "d-33",
+   "exam": "D",
+   "n": 33,
+   "chapter": 5,
+   "lo": "Route by difficulty",
+   "ref": "5.1 Choosing a model",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A triage pipeline sorts 500,000 short tickets a day. Cost and speed matter most, and a small model already routes them accurately in testing. Now and then a complex escalation needs deep, multi-step reasoning. What's the best model strategy?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Sonnet for everything, with higher temperature for hard ones"
+    },
+    {
+     "key": "b",
+     "text": "Haiku for routing, passing hard escalations to a larger model"
+    },
+    {
+     "key": "c",
+     "text": "Haiku for everything, with reasoning tips in the system prompt"
+    },
+    {
+     "key": "d",
+     "text": "Opus for everything, so every ticket gets the best quality"
+    }
+   ],
+   "answer": [
+    "b"
+   ],
+   "explanation": {
+    "intro": "Match the model to the job, ticket by ticket.",
+    "options": {
+     "a": "Temperature controls randomness, not depth, and current models reject changing it.",
+     "b": "Correct: the small model handles the volume cheaply, and the rare hard case goes to a model that can reason through it.",
+     "c": "Instructions can't give a small model the depth the rare hard cases need.",
+     "d": "Overspends hugely on simple tickets and adds delay for no gain."
+    }
+   },
+   "source": {
+    "title": "Choosing a model",
+    "url": "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model"
+   }
+  },
+  {
+   "id": "d-34",
+   "exam": "D",
+   "n": 34,
+   "chapter": 5,
+   "lo": "Model the cost of caching",
+   "ref": "5.3 Prompt caching",
+   "k": "Recall",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "Before launch, a team is forecasting the monthly cost of a chatbot. Every request starts with the same 5,000-token prefix, and a typical conversation is ten turns within a few minutes. Which cost model is most accurate?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Cached tokens cost half the normal rate on every turn"
+    },
+    {
+     "key": "b",
+     "text": "The prefix is free after the first request, so count output only"
+    },
+    {
+     "key": "c",
+     "text": "Charge every token at the normal rate; caching only saves time"
+    },
+    {
+     "key": "d",
+     "text": "Turn one pays a write premium; later turns pay about 10%"
+    }
+   ],
+   "answer": [
+    "d"
+   ],
+   "explanation": {
+    "intro": "Cache pricing: pay a little more once, then much less on every hit.",
+    "options": {
+     "a": "It misses the first-turn write premium, and reads cost about 10%, not 50%.",
+     "b": "Cache reads are cheaper, not free, so this understates the bill.",
+     "c": "Caching cuts input cost as well as delay, so this overstates the bill.",
+     "d": "Correct: a 5-minute cache write costs 1.25× normal input, and reads within the time limit cost about 0.1×, each read resetting the timer."
+    }
+   },
+   "source": {
+    "title": "Pricing",
+    "url": "https://platform.claude.com/docs/en/about-claude/pricing"
+   }
+  },
+  {
+   "id": "d-35",
+   "exam": "D",
+   "n": 35,
+   "chapter": 1,
+   "lo": "Use a graph framework for fixed, auditable flows",
+   "ref": "1.4 Three ways to wire an agent",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A team wants an agent with a fixed, auditable flow: classify the ticket, branch to one of three handlers, then pause for a person to approve any refund. They're choosing between a hand-written tool-use loop and a graph framework such as LangGraph. What's the best reasoning?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "A graph: nodes, conditional edges and interrupts fix the flow"
+    },
+    {
+     "key": "b",
+     "text": "A plain loop, since the model will follow branching rules"
+    },
+    {
+     "key": "c",
+     "text": "A plain loop at temperature 0, so it always branches correctly"
+    },
+    {
+     "key": "d",
+     "text": "A graph framework only if the task needs more than ten tools"
+    }
+   ],
+   "answer": [
+    "a"
+   ],
+   "explanation": {
+    "intro": "Fixed flow plus approvals: put the control flow in code.",
+    "options": {
+     "a": "Correct: the route and the approval pause are written into the graph in code, so the model can't skip them.",
+     "b": "Branching left to instructions is probabilistic; approval steps need to be enforced in code.",
+     "c": "Temperature 0 doesn't guarantee correct routing or enforce the approval, and current models reject it.",
+     "d": "The number of tools isn't what decides it; control flow and checkpoints are."
+    }
+   },
+   "source": {
+    "title": "LangGraph",
+    "url": "https://www.langchain.com/langgraph"
+   }
+  },
+  {
+   "id": "d-36",
+   "exam": "D",
+   "n": 36,
+   "chapter": 6,
+   "lo": "Show edge cases with examples",
+   "ref": "6.2 The techniques",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A review classifier keeps getting sarcastic and mixed-tone reviews wrong. The prompt already defines each label carefully, and adding more definitions hasn't helped. What's the best next step?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Switch to a larger model, since nuance needs more capability"
+    },
+    {
+     "key": "b",
+     "text": "Raise max_tokens so Claude has room to weigh each label"
+    },
+    {
+     "key": "c",
+     "text": "Add examples of sarcastic and mixed reviews with their labels"
+    },
+    {
+     "key": "d",
+     "text": "Tell Claude to \"read carefully and think hard\" first"
+    }
+   ],
+   "answer": [
+    "c"
+   ],
+   "explanation": {
+    "intro": "When definitions don't land, show examples.",
+    "options": {
+     "a": "Adds cost without teaching this task's particular edge cases.",
+     "b": "The labels are short; the length of the reply isn't the problem.",
+     "c": "Correct: when descriptions fail on edge cases, examples show the boundary directly.",
+     "d": "Vague encouragement rarely fixes a consistent pattern of errors."
+    }
+   },
+   "source": {
+    "title": "Prompting best practices",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+   }
+  },
+  {
+   "id": "d-37",
+   "exam": "D",
+   "n": 37,
+   "chapter": 6,
+   "lo": "Put stable rules in the system prompt",
+   "ref": "6.2 The techniques",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A developer puts everything into one user message: the assistant's role, the tone rules and each user's question. Many users share the same persona. What's the best restructuring?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Spread the rules over made-up user and assistant turns"
+    },
+    {
+     "key": "b",
+     "text": "Role and rules in the system prompt; questions in user turns"
+    },
+    {
+     "key": "c",
+     "text": "Move everything, including the question, into the system prompt"
+    },
+    {
+     "key": "d",
+     "text": "Keep it all in the user message, wrapped in XML tags"
+    }
+   ],
+   "answer": [
+    "b"
+   ],
+   "explanation": {
+    "intro": "Stable instructions in the system prompt; what changes in the messages.",
+    "options": {
+     "a": "Invented turns add confusion and tokens without improving how well rules are followed.",
+     "b": "Correct: the system prompt holds stable instructions that apply to every request; user messages carry what changes. It also lets the stable part be cached.",
+     "c": "Changing questions don't belong there; it breaks caching and the conversation's structure.",
+     "d": "Tags help structure, but miss the benefits of putting stable rules in the system prompt."
+    }
+   },
+   "source": {
+    "title": "Prompting best practices",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+   }
+  },
+  {
+   "id": "d-38",
+   "exam": "D",
+   "n": 38,
+   "chapter": 1,
+   "lo": "Choose a managed deployment",
+   "ref": "1.4 Three ways to wire an agent",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A two-person startup needs a customer-facing Claude agent live within days. They have no one to run servers, but must stay available around the clock, and data residency isn't a concern. Should they host the Agent SDK themselves or use an Anthropic-hosted managed deployment?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Host it themselves, but only on weekdays to save effort"
+    },
+    {
+     "key": "b",
+     "text": "Write their own harness on serverless functions instead"
+    },
+    {
+     "key": "c",
+     "text": "Host the SDK themselves for full control over scaling"
+    },
+    {
+     "key": "d",
+     "text": "Managed hosting: less control, but no servers to run"
+    }
+   ],
+   "answer": [
+    "d"
+   ],
+   "explanation": {
+    "intro": "No operations team and a tight deadline: let Anthropic run it.",
+    "options": {
+     "a": "Pausing a customer-facing agent breaks the round-the-clock requirement.",
+     "b": "More building and maintenance: the opposite of live in days.",
+     "c": "Full control needs exactly the operations capacity they don't have.",
+     "d": "Correct: Anthropic runs the infrastructure and scaling, the right trade for a team with no operations capacity and a tight deadline."
+    }
+   },
+   "source": {
+    "title": "Managed Agents overview",
+    "url": "https://platform.claude.com/docs/en/managed-agents/overview"
+   }
+  },
+  {
+   "id": "d-39",
+   "exam": "D",
+   "n": 39,
+   "chapter": 6,
+   "lo": "Summarise older turns",
+   "ref": "6.5 Managing the context window",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A support chatbot resends the whole conversation on every turn. Long sessions are now nearing the context limit, and the input cost of each turn keeps rising. What's the best fix?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Summarise older turns, keeping recent ones and key facts"
+    },
+    {
+     "key": "b",
+     "text": "Rely on the API to remember earlier turns instead"
+    },
+    {
+     "key": "c",
+     "text": "Spread each session over several API keys to share the load"
+    },
+    {
+     "key": "d",
+     "text": "Raise max_tokens so the model can cope with more history"
+    }
+   ],
+   "answer": [
+    "a"
+   ],
+   "explanation": {
+    "intro": "Long conversations need trimming: summarise the old, keep the new.",
+    "options": {
+     "a": "Correct: it caps how fast the input grows while keeping the conversation coherent.",
+     "b": "The API is stateless: the app has to send the history every time.",
+     "c": "Extra keys don't change what one conversation has to include.",
+     "d": "max_tokens limits the reply; it doesn't add room for input or cut its cost."
+    }
+   },
+   "source": {
+    "title": "Compaction",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/compaction"
+   }
+  },
+  {
+   "id": "d-40",
+   "exam": "D",
+   "n": 40,
+   "chapter": 5,
+   "lo": "Put changing content after the cache",
+   "ref": "5.3 Prompt caching",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A developer marks a cache breakpoint after a large, fixed system prompt, but the cache almost never hits. It turns out a timestamp and the user's ID are added to the very top of the system prompt on each request. What's the fix?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Cache the user message instead, as system prompts can't be"
+    },
+    {
+     "key": "b",
+     "text": "Use a longer cache lifetime so entries last between requests"
+    },
+    {
+     "key": "c",
+     "text": "Move the changing values to after the fixed content"
+    },
+    {
+     "key": "d",
+     "text": "Shorten the timestamp so fewer tokens change each time"
+    }
+   ],
+   "answer": [
+    "c"
+   ],
+   "explanation": {
+    "intro": "Fixed content first, changing content last.",
+    "options": {
+     "a": "System prompts can be cached; the problem is the order of the content.",
+     "b": "Lifetime isn't the issue: the prefix is different every time, so it never matches.",
+     "c": "Correct: a cache hit needs an identical prefix, so anything that changes must come after the cached part.",
+     "d": "One changed token is enough to break the match."
+    }
+   },
+   "source": {
+    "title": "Prompt caching",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+   }
+  },
+  {
+   "id": "d-41",
+   "exam": "D",
+   "n": 41,
+   "chapter": 4,
+   "lo": "Check content, not just format",
+   "ref": "4.4 Tests, traces and debugging",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "Claude extracts invoice data into JSON for the accounts team. The JSON always parses, but staff have found records with made-up supplier IDs and totals that don't add up to the line items. What's the best fix?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Add \"do not hallucinate\" to the system prompt"
+    },
+    {
+     "key": "b",
+     "text": "Check fields against business rules and source data in code"
+    },
+    {
+     "key": "c",
+     "text": "Switch the output from JSON to XML tags"
+    },
+    {
+     "key": "d",
+     "text": "Ask Claude to rate its confidence and trust the high scores"
+    }
+   ],
+   "answer": [
+    "b"
+   ],
+   "explanation": {
+    "intro": "Parsable output isn't correct output: verify the content.",
+    "options": {
+     "a": "An instruction can reduce invented values but can't verify them.",
+     "b": "Correct: valid JSON isn't correct data. Checks such as \"does this supplier exist?\" catch errors, and failures go to a person.",
+     "c": "A different format carries invented values just as well.",
+     "d": "Self-rated confidence is unreliable; models can be confidently wrong."
+    }
+   },
+   "source": {
+    "title": "Structured outputs",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+   }
+  },
+  {
+   "id": "d-42",
+   "exam": "D",
+   "n": 42,
+   "chapter": 3,
+   "lo": "Use branches, tests and review",
+   "ref": "3.1 How Claude Code works",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A developer is using Claude Code to rename a core module across 40 files. They want it to fit the team's Git workflow and be easy to roll back if tests fail. What's the best practice?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Let Claude commit straight to main after each file changes"
+    },
+    {
+     "key": "b",
+     "text": "Have Claude review its own work and merge automatically"
+    },
+    {
+     "key": "c",
+     "text": "Make all the changes locally, committing only at the very end"
+    },
+    {
+     "key": "d",
+     "text": "Use a feature branch, let Claude run the tests, then open a PR"
+    }
+   ],
+   "answer": [
+    "d"
+   ],
+   "explanation": {
+    "intro": "Agent changes go through the same branch, test and review steps as anyone's.",
+    "options": {
+     "a": "Skips review and can break the shared branch halfway through.",
+     "b": "The same agent misses its own systematic mistakes, and there's no human check.",
+     "c": "No commits means no points to roll back to; one mistake loses everything.",
+     "d": "Correct: the branch isolates the change, tests catch regressions, and a pull request keeps a human reviewer."
+    }
+   },
+   "source": {
+    "title": "Claude Code: common workflows",
+    "url": "https://code.claude.com/docs/en/common-workflows"
+   }
+  },
+  {
+   "id": "d-43",
+   "exam": "D",
+   "n": 43,
+   "chapter": 1,
+   "lo": "Pause and resume with checkpoints",
+   "ref": "1.4 Three ways to wire an agent",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "A team uses LangGraph for a support agent that must pass any refund over £500 to a person before acting. The run has to pause, save where it got to, and carry on after approval, even if that takes hours. Which feature fits best?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "A checkpointer, plus an interrupt before the refund step"
+    },
+    {
+     "key": "b",
+     "text": "A higher temperature on the refund step so Claude asks more"
+    },
+    {
+     "key": "c",
+     "text": "Retry with exponential backoff until the person approves"
+    },
+    {
+     "key": "d",
+     "text": "A second agent that emails the manager and checks for a reply"
+    }
+   ],
+   "answer": [
+    "a"
+   ],
+   "explanation": {
+    "intro": "Long human pauses need saved state: a checkpoint plus an interrupt.",
+    "options": {
+     "a": "Correct: the checkpointer saves the run's state, and the interrupt pauses before the refund until someone approves; then it resumes where it stopped.",
+     "b": "Temperature can't pause a run or gate an action, and current models reject it.",
+     "c": "Backoff is for brief errors, not waiting hours for a decision, and it saves no state.",
+     "d": "Waiting in a loop burns tokens and loses everything if the process stops."
+    }
+   },
+   "source": {
+    "title": "LangGraph",
+    "url": "https://www.langchain.com/langgraph"
+   }
+  }
+ ]
+}

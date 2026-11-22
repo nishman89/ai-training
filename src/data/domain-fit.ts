@@ -6,11 +6,27 @@ export interface FitStep { title: string; sub: string; sec: string; what: string
 export interface DomainFit { story: string; steps: FitStep[]; loop?: string; links: { text: string; sec: string }[];
   /** A worked use case: one realistic job, followed through each step of the diagram (same order). */
   useCase: { title: string; intro: string; steps: string[] };
+  /** Optional side-by-side comparison: which option to use when (rows link to the section that teaches each). */
+  choose?: { title: string; head?: [string, string, string]; rows: { when: string; use: string; sec: string; example: string }[]; rule?: string };
   /** Optional end-to-end code skeleton: files src/data/fit-code/d<N>.{java,py,ts}; comments ①… match the steps. */
   code?: string; }
 
 export const DOMAIN_FIT: Record<number, DomainFit> = {
   1: {
+    choose: {
+      title: 'Which pattern when',
+      rule: 'Start at the top and only move down when the task needs it: each step down costs more and is harder to predict and test. Patterns also combine.',
+      rows: [
+        { when: 'Is one step', use: 'A single call', sec: '1.1', example: 'Summarise one email' },
+        { when: 'Has fixed steps, each needing the one before', use: 'Prompt chaining', sec: '1.2', example: 'Read an invoice, check it, then file it' },
+        { when: 'Has different kinds of request needing different handling', use: 'Routing', sec: '1.2', example: 'FAQs to Haiku, contracts to Opus' },
+        { when: 'Has independent parts, or needs several opinions', use: 'Parallelisation', sec: '1.2', example: 'Translate into five languages at once, then review each' },
+        { when: 'Has subtasks you only discover while working', use: 'Orchestrator and workers', sec: '1.2', example: 'Research a market and write one report' },
+        { when: 'Needs draft, critique, improve', use: 'Evaluator-optimiser', sec: '1.2', example: 'Polish copy until it passes the style guide' },
+        { when: 'Has a clear goal but no way to know the steps', use: 'An agent', sec: '1.3', example: 'Find out why broadband keeps dropping' },
+        { when: 'Is too big for one context window', use: 'Subagents', sec: '1.5', example: 'Audit 60 files, then write one report' },
+      ],
+    },
     code: 'Domain 1 in one function: route, then run an agent',
     story: 'Start with one question: can you write the steps down in advance? If yes, build a workflow from one of the five patterns. If not, build an agent: a loop where Claude picks the next step. Then decide who runs that loop, and how it remembers things on long jobs.',
     steps: [
@@ -38,6 +54,20 @@ export const DOMAIN_FIT: Record<number, DomainFit> = {
     ],
   },
   2: {
+    choose: {
+      title: 'How to send the calls',
+      head: ['If…', 'Do this', 'Example'],
+      rule: 'Most real apps mix these: stream the live chat, batch the overnight reports, and put a queue in front of anything that must never be lost.',
+      rows: [
+        { when: 'A person is waiting and the reply is long', use: 'Stream the reply', sec: '2.3', example: 'A support chat showing the answer as it\'s written' },
+        { when: 'A short job, and your code waits for the full answer', use: 'One normal call', sec: '2.1', example: 'Classify one ticket' },
+        { when: 'Many requests need answers soon', use: 'The async client, with a cap on calls in flight', sec: '2.4', example: 'Summarise 200 documents while a user waits' },
+        { when: 'Nobody is waiting, and cost matters', use: 'The Batch API (half price, up to 24 hours)', sec: '5.4', example: 'Tag 100,000 old tickets overnight' },
+        { when: 'Load is spiky and nothing may be lost', use: 'A durable queue, a fixed number of workers, retries', sec: '2.4', example: '10,000 tickets a day, with 5× spikes during outages' },
+        { when: 'The API is busy (429, 529)', use: 'Let the SDK back off and retry; don\'t add your own loop', sec: '2.4', example: 'A brief overload at peak time' },
+        { when: 'The request itself is wrong (400, 401, 403, 404)', use: 'Fix it; never retry', sec: '2.4', example: 'A missing field or a bad API key' },
+      ],
+    },
     code: 'Domain 2 in one function: ask()',
     story: 'Every Claude feature is built from the same call. You build a request, send it, and get back either an error or a reply. Errors you retry or fix. Replies you check before using. Then you ship it on the right platform and keep it stable.',
     steps: [
@@ -114,6 +144,19 @@ export const DOMAIN_FIT: Record<number, DomainFit> = {
     ],
   },
   5: {
+    choose: {
+      title: 'Which lever when',
+      head: ['If…', 'Pull this lever', 'Example'],
+      rule: 'Try them roughly in this order, and check each change against your evals: saving money is no good if quality drops.',
+      rows: [
+        { when: 'A big model is doing simple work', use: 'A smaller model, or routing by difficulty', sec: '5.1', example: 'Ticket labelling moves to Haiku' },
+        { when: 'The same long text starts every request', use: 'Prompt caching', sec: '5.3', example: 'A 30,000-token policy manual on every call' },
+        { when: 'Nobody is waiting for the answers', use: 'The Batch API: half price', sec: '5.4', example: 'Overnight reports' },
+        { when: 'It thinks hard on easy tasks', use: 'Lower the effort setting', sec: '5.2', example: 'Renaming a variable at maximum effort' },
+        { when: 'Requests carry more context than they need', use: 'Trim history, send only relevant sections, count tokens', sec: '5.5', example: 'Old chat turns resent on every call' },
+        { when: 'It must be faster, and cost matters less', use: 'Fast mode, or streaming so people see text sooner', sec: '5.2', example: 'A live coding assistant' },
+      ],
+    },
     code: 'Domain 5 in one request builder: model, effort, cache, batch, budget',
     story: 'Pick the smallest model that passes your tests, set how hard it thinks, then cut the bill: cache what repeats, batch what can wait, and keep an eye on how many tokens each call uses.',
     steps: [
@@ -141,6 +184,19 @@ export const DOMAIN_FIT: Record<number, DomainFit> = {
     ],
   },
   6: {
+    choose: {
+      title: 'Which context fix when',
+      head: ['If…', 'Use', 'Example'],
+      rule: 'A bigger context window or a higher max_tokens fixes none of these: the first only delays the problem, and the second only limits the reply.',
+      rows: [
+        { when: 'Details in the middle of a long document get missed', use: 'Send only the relevant sections; document first, question last', sec: '6.5', example: 'A clause on page 70 of a 150-page contract' },
+        { when: 'Claude needs facts it doesn\'t have', use: 'Retrieval (RAG): fetch the relevant pieces and add them to the prompt', sec: '6.5', example: 'Answering from 2,000 help articles' },
+        { when: 'A long conversation is filling up', use: 'Compaction: summarise older turns, keeping key facts', sec: '6.5', example: 'A two-hour support chat' },
+        { when: 'Old tool output piles up in an agent', use: 'Clear or trim tool results the task no longer needs', sec: '6.5', example: 'Whole files and build logs from 40 turns ago' },
+        { when: 'Findings must survive a long or restarted job', use: 'Write them to an external store', sec: '1.5', example: 'A migration that runs over two days' },
+        { when: 'A side task would flood the main context', use: 'Hand it to a subagent that returns a summary', sec: '1.5', example: 'Reading 50 log files to find one error' },
+      ],
+    },
     code: 'Domain 6 in one function: a prompt built from every technique',
     story: 'When an answer is weak, find the missing piece and add it with the right technique. If software reads the output, let the API enforce its shape. Use thinking for hard problems, and keep long sessions inside the context window.',
     steps: [
@@ -193,6 +249,18 @@ export const DOMAIN_FIT: Record<number, DomainFit> = {
     ],
   },
   8: {
+    choose: {
+      title: 'Which mechanism when',
+      head: ['You need…', 'Use', 'Example'],
+      rule: 'The quick test: does Claude need to KNOW something (a skill) or REACH something, by getting live data or changing something (a tool)? MCP is how you share tools; a hook is how you guarantee a rule.',
+      rows: [
+        { when: 'A common ability Anthropic already provides', use: 'A built-in (server) tool', sec: '8.3', example: 'Web search, web fetch, code execution' },
+        { when: 'Claude to use your own function, in one app', use: 'A custom (client) tool', sec: '8.1', example: 'Look up an order in your database' },
+        { when: 'Claude to follow a procedure or use your know-how', use: 'A skill', sec: '3.4', example: 'The house style guide, a 12-step refund procedure' },
+        { when: 'The same integration in several apps', use: 'An MCP server', sec: '8.4', example: 'One stock-system server for Claude Code, Claude Desktop and your agent' },
+        { when: 'A rule that must always hold, whatever Claude decides', use: 'A hook, or a check in the tool\'s code', sec: '3.3', example: 'Block edits to .env; refuse refunds over £100' },
+      ],
+    },
     code: 'Domain 8 end to end: one tool, from round trip to MCP server',
     story: 'A tool is a function you describe and your code runs. Design tools so Claude picks the right one and can recover from failures. Some tools Anthropic runs for you. Package your own as an MCP server to reuse them everywhere, and control who gets each one.',
     steps: [
@@ -200,7 +268,7 @@ export const DOMAIN_FIT: Record<number, DomainFit> = {
       { title: 'Design tools', sub: 'so Claude picks right', sec: '8.2', what: 'Clear descriptions, errors with is_error and input checks (order tool steps 3–4), small results, idempotent writes.' },
       { title: 'Where it runs', sub: 'yours or Anthropic\'s', sec: '8.3', what: 'Client vs server tools, computer use, tool_choice.' },
       { title: 'Package as MCP', sub: 'build once, reuse', sec: '8.4', what: 'The order tool as an MCP server (step 5); tools, resources and prompts; the Inspector; JSON-RPC, the handshake, transports.' },
-      { title: 'Control access', sub: 'scope and auth', sec: '8.5', what: 'Who gets the server, per-tool allow and deny, credentials; then which mechanism when (tool, Skill, MCP, hook).' },
+      { title: 'Control access', sub: 'scope and auth', sec: '8.5', what: 'Who gets the server, per-tool allow and deny, credentials.' },
     ],
     useCase: {
       title: 'Letting Claude check orders and stock',

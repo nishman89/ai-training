@@ -9,15 +9,15 @@ import { url, EXAM_MINUTES } from '../lib/site';
 const exam = await getExam('B');
 const questions = exam.questions;
 ---
-<BaseLayout title="Mock exam 2" description="A second, 53-question CCDV-F style mock exam in mixed domain order, with a score per domain and every answer explained.">
-  <PageHead eyebrow="Exam practice · based on unofficial papers" title="Mock exam 2">
-    <p class="lead">{questions.length} questions in {EXAM_MINUTES} minutes, in mixed domain order like the real exam,
+<BaseLayout title="Mock exam 2a" description="A 53-question CCDV-F style mock exam in mixed domain order, with a score per domain and every answer explained.">
+  <PageHead eyebrow="Exam practice · based on unofficial papers" title="Mock exam 2a">
+    <p class="lead">{questions.length} questions in {EXAM_MINUTES} minutes, written to feel like the real exam: each question is a short scenario of three or four sentences, some ask you to choose TWO answers, and the domains are mixed,
       with a score by domain at the end. Each question shows its domain and the section of the notes it tests, and links (📚) to the official documentation it's based on.
       The questions are based on, but not copied from, unofficial practice papers: the topics match, but the wording, scenarios and explanations are original. They are not real exam questions.</p>
     <p class="note">Where older material teaches something current models reject (setting temperature, prefilling the reply), the explanation says so and gives the current answer.</p>
   </PageHead>
   <div class="container">
-    <MockPicker current="2" />
+    <MockPicker current="2a" />
     <Quiz questions={questions} quizId="mock-b" examMode />
   </div>
 </BaseLayout>

@@ -20,19 +20,19 @@
    "options": [
     {
      "key": "a",
-     "text": "A prompt-chaining workflow with code checks between steps"
+     "text": "A prompt-chaining workflow, with code checks between steps"
     },
     {
      "key": "b",
-     "text": "An orchestrator-workers system"
+     "text": "An orchestrator-workers system, with one worker per invoice field"
     },
     {
      "key": "c",
-     "text": "A single prompt that does everything"
+     "text": "A single prompt that extracts, validates and posts in one call"
     },
     {
      "key": "d",
-     "text": "An autonomous agent with all ledger tools"
+     "text": "An autonomous agent with access to all of the ledger tools"
     }
    ],
    "answer": [
@@ -120,19 +120,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Orchestrator-workers runs sequentially"
+     "text": "Orchestrator-workers always runs its subtasks one after another"
     },
     {
      "key": "b",
-     "text": "In orchestrator-workers the subtasks are decided at run time from the input; in sectioning they're predefined"
+     "text": "Orchestrator-workers picks subtasks at run time; sectioning's are fixed"
     },
     {
      "key": "c",
-     "text": "Sectioning needs an agent framework"
+     "text": "Sectioning needs an agent framework, while orchestrator-workers doesn't"
     },
     {
      "key": "d",
-     "text": "There is no difference"
+     "text": "There is no real difference; the two names describe the same pattern"
     }
    ],
    "answer": [
@@ -170,19 +170,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Prefer a single agent with good context: multi-agent setups multiply token cost (about 15× in Anthropic's reported case) and suit broad, parallel work"
+     "text": "Use one agent with good context; multi-agent costs far more tokens"
     },
     {
      "key": "b",
-     "text": "Use the Batch API instead"
+     "text": "Send the refactor through the Batch API to make it cheaper"
     },
     {
      "key": "c",
-     "text": "Go ahead: more agents always finish faster"
+     "text": "Go ahead: more agents always finish a refactor faster than one"
     },
     {
      "key": "d",
-     "text": "Use evaluator-optimizer with five evaluators"
+     "text": "Use evaluator-optimizer instead, with five evaluators checking the work"
     }
    ],
    "answer": [
@@ -220,19 +220,19 @@
    "options": [
     {
      "key": "a",
-     "text": "While stop_reason is \"tool_use\" and no exit condition (such as the iteration cap) has been hit"
+     "text": "While stop_reason is \"tool_use\" and no exit condition has been hit"
     },
     {
      "key": "b",
-     "text": "Always exactly 10 times"
+     "text": "Always exactly 10 times, whatever the stop_reason says"
     },
     {
      "key": "c",
-     "text": "Until stop_reason is \"tool_use\""
+     "text": "Until stop_reason is \"tool_use\", then stop the loop there"
     },
     {
      "key": "d",
-     "text": "While stop_reason is \"max_tokens\""
+     "text": "While stop_reason is \"max_tokens\", so the reply can finish"
     }
    ],
    "answer": [
@@ -270,19 +270,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Before destructive actions such as deleting a database"
+     "text": "Before destructive actions, such as deleting a database"
     },
     {
      "key": "b",
-     "text": "Only at the end of the session"
+     "text": "Only once, at the end of the session, to review everything"
     },
     {
      "key": "c",
-     "text": "Before every read-only describe call"
+     "text": "Before every read-only describe call the agent makes"
     },
     {
      "key": "d",
-     "text": "After every tool result, however small"
+     "text": "After every tool result, however small or harmless"
     }
    ],
    "answer": [
@@ -320,19 +320,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Anthropic runs the loop and sandbox; sessions are stored server-side, so they're not currently ZDR or HIPAA eligible"
+     "text": "Anthropic runs the loop and sandbox; it isn't currently ZDR eligible"
     },
     {
      "key": "b",
-     "text": "It removes the need to define tools"
+     "text": "It removes the need to define any tools for the agent to use"
     },
     {
      "key": "c",
-     "text": "It's available only for Java"
+     "text": "It's available only for Java, through the Java SDK"
     },
     {
      "key": "d",
-     "text": "You run the loop in your own process"
+     "text": "You run the loop in your own process, and Anthropic hosts the model"
     }
    ],
    "answer": [
@@ -370,19 +370,19 @@
    "options": [
     {
      "key": "a",
-     "text": "The model is too small"
+     "text": "The model is too small to follow the skill's instructions"
     },
     {
      "key": "b",
-     "text": "Skills don't work outside Claude Code"
+     "text": "Skills only work inside Claude Code, never through the SDK"
     },
     {
      "key": "c",
-     "text": "settingSources wasn't set, so filesystem settings such as skills and CLAUDE.md never loaded"
+     "text": "settingSources wasn't set, so skills and CLAUDE.md never loaded"
     },
     {
      "key": "d",
-     "text": "Skills need the Batch API"
+     "text": "Skills need the Batch API, which the agent isn't using"
     }
    ],
    "answer": [
@@ -420,19 +420,19 @@
    "options": [
     {
      "key": "a",
-     "text": "No persistent memory"
+     "text": "No persistent memory, so each session starts fresh"
     },
     {
      "key": "b",
-     "text": "A longer system prompt"
+     "text": "A longer system prompt listing every customer"
     },
     {
      "key": "c",
-     "text": "In-context only"
+     "text": "In-context only, kept within the conversation"
     },
     {
      "key": "d",
-     "text": "External storage read at session start"
+     "text": "External storage, read at session start"
     }
    ],
    "answer": [
@@ -470,7 +470,7 @@
    "options": [
     {
      "key": "a",
-     "text": "Intermediate steps stay visible to the parent"
+     "text": "Intermediate steps stay visible to the parent as they happen"
     },
     {
      "key": "b",
@@ -478,7 +478,7 @@
     },
     {
      "key": "c",
-     "text": "Only a summary returns to the parent, keeping its context small"
+     "text": "Only a summary returns to the parent, keeping it small"
     },
     {
      "key": "d",
@@ -486,7 +486,7 @@
     },
     {
      "key": "e",
-     "text": "They always reduce total token cost"
+     "text": "They always reduce the total token cost of the task"
     }
    ],
    "answer": [
@@ -626,19 +626,19 @@
    "options": [
     {
      "key": "a",
-     "text": "The system message must be the LAST item in the array"
+     "text": "The system message must be the LAST item in the messages array"
     },
     {
      "key": "b",
-     "text": "Nothing: this is the recommended way to set a system prompt"
+     "text": "Nothing is wrong: this is the recommended way to set a system prompt"
     },
     {
      "key": "c",
-     "text": "System instructions belong in the top-level system field; messages only holds user and assistant turns"
+     "text": "The system prompt goes in the top-level system field, not messages"
     },
     {
      "key": "d",
-     "text": "System prompts are only supported with streaming"
+     "text": "System prompts are only supported when streaming is switched on"
     }
    ],
    "answer": [
@@ -676,19 +676,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Conversation memory requires the 1-hour cache TTL"
+     "text": "Conversation memory needs the 1-hour cache TTL to be switched on"
     },
     {
      "key": "b",
-     "text": "The Messages API is stateless: the app must resend the conversation history on every call"
+     "text": "The API is stateless, so the app must resend the history each call"
     },
     {
      "key": "c",
-     "text": "The API key is scoped to single-turn conversations"
+     "text": "The API key is scoped to single-turn conversations only"
     },
     {
      "key": "d",
-     "text": "The model's memory resets every 5 minutes"
+     "text": "The model's memory of the chat resets every 5 minutes"
     }
    ],
    "answer": [
@@ -786,15 +786,15 @@
     },
     {
      "key": "b",
-     "text": "429 means your organisation hit a rate or spend limit; 529 means the API is overloaded across the board"
+     "text": "429: your org hit a rate or spend limit; 529: the API is overloaded"
     },
     {
      "key": "c",
-     "text": "429 is terminal; 529 is retriable"
+     "text": "429 is terminal and never retried; 529 is retriable after a pause"
     },
     {
      "key": "d",
-     "text": "Both mean the same thing and are handled identically"
+     "text": "Both mean the same thing and should be handled identically"
     }
    ],
    "answer": [
@@ -832,19 +832,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Increase the loop to 10 retries with no delay"
+     "text": "Increase the loop to 10 retries, with no delay between them"
     },
     {
      "key": "b",
-     "text": "Remove the custom loop, rely on the SDK's built-in backoff (configure maxRetries), and handle only what remains"
+     "text": "Drop the custom loop and rely on the SDK's backoff (maxRetries)"
     },
     {
      "key": "c",
-     "text": "Switch to raw HTTP so retries are fully under your control"
+     "text": "Switch to raw HTTP so the retries are fully under your control"
     },
     {
      "key": "d",
-     "text": "Retry 400 errors too, in case the request was fine"
+     "text": "Retry 400 errors too, in case the request was actually fine"
     }
    ],
    "answer": [
@@ -886,15 +886,15 @@
     },
     {
      "key": "b",
-     "text": "Requests per minute, input tokens per minute and output tokens per minute"
+     "text": "Requests, input tokens and output tokens per minute"
     },
     {
      "key": "c",
-     "text": "Total tokens per day per API key"
+     "text": "Total tokens per day, counted separately per API key"
     },
     {
      "key": "d",
-     "text": "Characters per minute per user"
+     "text": "Characters per minute, counted separately per user"
     }
    ],
    "answer": [
@@ -932,19 +932,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Streaming doesn't support tools"
+     "text": "Streaming doesn't support tools, so tool calls are always lost"
     },
     {
      "key": "b",
-     "text": "The 5-minute cache expired during the drop"
+     "text": "The 5-minute cache expired while the connection was down"
     },
     {
      "key": "c",
-     "text": "A partial assistant turn (with an incomplete tool_use block) was saved because the app didn't wait for message_stop"
+     "text": "A partial turn was saved, because the app didn't wait for message_stop"
     },
     {
      "key": "d",
-     "text": "The tool schema is invalid"
+     "text": "The tool's schema is invalid, so the API rejected the request"
     }
    ],
    "answer": [
@@ -1082,19 +1082,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Show the text to the user; the answer is complete"
+     "text": "Show the text to the user, because the answer is complete"
     },
     {
      "key": "b",
-     "text": "Retry the request with a higher max_tokens"
+     "text": "Retry the request with a higher max_tokens so it can finish"
     },
     {
      "key": "c",
-     "text": "Resend the same request unchanged"
+     "text": "Resend the same request unchanged until the text arrives"
     },
     {
      "key": "d",
-     "text": "Run the requested tool(s) and send the results back as tool_result blocks with matching IDs"
+     "text": "Run the tool(s) and send back tool_result blocks with matching IDs"
     }
    ],
    "answer": [
@@ -1232,19 +1232,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Using the 1-hour cache"
+     "text": "Use the 1-hour cache so responses stay the same"
     },
     {
      "key": "b",
-     "text": "Switching to streaming"
+     "text": "Switch to streaming so changes show up sooner"
     },
     {
      "key": "c",
-     "text": "Raising max_tokens"
+     "text": "Raise max_tokens so replies have more room"
     },
     {
      "key": "d",
-     "text": "Pinning the full model ID, and promoting new versions only after they pass the eval"
+     "text": "Pin the full model ID; promote new ones after the eval"
     }
    ],
    "answer": [
@@ -1332,11 +1332,11 @@
    "options": [
     {
      "key": "a",
-     "text": "Don't release a new model version until it clears the eval baseline"
+     "text": "Hold each new model version until it clears the eval baseline"
     },
     {
      "key": "b",
-     "text": "Skip testing if the prompt worked in a demo"
+     "text": "Skip formal testing if the prompt already worked well in a demo"
     },
     {
      "key": "c",
@@ -1344,11 +1344,11 @@
     },
     {
      "key": "d",
-     "text": "Defer security review until after go-live"
+     "text": "Defer the security review until after the system goes live"
     },
     {
      "key": "e",
-     "text": "Don't start building until the chosen platform meets the residency requirement"
+     "text": "Don't start building until the platform meets residency rules"
     }
    ],
    "answer": [
@@ -1396,11 +1396,11 @@
     },
     {
      "key": "c",
-     "text": "Treat it as a content decision, not a transient fault: read stop_details, log it, and either surface it or retry on a fallback model"
+     "text": "Treat it as a content decision: log it, then surface it or fall back"
     },
     {
      "key": "d",
-     "text": "Raise max_tokens and resend the same request"
+     "text": "Raise max_tokens and resend the same request straight away"
     }
    ],
    "answer": [
@@ -1488,19 +1488,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Claude asks the user to choose"
+     "text": "Claude asks the user to choose between the two rules"
     },
     {
      "key": "b",
-     "text": "Whichever was edited last wins"
+     "text": "Whichever settings file was edited most recently wins"
     },
     {
      "key": "c",
-     "text": "The deny wins: deny beats allow, and enterprise settings can't be overridden"
+     "text": "The deny wins; enterprise settings can't be overridden"
     },
     {
      "key": "d",
-     "text": "Local settings win"
+     "text": "Local settings win, because they're the most specific"
     }
    ],
    "answer": [
@@ -1538,19 +1538,19 @@
    "options": [
     {
      "key": "a",
-     "text": "A skill"
+     "text": "A skill that explains why migrations must not change"
     },
     {
      "key": "b",
-     "text": "A PreToolUse hook (or a deny rule) that blocks edits to that path"
+     "text": "A PreToolUse hook, or a deny rule, that blocks that path"
     },
     {
      "key": "c",
-     "text": "A comment in the migration files"
+     "text": "A comment at the top of each of the migration files"
     },
     {
      "key": "d",
-     "text": "CLAUDE.md only"
+     "text": "A line in CLAUDE.md only, stated clearly in capitals"
     }
    ],
    "answer": [
@@ -1644,19 +1644,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Ask everyone to create /Users/sam"
+     "text": "Ask everyone on the team to create a /Users/sam folder"
     },
     {
      "key": "b",
-     "text": "Use bypassPermissions"
+     "text": "Use bypassPermissions so the hook is allowed to run"
     },
     {
      "key": "c",
-     "text": "Remove the hook"
+     "text": "Remove the hook from the plugin and lint by hand"
     },
     {
      "key": "d",
-     "text": "Bundle the script in the plugin and reference it with ${CLAUDE_PLUGIN_ROOT}"
+     "text": "Bundle the script and use ${CLAUDE_PLUGIN_ROOT}"
     }
    ],
    "answer": [
@@ -1694,19 +1694,19 @@
    "options": [
     {
      "key": "a",
-     "text": "A code check for valid JSON"
+     "text": "A code check that the reply is valid JSON"
     },
     {
      "key": "b",
-     "text": "Counting words"
+     "text": "Counting the words, with a minimum and maximum"
     },
     {
      "key": "c",
-     "text": "An LLM judge with a rubric, calibrated against human labels"
+     "text": "An LLM judge with a rubric, checked against human labels"
     },
     {
      "key": "d",
-     "text": "Exact string match"
+     "text": "An exact string match against a model answer"
     }
    ],
    "answer": [
@@ -1744,19 +1744,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Delete the human labels"
+     "text": "Delete the human labels, since they disagree with the judge"
     },
     {
      "key": "b",
-     "text": "Tighten the rubric's score definitions, add good and bad examples, and re-measure agreement"
+     "text": "Tighten the rubric, add examples, and re-measure agreement"
     },
     {
      "key": "c",
-     "text": "Trust the judge: it's more consistent than humans"
+     "text": "Trust the judge: it's more consistent than human reviewers"
     },
     {
      "key": "d",
-     "text": "Switch to exact match for everything"
+     "text": "Switch to exact string match for every kind of check"
     }
    ],
    "answer": [
@@ -1794,19 +1794,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Several changes at once means you can't tell which one caused the drop: change one thing at a time"
+     "text": "Change one thing at a time, so you can tell which caused it"
     },
     {
      "key": "b",
-     "text": "Nothing"
+     "text": "Nothing; a drop after changes is normal and can be ignored"
     },
     {
      "key": "c",
-     "text": "Evals shouldn't be run after changes"
+     "text": "Evals shouldn't be run straight after making changes"
     },
     {
      "key": "d",
-     "text": "The score should have been ignored"
+     "text": "The score should have been ignored, as evals are noisy"
     }
    ],
    "answer": [
@@ -1856,7 +1856,7 @@
     },
     {
      "key": "d",
-     "text": "Unit"
+     "text": "Unit testing"
     }
    ],
    "answer": [
@@ -1944,7 +1944,7 @@
    "options": [
     {
      "key": "a",
-     "text": "Switch straight to Haiku 5.5 for every request"
+     "text": "Switch straight to Haiku 5.5 for every request to cut costs"
     },
     {
      "key": "b",
@@ -1952,11 +1952,11 @@
     },
     {
      "key": "c",
-     "text": "Keep Opus 5.5 but lower the effort setting, re-run the eval, and consider a cheaper tier only if quality still holds"
+     "text": "Keep Opus 5.5, lower effort, and re-run the eval"
     },
     {
      "key": "d",
-     "text": "Leave it: model choice can't change after launch"
+     "text": "Leave it as it is: the model can't change after launch"
     }
    ],
    "answer": [
@@ -1994,19 +1994,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Send everything to Haiku and accept the errors"
+     "text": "Send everything to Haiku and accept the occasional errors"
     },
     {
      "key": "b",
-     "text": "Use the Batch API for all requests"
+     "text": "Use the Batch API for all requests to halve the cost"
     },
     {
      "key": "c",
-     "text": "Send everything to the most capable model"
+     "text": "Send everything to the most capable model available"
     },
     {
      "key": "d",
-     "text": "Classify each request, routing FAQs to a small model and disputes to a more capable one"
+     "text": "Route FAQs to a small model and disputes to a larger one"
     }
    ],
    "answer": [
@@ -2052,7 +2052,7 @@
     },
     {
      "key": "c",
-     "text": "Free"
+     "text": "Free, no charge"
     },
     {
      "key": "d",
@@ -2094,11 +2094,11 @@
    "options": [
     {
      "key": "a",
-     "text": "Caching only works with streaming"
+     "text": "Caching only works when streaming is switched on"
     },
     {
      "key": "b",
-     "text": "cache_read_input_tokens is always 0 on the first day"
+     "text": "cache_read_input_tokens always shows 0 on the first day"
     },
     {
      "key": "c",
@@ -2106,7 +2106,7 @@
     },
     {
      "key": "d",
-     "text": "The prefix changes on every call, so it never matches an existing cache entry"
+     "text": "The prefix changes on every call, so it never matches"
     }
    ],
    "answer": [
@@ -2148,7 +2148,7 @@
     },
     {
      "key": "b",
-     "text": "Any order you choose"
+     "text": "Any order you choose in the request"
     },
     {
      "key": "c",
@@ -2248,15 +2248,15 @@
     },
     {
      "key": "b",
-     "text": "Re-classifying 2 million archived tickets over the weekend"
+     "text": "Re-classifying 2 million archived tickets over a weekend"
     },
     {
      "key": "c",
-     "text": "A code-completion feature in an IDE"
+     "text": "A code-completion feature inside a developer's IDE"
     },
     {
      "key": "d",
-     "text": "A live chat assistant"
+     "text": "A live chat assistant answering customers on the website"
     }
    ],
    "answer": [
@@ -2294,7 +2294,7 @@
    "options": [
     {
      "key": "a",
-     "text": "Higher quality outputs"
+     "text": "Higher-quality outputs from a slower, careful model"
     },
     {
      "key": "b",
@@ -2302,11 +2302,11 @@
     },
     {
      "key": "c",
-     "text": "Unlimited rate limits"
+     "text": "No rate limits, however many requests you send"
     },
     {
      "key": "d",
-     "text": "Access to unreleased models"
+     "text": "Early access to models that aren't released yet"
     }
    ],
    "answer": [
@@ -2344,23 +2344,23 @@
    "options": [
     {
      "key": "a",
-     "text": "Translating a short UI label"
+     "text": "Translating a short UI label into four other languages"
     },
     {
      "key": "b",
-     "text": "Planning a multi-step data migration with rollback"
+     "text": "Planning a data migration, with rollback"
     },
     {
      "key": "c",
-     "text": "Diagnosing an intermittent concurrency bug across several files"
+     "text": "Diagnosing an intermittent concurrency bug"
     },
     {
      "key": "d",
-     "text": "Extracting a date from a sentence"
+     "text": "Extracting a single date from one sentence of an email"
     },
     {
      "key": "e",
-     "text": "Routing an email to one of four departments"
+     "text": "Routing an incoming email to one of four departments"
     }
    ],
    "answer": [
@@ -2450,19 +2450,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Add one or two few-shot examples showing the exact structure"
+     "text": "Add one or two examples showing the exact structure"
     },
     {
      "key": "b",
-     "text": "Switch to a bigger model"
+     "text": "Switch to a bigger model that follows formats better"
     },
     {
      "key": "c",
-     "text": "Add three more paragraphs of instructions"
+     "text": "Add three more paragraphs of instructions about format"
     },
     {
      "key": "d",
-     "text": "Raise max_tokens"
+     "text": "Raise max_tokens so the summary has room to be complete"
     }
    ],
    "answer": [
@@ -2500,19 +2500,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Few-shot examples"
+     "text": "Few-shot examples of on-topic questions in each turn"
     },
     {
      "key": "b",
-     "text": "A specific system prompt that defines scope and holds across turns"
+     "text": "A specific system prompt that defines the scope"
     },
     {
      "key": "c",
-     "text": "A higher temperature"
+     "text": "A higher temperature so replies vary less over time"
     },
     {
      "key": "d",
-     "text": "Structured outputs"
+     "text": "Structured outputs with a schema for every answer"
     }
    ],
    "answer": [
@@ -2606,19 +2606,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Tags turn on structured outputs"
+     "text": "Tags turn on structured outputs for the contract"
     },
     {
      "key": "b",
-     "text": "Tags are required by the API"
+     "text": "Tags are required by the API for any long document"
     },
     {
      "key": "c",
-     "text": "Tags reduce token cost"
+     "text": "Tags reduce the token cost of the pasted contract"
     },
     {
      "key": "d",
-     "text": "To make clear where the data ends and the instructions begin"
+     "text": "To show where the data ends and instructions begin"
     }
    ],
    "answer": [
@@ -2656,19 +2656,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Clearing"
+     "text": "Clearing the whole context and starting afresh"
     },
     {
      "key": "b",
-     "text": "Raising max_tokens"
+     "text": "Raising max_tokens so the session can run longer"
     },
     {
      "key": "c",
-     "text": "Compaction, with the summariser told to keep file paths, decisions and errors"
+     "text": "Compaction, told to keep paths, decisions and errors"
     },
     {
      "key": "d",
-     "text": "Pruning back to the first message"
+     "text": "Pruning the conversation back to the first message"
     }
    ],
    "answer": [
@@ -2706,19 +2706,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Pass them back to the API unchanged in the next request"
+     "text": "Pass them back to the API unchanged"
     },
     {
      "key": "b",
-     "text": "Move them to the system prompt"
+     "text": "Move them into the system prompt for the next turn"
     },
     {
      "key": "c",
-     "text": "Edit them to fix mistakes"
+     "text": "Edit them to fix any mistakes in the reasoning"
     },
     {
      "key": "d",
-     "text": "Delete them to save tokens"
+     "text": "Delete them to save tokens on later requests"
     }
    ],
    "answer": [
@@ -2756,19 +2756,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Remove the retrieval step"
+     "text": "Remove the retrieval step and send all documents"
     },
     {
      "key": "b",
-     "text": "Run a lexical (keyword) search alongside the embedding search"
+     "text": "Run a keyword search alongside the embedding search"
     },
     {
      "key": "c",
-     "text": "Increase max_tokens"
+     "text": "Increase max_tokens so more documents are read"
     },
     {
      "key": "d",
-     "text": "Larger chunks"
+     "text": "Use larger chunks so each one holds more product codes"
     }
    ],
    "answer": [
@@ -2806,19 +2806,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Paste the text into the system prompt with no caching"
+     "text": "Paste the text into the system prompt, without caching"
     },
     {
      "key": "b",
-     "text": "Upload it once with the Files API and reference the file_id"
+     "text": "Upload it once with the Files API and use its file_id"
     },
     {
      "key": "c",
-     "text": "Send it as a URL to a private intranet page"
+     "text": "Send it as a link to a page on the private intranet"
     },
     {
      "key": "d",
-     "text": "Base64 inline on every request"
+     "text": "Send it as base64 inline in every single request"
     }
    ],
    "answer": [
@@ -2860,15 +2860,15 @@
     },
     {
      "key": "b",
-     "text": "Use a larger model"
+     "text": "Use a larger model that's better at spotting hidden text"
     },
     {
      "key": "c",
-     "text": "Lower the temperature"
+     "text": "Lower the temperature so the agent acts more predictably"
     },
     {
      "key": "d",
-     "text": "Constrain the actions: require approval for sending email, limit recipients, and log blocked attempts"
+     "text": "Require approval to send email, and limit recipients"
     }
    ],
    "answer": [
@@ -2906,19 +2906,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Injection hides instructions in content the agent reads; a jailbreak is a user prompt crafted to bypass safety rules"
+     "text": "Injection hides orders in content; a jailbreak is a crafted user prompt"
     },
     {
      "key": "b",
-     "text": "They are the same attack"
+     "text": "They are the same attack, described with two different names"
     },
     {
      "key": "c",
-     "text": "Injection only happens in Claude Code"
+     "text": "Injection only happens in Claude Code, not through the API"
     },
     {
      "key": "d",
-     "text": "A jailbreak only affects images"
+     "text": "A jailbreak only affects images, while injection affects text"
     }
    ],
    "answer": [
@@ -2956,19 +2956,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Rotate the key: it remains in git history and must be treated as compromised"
+     "text": "Rotate the key: it's still in the git history"
     },
     {
      "key": "b",
-     "text": "Make the repository private and keep the key"
+     "text": "Make the repository private and keep the same key"
     },
     {
      "key": "c",
-     "text": "Add the key to .gitignore"
+     "text": "Add the key's file to .gitignore from now on"
     },
     {
      "key": "d",
-     "text": "Nothing: it's gone"
+     "text": "Nothing: deleting it in a new commit removed it"
     }
    ],
    "answer": [
@@ -3010,15 +3010,15 @@
     },
     {
      "key": "b",
-     "text": "Wrapping fetched HTML in tags"
+     "text": "Wrapping fetched HTML in clearly labelled tags"
     },
     {
      "key": "c",
-     "text": "\"Never touch .env\" in CLAUDE.md"
+     "text": "\"Never touch .env\" written in CLAUDE.md, in capitals"
     },
     {
      "key": "d",
-     "text": "A polite request in the user prompt"
+     "text": "A polite request in the user prompt not to edit .env"
     },
     {
      "key": "e",
@@ -3062,19 +3062,19 @@
    "options": [
     {
      "key": "a",
-     "text": "No credential, with the database public"
+     "text": "No credential at all, with the database made public"
     },
     {
      "key": "b",
-     "text": "The DBA's admin account, for convenience"
+     "text": "The DBA's admin account, since it's the most convenient"
     },
     {
      "key": "c",
-     "text": "A read-only account scoped to the reporting schema"
+     "text": "A read-only account for the reporting schema"
     },
     {
      "key": "d",
-     "text": "The application's full read-write account"
+     "text": "The application's full read-write database account"
     }
    ],
    "answer": [
@@ -3112,19 +3112,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Model temperature, top_p and top_k"
+     "text": "Which temperature, top_p and top_k values the model will use"
     },
     {
      "key": "b",
-     "text": "Which IDE, which font, which colour scheme"
+     "text": "Which IDE, which font and which colour scheme the team prefers"
     },
     {
      "key": "c",
-     "text": "How many developers, how many sprints, which board tool"
+     "text": "How many developers, how many sprints, and which board tool"
     },
     {
      "key": "d",
-     "text": "Where data is processed, how access is logged, and whether an admin can lock the configuration"
+     "text": "Where data is processed, how access is logged, and config locking"
     }
    ],
    "answer": [
@@ -3162,11 +3162,11 @@
    "options": [
     {
      "key": "a",
-     "text": "As system instructions"
+     "text": "As system instructions for the MCP server to follow"
     },
     {
      "key": "b",
-     "text": "It doesn't matter"
+     "text": "It doesn't matter how it's treated once it's fetched"
     },
     {
      "key": "c",
@@ -3174,7 +3174,7 @@
     },
     {
      "key": "d",
-     "text": "As untrusted data, never as instructions; trust doesn't carry across seams"
+     "text": "As untrusted data; trust doesn't carry across seams"
     }
    ],
    "answer": [
@@ -3212,7 +3212,7 @@
    "options": [
     {
      "key": "a",
-     "text": "Managed Agents are always ZDR eligible"
+     "text": "Managed Agents are always ZDR eligible by default"
     },
     {
      "key": "b",
@@ -3220,11 +3220,11 @@
     },
     {
      "key": "c",
-     "text": "ZDR is turned on by setting temperature to 0"
+     "text": "ZDR is turned on by setting the temperature to 0"
     },
     {
      "key": "d",
-     "text": "Eligibility varies by model, feature and platform, so confirm it during scoping"
+     "text": "Eligibility varies by model, feature and platform"
     }
    ],
    "answer": [
@@ -3262,19 +3262,19 @@
    "options": [
     {
      "key": "a",
-     "text": "The MCP connector, automatically"
+     "text": "The MCP connector, automatically, on Claude's behalf"
     },
     {
      "key": "b",
-     "text": "Nobody: tools are descriptive only"
+     "text": "Nobody: tools only describe actions, they don't run"
     },
     {
      "key": "c",
-     "text": "Your application, which then returns a tool_result"
+     "text": "Your application, which returns a tool_result"
     },
     {
      "key": "d",
-     "text": "Claude, inside Anthropic's servers"
+     "text": "Claude itself, inside Anthropic's own servers"
     }
    ],
    "answer": [
@@ -3312,19 +3312,19 @@
    "options": [
     {
      "key": "a",
-     "text": "A text block summarising the result"
+     "text": "A text block summarising what the tool returned"
     },
     {
      "key": "b",
-     "text": "A tool_result block whose tool_use_id matches the tool_use block"
+     "text": "A tool_result block with the matching tool_use_id"
     },
     {
      "key": "c",
-     "text": "The original question again"
+     "text": "The original question again, so Claude has context"
     },
     {
      "key": "d",
-     "text": "A new system prompt"
+     "text": "A new system prompt describing the tool's output"
     }
    ],
    "answer": [
@@ -3362,19 +3362,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Return a random stock level"
+     "text": "Return a random stock level so the reply still makes sense"
     },
     {
      "key": "b",
-     "text": "Throw an exception that ends the conversation"
+     "text": "Throw an exception that ends the whole conversation"
     },
     {
      "key": "c",
-     "text": "Return a tool_result with is_error: true and a message describing the timeout"
+     "text": "Return a tool_result with is_error: true and a message"
     },
     {
      "key": "d",
-     "text": "Return an empty list faster"
+     "text": "Return an empty list faster, before the timeout hits"
     }
    ],
    "answer": [
@@ -3412,19 +3412,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Rename the tools with numbers"
+     "text": "Rename the tools with numbers so they're easier to tell apart"
     },
     {
      "key": "b",
-     "text": "Add more tools"
+     "text": "Add more tools, each covering a narrower kind of search"
     },
     {
      "key": "c",
-     "text": "Add a sentence to each description saying when NOT to use it"
+     "text": "Add a line to each description on when NOT to use it"
     },
     {
      "key": "d",
-     "text": "Increase max_tokens"
+     "text": "Increase max_tokens so Claude can reason about the choice"
     }
    ],
    "answer": [
@@ -3462,19 +3462,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Resend the conversation as it is so the server-side loop resumes"
+     "text": "Resend the conversation as it is, so the loop resumes"
     },
     {
      "key": "b",
-     "text": "Add a user message saying \"please continue\""
+     "text": "Add a user message saying \"please continue\" and resend"
     },
     {
      "key": "c",
-     "text": "Switch to a client tool"
+     "text": "Switch to a client tool that runs the search yourself"
     },
     {
      "key": "d",
-     "text": "Treat it as an error and stop"
+     "text": "Treat it as an error, stop, and show the user a message"
     }
    ],
    "answer": [
@@ -3512,7 +3512,7 @@
    "options": [
     {
      "key": "a",
-     "text": "Models, keys and quotas"
+     "text": "Models, API keys and quotas"
     },
     {
      "key": "b",
@@ -3562,19 +3562,19 @@
    "options": [
     {
      "key": "a",
-     "text": "stdio is only for Python"
+     "text": "stdio servers can only be written in Python, not other languages"
     },
     {
      "key": "b",
-     "text": "MCP needs the Batch API"
+     "text": "MCP servers need the Batch API to be enabled on the account"
     },
     {
      "key": "c",
-     "text": ".mcp.json is ignored by Claude Code"
+     "text": ".mcp.json is ignored by Claude Code unless it's in the home folder"
     },
     {
      "key": "d",
-     "text": "stdio servers run as a local subprocess, so each machine needs the runtime and script; a shared server should use HTTP"
+     "text": "stdio runs locally, so each machine needs the script; share via HTTP"
     }
    ],
    "answer": [
@@ -3612,19 +3612,19 @@
    "options": [
     {
      "key": "a",
-     "text": "A CLAUDE.md line saying \"don't merge\""
+     "text": "A line in CLAUDE.md saying \"don't merge pull requests\""
     },
     {
      "key": "b",
-     "text": "Don't connect GitHub at all"
+     "text": "Don't connect GitHub at all, and do the work by hand"
     },
     {
      "key": "c",
-     "text": "A deny rule on the merge tool (mcp__github__<merge tool>), leaving the read and issue tools available"
+     "text": "A deny rule on the merge tool only, keeping the rest"
     },
     {
      "key": "d",
-     "text": "A larger context window"
+     "text": "A larger context window so it remembers the rule"
     }
    ],
    "answer": [
@@ -3662,7 +3662,7 @@
    "options": [
     {
      "key": "a",
-     "text": "Copy the same tool definition and HTTP client code into each application"
+     "text": "Copy the same tool definition and HTTP client code into each app"
     },
     {
      "key": "b",
@@ -3670,11 +3670,11 @@
     },
     {
      "key": "c",
-     "text": "Wrap the REST service in an MCP server that exposes inventory tools, and connect each application to it"
+     "text": "Wrap the REST service in an MCP server and connect each app to it"
     },
     {
      "key": "d",
-     "text": "Give each application the REST service's admin credentials and let Claude write its own HTTP calls"
+     "text": "Give each app the service's admin credentials so Claude calls it directly"
     }
    ],
    "answer": [

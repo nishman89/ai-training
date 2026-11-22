@@ -1,12 +1,13 @@
 ---
 /** The three mock papers, in the order to take them, with where each one comes from. Shown on every mock page. */
 import { url } from '../lib/site';
-interface Props { current: 'quick' | '1' | '2'; }
+interface Props { current: 'quick' | '1' | '2a' | '2b'; }
 const { current } = Astro.props;
 const papers = [
-  { id: 'quick', href: 'mock-exam-quick', name: 'Quick mock', meta: '15 questions · 34 minutes', src: 'Based on, but not copied from, an unofficial practice paper. A quick check across all eight domains.' },
-  { id: '1', href: 'mock-exam', name: 'Mock exam 1', meta: '53 questions · 120 minutes', src: 'Written from the content of this site, weighted by domain like the real exam.' },
-  { id: '2', href: 'mock-exam-2', name: 'Mock exam 2', meta: '53 questions · 120 minutes', src: 'Based on, but not copied from, unofficial practice papers. Mixed domain order.' },
+  { id: 'quick', href: 'mock-exam-quick', name: 'Quick mock', meta: '15 questions · 34 minutes', src: 'Warm-up. Based on, but not copied from, an unofficial practice paper. A quick check across all eight domains.' },
+  { id: '1', href: 'mock-exam', name: 'Mock exam 1', meta: '53 questions · 120 minutes', src: 'Mainly recall: did you learn it? Written from the content of this site: short, direct questions, weighted by domain like the real exam.' },
+  { id: '2a', href: 'mock-exam-2a', name: 'Mock exam 2a', meta: '53 questions · 120 minutes', src: 'Exam conditions. Longer scenarios, some choose-TWO questions, mixed domain order. Based on, but not copied from, unofficial practice papers.' },
+  { id: '2b', href: 'mock-exam-2b', name: 'Mock exam 2b', meta: '43 questions · 97 minutes', src: 'Exam conditions, shorter scenarios. One best answer each, mixed domain order. Based on, but not copied from, another unofficial practice paper.' },
 ];
 ---
 <nav class="mp no-print" aria-label="Mock exams" data-testid="mock-picker">

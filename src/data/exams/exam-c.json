@@ -24,11 +24,11 @@
     },
     {
      "key": "b",
-     "text": "Send the questions through the Batch API"
+     "text": "Send the questions through the Batch API to cut the cost"
     },
     {
      "key": "c",
-     "text": "Cap max_tokens at 150"
+     "text": "Cap max_tokens at 150 so every reply finishes sooner"
     },
     {
      "key": "d",
@@ -70,7 +70,7 @@
    "options": [
     {
      "key": "a",
-     "text": "Retry with increasing waits between attempts, as the SDK does by default"
+     "text": "Retry with increasing waits, as the SDK does by default"
     },
     {
      "key": "b",
@@ -78,11 +78,11 @@
     },
     {
      "key": "c",
-     "text": "Retry immediately in a loop until it works"
+     "text": "Retry immediately in a loop until the request goes through"
     },
     {
      "key": "d",
-     "text": "Move all traffic to the Batch API"
+     "text": "Move all traffic to the Batch API until the errors stop"
     }
    ],
    "answer": [
@@ -120,7 +120,7 @@
    "options": [
     {
      "key": "a",
-     "text": "Write \"never open .env files\" in the project's CLAUDE.md"
+     "text": "Add \"never open or read .env files\" to the project's CLAUDE.md"
     },
     {
      "key": "b",
@@ -128,11 +128,11 @@
     },
     {
      "key": "c",
-     "text": "Add deny rules such as Read(./.env) to the project's .claude/settings.json and commit it"
+     "text": "Add deny rules like Read(./.env) to a committed .claude/settings.json"
     },
     {
      "key": "d",
-     "text": "Add .env to .gitignore"
+     "text": "Add .env to .gitignore so the file is never committed"
     }
    ],
    "answer": [
@@ -170,7 +170,7 @@
    "options": [
     {
      "key": "a",
-     "text": "Replace the handbook with a one-paragraph summary"
+     "text": "Replace the handbook with a one-paragraph summary of the key rules"
     },
     {
      "key": "b",
@@ -182,7 +182,7 @@
     },
     {
      "key": "d",
-     "text": "Send every question through the Batch API"
+     "text": "Send every question through the Batch API to halve the cost"
     }
    ],
    "answer": [
@@ -220,19 +220,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Send the same request again until it completes"
+     "text": "Retry the same request automatically until a complete export comes back"
     },
     {
      "key": "b",
-     "text": "Ask Claude to write more concisely in the prompt"
+     "text": "Ask Claude in the prompt to keep the export short and concise"
     },
     {
      "key": "c",
-     "text": "Raise max_tokens or ask for less per request, and check stop_reason before parsing"
+     "text": "Raise max_tokens or ask for less, and check stop_reason before parsing"
     },
     {
      "key": "d",
-     "text": "Turn on streaming"
+     "text": "Turn on streaming so the export arrives in pieces as it's written"
     }
    ],
    "answer": [
@@ -274,15 +274,15 @@
     },
     {
      "key": "b",
-     "text": "A fixed workflow in code with one Claude call per step, checking each result before the next"
+     "text": "A fixed workflow: one Claude call per step, each result checked in code"
     },
     {
      "key": "c",
-     "text": "A lead agent that hands each contract to several helper agents"
+     "text": "A lead agent that hands each contract to helper agents"
     },
     {
      "key": "d",
-     "text": "An agent with every tool, deciding the order itself"
+     "text": "An agent given every tool, deciding the order of the steps itself"
     }
    ],
    "answer": [
@@ -324,15 +324,15 @@
     },
     {
      "key": "b",
-     "text": "A PreToolUse hook on Write and Edit that runs the formatter"
+     "text": "A PreToolUse hook on Write and Edit that runs the formatter on the file"
     },
     {
      "key": "c",
-     "text": "A PostToolUse hook matching Write and Edit that runs the formatter on the changed file"
+     "text": "A PostToolUse hook on Write and Edit that formats the changed file"
     },
     {
      "key": "d",
-     "text": "A formatting check in CI once a pull request is opened"
+     "text": "A formatting check in CI that fails the pull request if files differ"
     }
    ],
    "answer": [
@@ -370,19 +370,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Ask Claude to explain each label"
+     "text": "Ask Claude to explain its reasoning step by step before giving each label"
     },
     {
      "key": "b",
-     "text": "List the exact allowed labels and show a few example tickets with their labels"
+     "text": "List the exact allowed labels and show a few labelled example tickets"
     },
     {
      "key": "c",
-     "text": "Add \"use consistent labels\" to the prompt"
+     "text": "Add \"always use consistent, standard labels\" to the system prompt"
     },
     {
      "key": "d",
-     "text": "Raise the temperature"
+     "text": "Raise the temperature so Claude considers more label options"
     }
    ],
    "answer": [
@@ -420,15 +420,15 @@
    "options": [
     {
      "key": "a",
-     "text": "Raise max_tokens"
+     "text": "Raise max_tokens so the agent has more room to work in"
     },
     {
      "key": "b",
-     "text": "Start a new, empty conversation at every step"
+     "text": "Start a new, empty conversation at every step of the task"
     },
     {
      "key": "c",
-     "text": "Tell the agent to ignore old output"
+     "text": "Tell the agent in its prompt to ignore old tool output"
     },
     {
      "key": "d",
@@ -470,19 +470,19 @@
    "options": [
     {
      "key": "a",
-     "text": "End the conversation and start again"
+     "text": "End the conversation and ask the customer to start again"
     },
     {
      "key": "b",
-     "text": "Send an empty string as a normal result"
+     "text": "Send an empty string back as a normal, successful tool_result block"
     },
     {
      "key": "c",
-     "text": "Skip the result and send the next user message"
+     "text": "Skip the tool_result and send the next user message instead"
     },
     {
      "key": "d",
-     "text": "Send a tool_result with is_error: true and a clear message, such as \"Delivery system unavailable, try again later\""
+     "text": "Send a tool_result with is_error: true and a short, clear message"
     }
    ],
    "answer": [
@@ -532,7 +532,7 @@
     },
     {
      "key": "d",
-     "text": "Sampling"
+     "text": "Sampling requests"
     }
    ],
    "answer": [
@@ -570,7 +570,7 @@
    "options": [
     {
      "key": "a",
-     "text": "Keep email away from the agent that reads the web, and route any email through a step a person approves"
+     "text": "Keep email out of the web-reading agent, and have a person approve emails"
     },
     {
      "key": "b",
@@ -578,11 +578,11 @@
     },
     {
      "key": "c",
-     "text": "Strip the HTML tags before the agent reads pages"
+     "text": "Strip the HTML tags and scripts from pages before the agent reads them"
     },
     {
      "key": "d",
-     "text": "Ask Claude to judge whether each page is safe first"
+     "text": "Ask Claude to check each page for suspicious text before it reads it"
     }
    ],
    "answer": [
@@ -620,19 +620,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Rotate the key weekly and leave it in the browser"
+     "text": "Rotate the key every week so a leaked copy soon stops working"
     },
     {
      "key": "b",
-     "text": "Move the calls to a backend that keeps the key, and have the browser call that"
+     "text": "Move the calls to a backend that keeps the key; the browser calls that"
     },
     {
      "key": "c",
-     "text": "Disguise the key inside the JavaScript bundle"
+     "text": "Obfuscate the key inside the minified JavaScript bundle before each release"
     },
     {
      "key": "d",
-     "text": "Keep the front-end code in a private repository"
+     "text": "Move the front-end code to a private repository so nobody can read it"
     }
    ],
    "answer": [
@@ -670,19 +670,19 @@
    "options": [
     {
      "key": "a",
-     "text": "A project skill at .claude/skills/release-check/SKILL.md, committed to the repo"
+     "text": "A project skill in .claude/skills/release-check/, committed to the repo"
     },
     {
      "key": "b",
-     "text": "A shared document that people paste in"
+     "text": "A shared document that people paste into each session"
     },
     {
      "key": "c",
-     "text": "An allow rule in .claude/settings.json"
+     "text": "An allow rule for the checklist's commands in .claude/settings.json"
     },
     {
      "key": "d",
-     "text": "A note in each developer's personal CLAUDE.md"
+     "text": "A note in each developer's personal ~/.claude/CLAUDE.md file"
     }
    ],
    "answer": [
@@ -720,19 +720,19 @@
    "options": [
     {
      "key": "a",
-     "text": "Rewrite the prompt"
+     "text": "Rewrite the prompt to ask more clearly for the expected text"
     },
     {
      "key": "b",
-     "text": "Switch to a bigger model and try again"
+     "text": "Switch to a bigger, more capable model and send the same input again"
     },
     {
      "key": "c",
-     "text": "Compare the raw API response in the logs with what the app displayed"
+     "text": "Compare the raw API response in the logs with what the app showed"
     },
     {
      "key": "d",
-     "text": "Raise max_tokens and retry"
+     "text": "Raise max_tokens and retry the request to see if it improves"
     }
    ],
    "answer": [

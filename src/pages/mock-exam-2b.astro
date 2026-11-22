@@ -1,0 +1,29 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHead from '../components/PageHead.astro';
+import Quiz from '../components/Quiz.astro';
+import MockPicker from '../components/MockPicker.astro';
+import { getExam } from '../lib/data';
+import { url, EXAM_MINUTES, EXAM_QUESTIONS } from '../lib/site';
+
+const exam = await getExam('D');
+const questions = exam.questions;
+const minutes = Math.round((questions.length / EXAM_QUESTIONS) * EXAM_MINUTES);
+---
+<BaseLayout title="Mock exam 2b" description="A 43-question CCDV-F style mock exam of short scenarios, with a score per domain and every answer explained.">
+  <PageHead eyebrow="Exam practice · based on unofficial papers" title="Mock exam 2b">
+    <p class="lead">{questions.length} questions in {minutes} minutes (the real exam's pace). Each question is a short, two- or three-sentence scenario with one best answer, and the domains are mixed, with a score by domain at the end. Each question shows its domain and the section of the notes it tests, and links (📚) to the documentation it's based on.
+      The questions are based on, but not copied from, an unofficial practice paper: the scenarios are rewritten, repeats are removed, and the explanations are original. They are not real exam questions.</p>
+    <p class="note">Where the original paper's answer is out of date (prefilling the reply with {'"{"'}, setting temperature to 0), the question has been rewritten around the current answer.</p>
+  </PageHead>
+  <div class="container">
+    <MockPicker current="2b" />
+    <Quiz questions={questions} quizId="mock-d" examMode examMinutes={minutes} />
+  </div>
+</BaseLayout>
+
+<style>
+  .lead { max-width: 52rem; }
+  .note { max-width: 52rem; color: var(--grey); font-size: 0.95rem; }
+  .back { margin: 1rem 0 0; font-weight: 700; }
+</style>

@@ -509,6 +509,23 @@ for (let round = 0; round < 3; round++) {                         // always cap 
   fix={"Use a single agent with good context for coupled work. Save orchestrator-workers for broad tasks that split into independent parts."}
 />
 
+<Exercise title="Workflow, agent or neither?" id="exercise-pattern">
+
+Pick the simplest pattern for each:
+
+1. Translate 50,000 product descriptions into French overnight.
+2. A support bot answers FAQs, but billing disputes need a specialist prompt with account tools.
+3. "Investigate why last night's data pipeline produced 3% fewer rows, and propose a fix."
+
+<div slot="answer">
+
+1. **A single call per item, run through the Batch API** (Anthropic's half-price service for jobs nobody is waiting on, see 5.4). There are no steps to decide.
+2. **Routing workflow.** Classify, then send billing to the specialist prompt and tools.
+3. **Agent.** The path depends on what each query reveals. Add a human gate before any fix is applied.
+
+</div>
+</Exercise>
+
 <SectionSummary points={[
   "Pick the workflow pattern by the shape of the job; each one is just a few Claude calls joined by your code.",
   "**Steps in a fixed order:** prompt chaining, with code checks between steps.",
@@ -538,6 +555,19 @@ The loop is then simple:
 1. Call Claude with the conversation so far and the list of tools.
 2. If `stop_reason` is `tool_use`, run the tool, add the `tool_result` to the conversation, and go back to step 1.
 3. If it's `end_turn`, the job is done: show the answer.
+
+**This code is called the harness.** The **harness** is the loop, plus everything around it that keeps the agent working and safe:
+
+**Agent = Claude (the brain) + the harness (the loop and the rules) + tools (the hands).**
+
+The harness's main jobs, and where each is taught:
+
+- **Run the loop:** call Claude, check `stop_reason`, repeat (this section).
+- **Run the tools:** call your function for each `tool_use` and send back the `tool_result` (8.1).
+- **Manage the context:** keep the history, and trim or summarise it as it grows (6.5).
+- **Enforce the rules:** turn limits, budgets, approvals, permission checks (exit conditions, below, and 7.2), plus retries and logging.
+
+Each call to the Messages API is just one step inside the harness: the "call Claude" step, repeated every turn. **The Batch API can't run an agent:** the loop needs each reply straight away to decide the next step, and batch results can take hours.
 
 **What's here and what's in 8.1:** a single tool round trip (what the `tool_use` and `tool_result` blocks look like, matching IDs, reporting tool errors) is explained in **8.1**. This section is about the **loop around it**: repeating the round trip, and deciding when to stop.
 
@@ -805,7 +835,7 @@ How well an agent picks the right tool depends on how the tools are described an
 />
 
 <SectionSummary points={[
-  "An agent is a loop: call Claude, run any tools it asks for, send the results back, repeat until it stops asking.",
+  "An agent is Claude plus a harness plus tools. The harness is your code: call Claude, run the tools it asks for, send the results back, repeat.",
   "**When `stop_reason` is `tool_use`,** run the tools and send each `tool_result` with the matching ID.",
   "**Always set exits:** a goal check, a maximum number of turns and a token or cost budget.",
   "**Before anything risky or unexpected,** stop and ask a person to approve.",
@@ -814,24 +844,18 @@ How well an agent picks the right tool depends on how the tools are described an
 ## 1.4 Three ways to wire an agent
 
 <ExamRef section="1.4" />
-<Imagine text={"Acme's Java developers and its Python data team both want to build that troubleshooting agent. Who should write the loop that runs it: your team, a ready-made library, or Anthropic?"} />
+<Imagine text={"Acme's Java developers and its Python data team both want to build that troubleshooting agent. Who should write the harness that runs it: your team, a ready-made library, or Anthropic?"} />
 
-### Who runs the agent loop: you, the SDK or Anthropic?
+### Who provides the harness: you, a library, Claude Code or Anthropic?
 
-There are three ways to build the loop from 1.3:
+There are four ways to get the harness from 1.3 (the loop and everything around it): write it yourself, use a library, use a finished one, or let Anthropic run it.
 
-| Way | Who runs the loop | In one line |
-|---|---|---|
-| **Raw Messages API** | You | You write the loop yourself against Claude's basic API |
-| **Agent SDK** | A library inside your program | The engine behind Claude Code, packaged for your own agents |
-| **Claude Managed Agents** | Anthropic, on its servers | The whole agent runs in a **sandbox**, an isolated environment where its actions can't touch anything else |
-
-| | Raw Messages API loop | Agent SDK | Claude Managed Agents |
-|---|---|---|---|
-| **Who runs the loop** | You | The SDK, inside your process | Anthropic, in its sandbox |
-| **What you own** | Everything | Tool execution and the app around it | The app layer and the agent definition |
-| **Choose when** | You need full control, or have constraints a library can't meet | You want a ready loop, context handling and tools in your own environment (Python or TypeScript; no Java version) | You want long-running execution and a managed sandbox |
-| **Watch out** | You maintain all of it | Set `settingSources` explicitly: whether CLAUDE.md and skills load by default has changed between SDK versions | Public beta; sessions stored server-side, so **not** eligible for Zero Data Retention (Anthropic keeping none of your data) or HIPAA (the US health-data law) |
+| | Raw Messages API | Agent SDK | Claude Code | Claude Managed Agents |
+|---|---|---|---|---|
+| **Who provides the harness** | You write it | A library, running inside your program | A finished harness for coding work | Anthropic, on its servers, in a **sandbox** (an isolated environment where the agent's actions can't touch anything else) |
+| **What you own** | Everything | Tool execution and the app around it | Your project, CLAUDE.md, settings and hooks (Domain 3) | The app layer and the agent definition |
+| **Choose when** | You need full control, or have constraints a library can't meet | You want a ready loop, context handling and tools in your own environment (Python or TypeScript; no Java version) | A developer working in a codebase, interactively or in CI | You want long-running execution and a managed sandbox |
+| **Watch out** | You maintain all of it | Set `settingSources` explicitly: whether CLAUDE.md and skills load by default has changed between SDK versions | It's built for coding; for your own product, use the Agent SDK (the same engine) | Public beta; sessions stored server-side, so **not** eligible for Zero Data Retention (Anthropic keeping none of your data) or HIPAA (the US health-data law) |
 
 Whichever you choose, you still do the same four things: decide which tools the agent gets, write its system prompt, run the loop (or let something run it for you), and set exit conditions.
 
@@ -954,6 +978,16 @@ Other agent **frameworks** can also run Claude. They're libraries that provide t
 | **PydanticAI** | Type-safe Python agents built around Pydantic models | You want validated, typed inputs and outputs in Python |
 | **Claude Agent SDK** | Anthropic's own: the engine behind Claude Code | You want Claude Code's tools, permissions, hooks and context handling |
 
+**Graph frameworks** such as LangGraph describe the flow as a diagram you can read in code. Three words come up a lot:
+
+| Term | Plain English | In a ticket pipeline |
+|---|---|---|
+| **Node** | One step in the flow | "Classify the ticket" |
+| **Conditional edge** | A rule in code that picks the next step | "If it's a refund, go to the refund handler" |
+| **Interrupt** | A planned pause until something outside the flow happens | Stop and wait for a person to approve the refund |
+
+Because the route and the pauses live in code, the flow is the same every time and easy to audit. A plain loop can do the same job if you write the branching and the approval gate in code yourself. What matters is that the control flow is in code, not left to the model's judgment.
+
 Whichever you pick, the point is the same: a framework doesn't remove the fundamentals. You still choose the tools, write the system prompt, set exit conditions, and enforce the hard rules in code.
 
 <Gotcha
@@ -964,7 +998,7 @@ Whichever you pick, the point is the same: a framework doesn't remove the fundam
 />
 
 <SectionSummary points={[
-  "You can write the loop yourself, let the Agent SDK run it in your program, or let Anthropic run it (Managed Agents).",
+  "The harness can be yours (raw API), a library's (Agent SDK), a finished one for coding (Claude Code), or Anthropic's (Managed Agents).",
   "**Writing in Java?** There's no Agent SDK, so you write the loop or use the SDK's simple tool runner.",
   "**With the Agent SDK,** set `settingSources` explicitly, or CLAUDE.md and skills may silently not load.",
   "**When a rule must hold,** use an SDK hook: your code checks or blocks each tool call.",
@@ -1067,23 +1101,6 @@ writeFileSync('progress.json', newStateJson);  // e.g. {"done":["users","orders"
 <Imagine text={"To find a bug, the agent must read 50 log files. If they all land in the main conversation, there's no room left to work on the fix."} />
 
 A **subagent** is a second agent that the main agent starts for one sub-task. It gets that task, the minimum context it needs, the tools for that task and clear exit conditions. It works in its own context window and returns only a summary, which keeps the parent's context small. The trade-off: you see only its summary, not how it got there.
-
-<Exercise title="Workflow, agent or neither?" id="exercise-pattern">
-
-Pick the simplest pattern for each:
-
-1. Translate 50,000 product descriptions into French overnight.
-2. A support bot answers FAQs, but billing disputes need a specialist prompt with account tools.
-3. "Investigate why last night's data pipeline produced 3% fewer rows, and propose a fix."
-
-<div slot="answer">
-
-1. **A single call per item, run through the Batch API** (Anthropic's half-price service for jobs nobody is waiting on, see 5.4). There are no steps to decide.
-2. **Routing workflow.** Classify, then send billing to the specialist prompt and tools.
-3. **Agent.** The path depends on what each query reveals. Add a human gate before any fix is applied.
-
-</div>
-</Exercise>
 
 ### Further reading
 
