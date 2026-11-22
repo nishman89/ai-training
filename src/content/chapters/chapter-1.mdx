@@ -622,7 +622,7 @@ Below is the loop written by hand. In **Python** or **TypeScript** you can use t
 
 <Running thread="tool" step={6} adds="a loop around the round trip from step 2. It repeats while `stop_reason` is `tool_use`, up to a turn limit, so Claude can use tools several times. `runToolSafely` is steps 3 and 4: it runs your method, checks the input and catches failures." />
 
-<CodeSwitch title="Order tool, step 6: put it in a loop">
+<CodeSwitch title="Order tool, step 6: put it in a loop" fold>
 
 ```java
 // ── Setup: where the names below come from ──

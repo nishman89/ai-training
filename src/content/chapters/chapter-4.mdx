@@ -107,7 +107,7 @@ A **grader** is whatever scores each eval case. It can be an exact comparison, a
 A common split: code checks on every commit, the slower judge on a scheduled quality run. For a single fixed-format output, a code check alone is enough.
 
 {/* more:4-codecheck */}
-<CodeSwitch title="A code-check grader">
+<CodeSwitch title="A code-check grader" fold>
 
 ```java
 boolean passes(String output) {
@@ -170,7 +170,7 @@ An **LLM judge** reads an output and scores it against a **rubric**, a written g
 2. Run the judge on the same cases and measure how often they agree.
 3. If agreement is low, tighten what each score means, add an example of a good and a bad answer, and re-measure.
 
-<CodeSwitch title="A minimal eval as a regression test">
+<CodeSwitch title="A minimal eval as a regression test" fold>
 
 ```java
 // ── Setup: where the names below come from ──
@@ -248,7 +248,7 @@ The same eval gates deployments: run a new model version against a **pinned base
 {/* code:4.3 */}
 **In code:** a judge is just a second Claude call with the rubric in the prompt. Ask for reasoning first and the score on the last line, so you can parse it.
 
-<CodeSwitch title="An LLM judge with a rubric">
+<CodeSwitch title="An LLM judge with a rubric" fold>
 
 ```java
 // ── Setup: where the names below come from ──

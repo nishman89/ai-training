@@ -5,6 +5,7 @@ import collapsibleSections from './src/lib/rehype-collapsible-sections.mjs';
 import tidyLists from './src/lib/rehype-tidy-lists.mjs';
 import glossary from './src/lib/rehype-glossary.mjs';
 import newLines from './src/lib/rehype-new-lines.mjs';
+import foldLongCode from './src/lib/rehype-fold-long-code.mjs';
 
 // GitHub Pages serves a project site from /<repo-name>/.
 // SITE_URL and BASE_PATH are set by the deploy workflow; the defaults suit local development.
@@ -12,5 +13,5 @@ export default defineConfig({
   site: process.env.SITE_URL ?? 'http://localhost:4321',
   base: process.env.BASE_PATH ?? '/',
   trailingSlash: 'always',
-  integrations: [mdx({ rehypePlugins: [newLines, tidyLists, collapsibleSections, glossary] })],
+  integrations: [mdx({ rehypePlugins: [newLines, foldLongCode, tidyLists, collapsibleSections, glossary] })],
 });

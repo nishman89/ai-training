@@ -370,7 +370,7 @@ Instead of describing the format in the prompt, give the API a **schema** (a des
 
 <Running thread="call" step={5} from={1} adds="a fixed shape for the answer: the reply text, a category, and whether a person should take over. Your code gets a typed object, not text to pick apart." />
 
-<CodeSwitch title="Acme assistant, step 5: get a fixed shape back">
+<CodeSwitch title="Acme assistant, step 5: get a fixed shape back" fold>
 
 ```java
 // ── Setup: where the names below come from ──
@@ -457,7 +457,7 @@ if (answer.needs_human) handOver(answer);   // ← new: your code can now act on
 
 **Strict tool use in code:** the other way to get guaranteed structure is to define a tool whose parameters are the fields you want, and mark it `strict`. Claude "calls" the tool, and its arguments are your extracted data.
 
-<CodeSwitch title="Structured output via a strict tool">
+<CodeSwitch title="Structured output via a strict tool" fold>
 
 ```java
 // ── Setup: where the names below come from ──

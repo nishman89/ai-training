@@ -158,7 +158,7 @@ export const TIP_CARDS: TipCard[] = [
       ['"Send it as base64"', 'Base64 is just packaging: it makes data ~33% bigger and changes no limit'],
       ['"Put it in the system prompt to use caching"', 'Caching makes repeated input cheaper, not smaller; the window still fills'],
       ['"Add your own retry loop"', 'The SDK already retries with backoff; your loop multiplies attempts'],
-      ['"Force the tool with tool_choice"', 'Rejected on Opus 5.5; use auto + strict tools or structured outputs'],
+      ['"Force the tool with tool_choice"', 'Fails with manual extended thinking, and on Opus 5.5, Sonnet 5.5 and Fable 5.2: use auto (or none) + strict tools or structured outputs'],
     ] },
     read: ['6.5', '6.3', '7.2', '2.4'],
   },
@@ -170,7 +170,7 @@ export const TIP_CARDS: TipCard[] = [
     table: { head: ['Older advice', 'On current models'], rows: [
       ['Prefill the assistant turn (e.g. with "{") for clean JSON', 'Rejected with a 400. Use structured outputs (`output_config.format`) or a strict tool'],
       ['Set temperature / top_p / top_k to control output; "low temperature for classification, high for brainstorming"', 'Non-default values are rejected on Opus 5.5 and Sonnet 5.5. Steer through the prompt; test properties. If a question only offers temperature values, pick low for consistency and high for variety'],
-      ['Force a tool with `tool_choice: any` or `tool`', 'Rejected on Opus 5.5. Keep `auto`, use strict tools or structured outputs'],
+      ['Force a tool with `tool_choice: any` or `tool`', 'Not allowed with manual extended thinking, nor on Opus 5.5, Sonnet 5.5 or Fable 5.2. Only `auto` or `none`; add strict tools or structured outputs'],
       ['Turn thinking on with a fixed `budget_tokens`', 'Thinking is adaptive; set `effort` instead. Disabling or a budget returns a 400 on Opus 5.5'],
       ['Read the answer from `content[0].text`', 'A reply can start with a thinking block. Pick blocks by `type`'],
       ['A 200K-token context window', 'Current models have 1M tokens (5.1)'],

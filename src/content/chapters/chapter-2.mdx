@@ -74,7 +74,7 @@ A request to `POST /v1/messages` needs three fields and two headers. Everything 
 | `messages` | The conversation: alternating `user` and `assistant` turns | Yes |
 | `system` | Standing instructions for the whole conversation (a top-level field, **not** the first message; see the note below) | No |
 | `tools`, `tool_choice` | Functions Claude may ask you to run (Domain 8) | No |
-| `stream` | Receive the reply piece by piece as **server-sent events** (a standard way for a server to push data over one open HTTP connection; see 2.3) | No |
+| `stream` | Receive the reply piece by piece as **server-sent events (SSE)** (a standard way for a server to push data over one open HTTP connection; see 2.3) | No |
 
 **What the request actually looks like.** Here is one complete request, as it goes over the wire: the headers first, then the JSON body.
 
@@ -214,7 +214,7 @@ app.post('/chat', async (req, res) => {
 
 <Running thread="call" step={1} adds="one call to Claude: a client, a request with a system prompt and the customer's question, and printing the reply." />
 
-<CodeSwitch title="Acme assistant, step 1: make the call">
+<CodeSwitch title="Acme assistant, step 1: make the call" fold>
 
 ```java
 // ── Setup: where the names below come from ──
@@ -520,7 +520,7 @@ console.log(`in=${msg.usage.input_tokens} out=${msg.usage.output_tokens}`);
 
 </CodeSwitch>
 
-<CodeSwitch title="Handle every stop_reason">
+<CodeSwitch title="Handle every stop_reason" fold>
 
 ```java
 // ── Setup: where the names below come from ──
@@ -929,7 +929,7 @@ Fixes: check `stop_reason` before parsing; raise `max_tokens` or, better, **spli
 ## 2.3 Streaming
 
 <ExamRef section="2.3" />
-<Imagine text={"Customers stare at an empty chat box for eight seconds while a long answer is generated, and some think it's broken. You want the words to appear as they're written, like someone typing."} />
+<Imagine text={"A customer asks \"Why is my router light red?\" and stares at an empty chat box for eight seconds while the answer is written. Some customers think it's broken. You want the words to appear as they're written, like someone typing."} />
 
 ### When to stream
 
@@ -941,18 +941,35 @@ Fixes: check `stop_reason` before parsing; raise `max_tokens` or, better, **spli
 
 ### The event sequence
 
-A streamed reply arrives as a series of small, named messages called **events**. Each reply is built from **content blocks** (a text block, a tool request), and the events tell you when each block starts, what to add to it, and when it's finished.
+**Start with the question.** A customer types *"Why is my router light red?"* and presses Send. Your server sends the usual request (2.1) with one extra field, `"stream": true`. The customer's question travels **in the request**. Everything that comes back is **Claude's reply**, delivered in small, named pieces called **events** over the next second or two, as **server-sent events (SSE)**.
 
-<Flow caption="Server-sent events for one streamed message" steps={[
-  { title: 'message_start', sub: 'empty shell' },
-  { title: 'content_block_start', sub: 'block type + index' },
-  { title: 'content_block_delta', sub: 'append fragment' },
+So `message_start` means "**Claude's** reply is starting". It has nothing to do with the user's message, which was sent already.
+
+Here's that one reply, event by event, next to what the customer sees:
+
+| When | Event | What it carries | What the customer sees |
+|---|---|---|---|
+| 0.0 s | *(your request goes out)* | The question, with `"stream": true` | Their question, and a typing indicator |
+| 0.3 s | `message_start` | An empty reply: its `id`, the model, the input token count | Still the typing indicator |
+| 0.3 s | `content_block_start` | "Block 0 is a **text** block" | Nothing new yet |
+| 0.4 s | `content_block_delta` | The first words: *"Your router light"* | *Your router light* |
+| 0.5 s | `content_block_delta` | More words: *" is red because…"* | *Your router light is red because…* (words keep arriving) |
+| 1.8 s | `content_block_stop` | "Block 0 is finished" | The full answer |
+| 1.8 s | `message_delta` | **Why** it stopped (`end_turn`) and the final output token count | Nothing new |
+| 1.8 s | `message_stop` | "The reply is finished" | Typing indicator gone. Your app saves the reply to the history |
+
+A **content block** is one part of a reply: a piece of text, a tool request or Claude's thinking. This reply has one text block, so the start → delta → stop group happens once. A reply with thinking, then text, then a tool request repeats it three times, with `index` 0, 1 and 2.
+
+<Flow caption="The same events as a sequence: the middle three repeat once per content block" steps={[
+  { title: 'message_start', sub: 'reply begins' },
+  { title: 'content_block_start', sub: 'new block + type' },
+  { title: 'content_block_delta', sub: 'add a fragment' },
   { title: 'content_block_stop', sub: 'block complete' },
   { title: 'message_delta', sub: 'stop_reason, usage' },
-  { title: 'message_stop', sub: 'message is whole' },
+  { title: 'message_stop', sub: 'reply complete' },
 ]} />
 
-Every event has a `type`. Here's what each one means, in the order they arrive:
+**As a reference**, here's what each event means and what your code does with it:
 
 | # | Event | What it carries | What your code does |
 |---|---|---|---|
@@ -1000,9 +1017,19 @@ A `tool_use` block's input arrives as JSON fragments, so it isn't valid JSON unt
 
 ### Interrupted streams
 
-<Imagine text={"A customer's train goes into a tunnel halfway through a reply. The next time they type, the bot fails with a strange error about a tool."} />
+<Imagine text={"The same customer asks the same question, this time on a train. Halfway through the answer, the train goes into a tunnel."} />
 
-A stream *ending* isn't the same as a message *completing*. Only `message_stop` means the message is whole. A common bug: the code saves whatever it has received when its read loop ends. If the connection drops, that saves a half-built reply into the conversation history, and the error only appears on the **next** request.
+A stream **ending** isn't the same as a reply **completing**. Only `message_stop` means the reply is whole. Here's the same reply as before, cut off part-way:
+
+| When | Event | What the customer sees | What your app should do |
+|---|---|---|---|
+| 0.3 s | `message_start` | The typing indicator | Start building the reply in memory |
+| 0.4 s | `content_block_delta`: *"Your router light"* | *Your router light* | Show it, and keep collecting |
+| 0.5 s | `content_block_delta`: *" is red because…"* | *Your router light is red because…* | Show it, and keep collecting |
+| 0.6 s | ✂ **Connection lost.** No `content_block_stop`, no `message_delta`, no `message_stop` | The half sentence, frozen | **Don't save it.** Throw the partial reply away |
+| Back in signal | *(your app sends the same request again)* | "Connection lost, trying again…", then the full answer | Retry from the last complete turn: the history still ends with the customer's question |
+
+**The common bug:** the code saves whatever it has received when its read loop ends. Now the history holds a half reply. If it was text, Claude's next answer builds on a broken sentence. If it was a **tool request**, it's worse: the **next** request fails with a 400 error, as the step-by-step example below shows.
 
 <WhenThen whenLabel="When the stream…" thenLabel="…do this" rows={[
   { when: 'reaches message_stop', then: 'Append the assembled message to history, then check stop_reason' },
@@ -1012,7 +1039,7 @@ A stream *ending* isn't the same as a message *completing*. Only `message_stop` 
 
 <Running thread="call" step={2} adds="streaming: the words appear as Claude writes them, and you only keep the reply once it has finished." />
 
-<CodeSwitch title="Acme assistant, step 2: stream the reply">
+<CodeSwitch title="Acme assistant, step 2: stream the reply" fold>
 
 ```java
 // ── Setup: where the names below come from ──
@@ -1079,29 +1106,31 @@ const msg = await stream.finalMessage();   // ← new: waits for the end; fails 
 In Java, `MessageAccumulator` rebuilds the full message and mid-stream failures throw `SseException`; in Python, `stream.get_final_message()` does the same job.
 
 <PictureIt title="A dropped stream, step by step">
-**The scenario:** a chat UI streams Claude's reply. Claude has decided to call a tool, and the customer's train goes into a tunnel.
+**The scenario:** the same customer, the same question. This time Claude decides to check their line before answering, so its reply starts with a **tool request** (8.1), and the train goes into the tunnel while that request is still arriving.
 
 #### What the app received before the connection dropped
 
 ```text
 event: message_start          {"message": {"id": "msg_01...", "content": []}}
-event: content_block_start    {"index": 0, "content_block": {"type": "tool_use", "id": "toolu_01A", "name": "get_order_status", "input": {}}}
-event: content_block_delta    {"index": 0, "delta": {"type": "input_json_delta", "partial_json": "{\"order_id\": \"A-12"}}
+event: content_block_start    {"index": 0, "content_block": {"type": "tool_use", "id": "toolu_01A", "name": "check_line_status", "input": {}}}
+event: content_block_delta    {"index": 0, "delta": {"type": "input_json_delta", "partial_json": "{\"account_id\": \"AC-7"}}
    ✂  connection lost: no content_block_stop, no message_delta, no message_stop
 ```
 
 #### The bug
 
-The app's read loop ends, and it saves what it has to the conversation history: an assistant turn with a `tool_use` whose input is the half-finished text `{"order_id": "A-12`.
+The app's read loop ends, and it saves what it has to the conversation history: an assistant turn with a `tool_use` whose input is the half-finished text `{"account_id": "AC-7`.
 
 #### Where it blows up: the NEXT request, not this one
+
+The customer types *"Hello?"*. The app sends the history, including that broken turn:
 
 ```text
 400 invalid_request_error: the tool_use block in the previous assistant turn
 has no matching tool_result / malformed input
 ```
 
-The team spends a morning looking at the tool schema, which was never the problem. **Fix:** only append to history after `message_stop`. If the stream drops, throw away the partial turn and retry from the last complete one.
+The team spends a morning looking at the tool schema, which was never the problem. **Fix:** only append to history after `message_stop`. If the stream drops, throw away the partial turn and retry from the last complete one, which ends with *"Why is my router light red?"*.
 
 </PictureIt>
 
@@ -1220,7 +1249,7 @@ The official SDKs retry connection errors, 408, 409, 429 and 5xx automatically, 
 
 <Running thread="call" step={3} from={1} adds="retry and timeout settings on the client, and a friendly message for when the retries run out." />
 
-<CodeSwitch title="Acme assistant, step 3: survive busy moments">
+<CodeSwitch title="Acme assistant, step 3: survive busy moments" fold>
 
 ```java
 // ── Setup: where the names below come from ──
@@ -1292,7 +1321,7 @@ try {   // ← new
 </CodeSwitch>
 {/* /more */}
 
-<CodeSwitch title="Handle errors by type">
+<CodeSwitch title="Handle errors by type" fold>
 
 ```java
 // ── Setup: where the names below come from ──

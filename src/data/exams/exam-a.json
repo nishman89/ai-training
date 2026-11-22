@@ -3693,6 +3693,56 @@
     "title": "Model Context Protocol: introduction",
     "url": "https://modelcontextprotocol.io/docs/getting-started/intro"
    }
+  },
+  {
+   "id": "a-74",
+   "exam": "A",
+   "n": 74,
+   "chapter": 8,
+   "lo": "tool_choice with thinking",
+   "ref": "8.3 tool_choice",
+   "k": "Apply",
+   "select": 1,
+   "blocks": [
+    {
+     "t": "p",
+     "text": "An agent on an older model uses manual extended thinking (thinking type \"enabled\") together with tools. To make sure it always looks something up, the developer sets tool_choice to {\"type\": \"any\"}. Every request now fails with a 400 error. Which change fixes it while keeping thinking on?"
+    }
+   ],
+   "options": [
+    {
+     "key": "a",
+     "text": "Set tool_choice to tool, naming the lookup tool directly"
+    },
+    {
+     "key": "b",
+     "text": "Use auto (or none), and say in the prompt when to look up"
+    },
+    {
+     "key": "c",
+     "text": "Lower the effort level so that forced tool calls are allowed"
+    },
+    {
+     "key": "d",
+     "text": "Keep any, and strip the thinking blocks from the history"
+    }
+   ],
+   "answer": [
+    "b"
+   ],
+   "explanation": {
+    "intro": "any and tool force a tool call, which clashes with extended thinking: only auto and none are accepted. On Opus 5.5, Sonnet 5.5 and Fable 5.2, which always think, forced tool use is rejected too.",
+    "options": {
+     "a": "tool also forces a call, so it fails in exactly the same way.",
+     "b": "Correct: thinking stays on, and the prompt tells Claude when the tool is needed.",
+     "c": "Effort changes how much Claude thinks, not which tool_choice values are allowed.",
+     "d": "any stays invalid, and removing thinking blocks from the latest turn causes its own error."
+    }
+   },
+   "source": {
+    "title": "Define tools",
+    "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+   }
   }
  ]
 }

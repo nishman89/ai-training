@@ -88,7 +88,7 @@ MCP doesn't make Claude smarter or the tool faster. It standardises how tools ar
 
 <Running thread="tool" step={1} adds="an ordinary method that looks up an order, and the description Claude will see." />
 
-<CodeSwitch title="Order tool, step 1: your method and its description">
+<CodeSwitch title="Order tool, step 1: your method and its description" fold>
 
 ```java
 // ── Setup: where the names below come from ──
@@ -159,7 +159,7 @@ The two halves are linked only by the **name**. When Claude asks for `get_order_
 
 <Running thread="tool" step={2} adds="the round trip that connects them: ask, run your method, send the answer back." marks={false} />
 
-<CodeSwitch title="Order tool, step 2: the round trip">
+<CodeSwitch title="Order tool, step 2: the round trip" fold>
 
 ```java
 // ── Setup: where the names below come from ──
@@ -333,7 +333,7 @@ Claude decides which tool to use by reading the name and description of every to
 {/* more:8-describe */}
 **Example:** two definitions of the same tool. Claude reads only the name, description and schema, so the second one gets picked correctly far more often.
 
-<CodeSwitch title="A tool description that says when, and when not">
+<CodeSwitch title="A tool description that says when, and when not" fold>
 
 ```java
 // ── Setup: where the names below come from ──
@@ -431,7 +431,7 @@ Return failures as a `tool_result` with `is_error: true` and a useful message, s
 
 <Running thread="tool" step={3} adds="a `try`/`catch` around your method. If it fails, the `tool_result` says so, with `is_error: true`." />
 
-<CodeSwitch title="Order tool, step 3: when your method fails">
+<CodeSwitch title="Order tool, step 3: when your method fails" fold>
 
 ```java
 // ── Setup: where the names below come from ──
@@ -517,7 +517,7 @@ The arguments in a `tool_use` block are **untrusted input**, just like a form a 
 
 <Running thread="tool" step={4} adds="a check on Claude's input before your method runs. Bad input gets a clear error back, so Claude can fix it or ask the customer." />
 
-<CodeSwitch title="Order tool, step 4: check Claude's input">
+<CodeSwitch title="Order tool, step 4: check Claude's input" fold>
 
 ```java
 // ── Setup: where the names below come from ──
@@ -723,16 +723,34 @@ It lets Claude operate a desktop through screenshots.
 
 ### Must Claude call a tool? tool_choice
 
-`tool_choice` is a request setting that controls whether Claude may, must or must not call a tool.
+`tool_choice` isn't a method you call. It's a **setting in the request**, like `max_tokens`, that says whether Claude has to use a tool or gets to decide:
 
-| `tool_choice` | Meaning |
-|---|---|
-| `auto` (default) | Claude decides whether to call a tool |
-| `any` | Must call some tool |
-| `tool` + name | Must call that specific tool (forced) |
-| `none` | Must not call tools |
+```python
+client.messages.create(
+    model="claude-sonnet-5-5",
+    max_tokens=4096,
+    tools=[get_line_status, book_engineer],
+    tool_choice={"type": "auto"},      # ← a setting in the request, not a method
+    messages=[...],
+)
+```
 
-**Model check:** Claude Opus 5.5 rejects the forcing options (`any` and `tool`) with a 400 error, so code that forced a tool breaks when you upgrade. On that model, keep `auto`, make the tool `strict`, and say in the prompt when it applies. For a guaranteed JSON shape, use structured outputs (`output_config.format`).
+| `type` | Meaning | Think of it as… |
+|---|---|---|
+| `auto` (the default) | Claude decides: use a tool, or just answer | "Call a colleague if you need to" |
+| `any` | Claude must use a tool, any one | "You must call someone before answering" |
+| `tool`, plus a `name` | Claude must use that specific tool | "You must call Dave" |
+| `none` | Claude can't use tools this turn | "No phone calls" |
+
+**Forcing a tool doesn't mix with thinking.** `any` and `tool` *force* a tool call, and that clashes with Claude thinking first:
+
+| Situation | `any` / `tool` | Use instead |
+|---|---|---|
+| Manual extended thinking (`thinking: {type: "enabled"}`, older models) | 400 error | `auto` or `none` |
+| Opus 5.5, Sonnet 5.5, Fable 5.2 (they always think) | 400 error | `auto` with a `strict` tool, or structured outputs (6.3) |
+| Other models with adaptive thinking (such as Haiku 5.5) | Accepted, but the forced call **skips** thinking | `auto`, if you want Claude to think first |
+
+So if an agent uses thinking and tools and its requests fail with a 400, check `tool_choice` first. Switching to the other forcing option doesn't help, and nor does changing the effort level. Use `auto` and say in the prompt when the tool should be used.
 
 ### How many at once? Parallel tool use
 
@@ -760,7 +778,7 @@ Older models were sometimes reluctant to ask for several tools at once, so you m
 
 <SectionSummary points={[
   "Three questions shape every tool: who runs it (your code or Anthropic), must Claude call one (`tool_choice`), and how many at once (parallel).",
-  "**Forcing a tool** with `tool_choice` is rejected on Opus 5.5. Use `auto` with a clear description instead.",
+  "**Forcing a tool** (`any` or `tool`) fails with manual extended thinking and on Opus 5.5, Sonnet 5.5 and Fable 5.2. Use `auto` (or `none`), with a clear description and a strict tool.",
   "**When `stop_reason` is `pause_turn`,** send the request again as it is to let the server tool continue.",
   "**Computer use** suits systems with no API: it's slower, so run it isolated with approval for risky steps.",
 ]} />
@@ -850,7 +868,7 @@ SSE (Server-Sent Events) is the older remote transport and isn't recommended for
 
 <Running thread="tool" step={5} adds="packaging: the same method becomes an MCP server. The description now sits next to the method, and any MCP app (Claude Code, Claude Desktop, your own agent) can use it without copying code." />
 
-<CodeSwitch title="Order tool, step 5: share it as an MCP server">
+<CodeSwitch title="Order tool, step 5: share it as an MCP server" fold>
 
 ```java
 // ── Setup: where the names below come from ──
