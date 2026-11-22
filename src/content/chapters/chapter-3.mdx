@@ -301,6 +301,8 @@ exit 0                                        # anything else: allowed
 
 <Explain title="Reading it" steps={["The matcher (`Bash`) only decides that this script runs for Bash commands; it knows nothing about which command.", "The script reads the JSON on standard input and pulls out `tool_input.command`.", "If it matches a dangerous pattern, it prints a reason to standard error and exits with **2**, which blocks the command and shows Claude the reason.", "Exit code **1** would only report an error and let the command run anyway, a common bug."]} />
 
+**Note:** this hook is a **blocklist**: it refuses a few known-dangerous patterns, so a variation it doesn't list (`rm -r -f`) gets through. Use it as an extra layer on top of tight permissions, not as your only protection (7.2 compares blocklists and allow-lists).
+
 **The formatter case, in full:** a PostToolUse hook that runs Prettier on every file Claude edits.
 
 ```json

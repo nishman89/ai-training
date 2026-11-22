@@ -142,6 +142,16 @@ const pom = `<dependency>
         <div class="fact card fact--pink"><span class="fact__big">720</span><span>out of 1,000 to pass (scaled score)</span></div>
         <div class="fact card card--dark"><span class="fact__big">8</span><span>domains, weighted very unevenly (below)</span></div>
       </div>
+      <div class="card eligibility" data-testid="eligibility">
+        <h3>Who can sit the exam</h3>
+        <ul>
+          <li><strong>Only people at Claude Partner Network companies.</strong> You register with your work email on the partner company's domain; personal email addresses aren't accepted. Customers and non-partners can't currently be certified.</li>
+          <li><strong>Booked through Pearson VUE,</strong> taken online with a proctor or at a test centre. US$125 before any partner discount.</li>
+          <li><strong>The pass mark is a scaled score:</strong> 720 on a scale of 100 to 1,000. That isn't the same as 72% of answers correct. The quizzes and mocks on this site use 72% as a rough practice target only.</li>
+          <li><strong>Valid for 12 months</strong> from the day you pass.</li>
+        </ul>
+        <p class="muted small">Not at a partner company? Everything on this site still works as Claude developer training; you just can't book the exam yet. Source: Anthropic's certification FAQ on the Partner Academy.</p>
+      </div>
       <div class="table-wrap weights">
         <table>
           <thead><tr><th>Domain</th><th>Weight</th><th>≈ Questions</th><th></th></tr></thead>
@@ -240,6 +250,9 @@ const pom = `<dependency>
   .intro { display: grid; gap: 2.5rem; }
   .lead { border-left: 8px solid var(--pink); }
   .codenote { border-left: 8px solid #5b6b80; }
+  .eligibility { margin-top: 1rem; border-left: 8px solid var(--pink); }
+  .eligibility h3 { margin-top: 0; }
+  .eligibility ul { margin: 0 0 0.5rem; padding-left: 1.2rem; display: grid; gap: 0.4rem; }
   .codenote p:last-child { margin-bottom: 0; }
   .lead p:last-child { margin-bottom: 0; }
   .grid h3 { margin-top: 0.25rem; }

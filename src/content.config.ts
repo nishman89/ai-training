@@ -26,7 +26,7 @@ const block = z.discriminatedUnion('t', [
 const question = z
   .object({
     id: z.string(),
-    exam: z.enum(['A']),
+    exam: z.enum(['A', 'B', 'C']),
     n: z.number().int(),
     chapter: z.number().int().min(1).max(8),
     lo: z.string(),
@@ -45,11 +45,11 @@ const question = z
   .refine((q) => q.answer.length === q.select, { message: 'answer count must match "select"' })
   .refine((q) => q.answer.every((a) => q.options.some((o) => o.key === a)), { message: 'answer is not an option' });
 
-/** The practice question bank (set A): questions written for this site, tagged by domain. */
+/** Practice question banks: set A (the main mock and domain quizzes) and set B (the beta mock exam). Written for this site, tagged by domain. */
 const exams = defineCollection({
   loader: glob({ pattern: 'exam-*.json', base: './src/data/exams' }),
   schema: z.object({
-    set: z.enum(['A']),
+    set: z.enum(['A', 'B', 'C']),
     version: z.string(),
     questions: z.array(question).min(1),
   }),

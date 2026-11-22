@@ -11,7 +11,7 @@ const questions = await getMockExam(QUESTIONS_PER_CHAPTER);
 <BaseLayout title="Mock exam" description="A timed CCDV-F style mock exam: questions weighted by domain, with a score per domain and every answer explained.">
   <PageHead eyebrow="Exam practice" title="Mock exam">
     <p class="lead">The real CCDV-F exam is {EXAM_QUESTIONS} multiple-choice and multiple-response questions in {EXAM_MINUTES} minutes,
-      scored 100–1,000 with 720 to pass. This mock uses the same domain weighting ({questions.length} questions), a timer and a score by domain.
+      scored 100–1,000 with 720 to pass. That's a scaled score, not 72% correct; this mock uses 72% only as a rough practice target. This mock uses the same domain weighting ({questions.length} questions), a timer and a score by domain.
       Questions are original practice items, not real exam questions. Each one links (📚) to the official Claude documentation or Anthropic article it's based on, so you can check the answer at source.</p>
     <p class="back no-print"><a href={url()}>← All domains</a></p>
   </PageHead>
@@ -29,6 +29,7 @@ const questions = await getMockExam(QUESTIONS_PER_CHAPTER);
       </ul>
       <p class="official__note">Try the official three first, then this mock. Free "CCDV-F practice exam" sites are unofficial, and some still teach behaviour that has since changed.</p>
     </aside>
+    <p class="next card no-print" data-testid="beta-link"><span class="beta">Beta</span> More practice: <a href={url('mock-exam-beta')}><strong>Mock exam 2</strong></a> (53 new questions, mixed order) or the <a href={url('mock-exam-quick')}><strong>Quick mock</strong></a> (15 questions, 35 minutes).</p>
     <Quiz questions={questions} quizId="mock-a" examMode />
   </div>
 </BaseLayout>
@@ -38,5 +39,7 @@ const questions = await getMockExam(QUESTIONS_PER_CHAPTER);
   .back { margin: 1rem 0 0; font-weight: 700; }
   .official { margin: 0 0 2rem; border-top: 6px solid #3b6fd8; }
   .official h2 { margin-top: 0.2rem; }
+  .next { margin: 0 0 2rem; padding: 0.9rem 1.2rem; }
+  .beta { display: inline-block; margin-right: 0.4rem; padding: 0.05rem 0.55rem; border-radius: 999px; background: #f5a623; color: #2d2a2b; font-weight: 800; font-size: 0.8rem; letter-spacing: 0.04em; text-transform: uppercase; }
   .official__note { color: var(--grey); font-size: 0.9rem; margin-bottom: 0; }
 </style>

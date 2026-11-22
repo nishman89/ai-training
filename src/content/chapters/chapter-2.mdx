@@ -678,6 +678,17 @@ A token is the unit Claude reads, writes and bills in: a chunk of text of roughl
 {/* more:2-tokens */}
 **Example:** the sentence *"Please summarise this invoice."* is about 6–8 tokens. A one-page email is roughly 500 tokens; a 300-page book is roughly 100,000. You never count by hand: the API reports exact numbers in `usage` on every reply, and 5.5 shows how to count before sending.
 
+**Picturing token counts:** at about ¾ of a word per token, and roughly 400 to 500 words per page:
+
+| Tokens | ≈ Words | ≈ Pages | Typical example |
+|---|---|---|---|
+| 500 | 375 | 1 | An email |
+| 5,000 | 3,750 | 8–10 | A long system prompt, or a short report |
+| 30,000 | 22,500 | 45–60 | A company policy handbook |
+| 100,000 | 75,000 | 150–300 | A book |
+
+**When a question gives a size in tokens** ("a 30,000-token policy manual"), it's hinting that a big block of text is being sent. Ask: is it the **same every time**? Think caching (5.3). Is only **part of it** needed for each question? Think retrieval, RAG (6.5).
+
 To see where the tokens in a reply are reported, see `usage` in 2.1; to turn them into a daily bill, see the worked example in 5.5.
 {/* /more */}
 
@@ -1675,6 +1686,33 @@ prompts/
 config/production.yaml       ← claude.model: claude-sonnet-5-5   prompt: support-system.v7
 ```
 
+### Keep each environment's configuration separate
+
+<Imagine text={"A developer tries a new system prompt and a newer model in staging. The next morning, production customers are getting the experimental answers too, because both environments read the same configuration."} />
+
+If staging and production share one configuration, every experiment is live. Give each environment its **own** configuration, and move changes forward on purpose:
+
+```text
+config/staging.yaml       ← claude.model: claude-opus-5-5     prompt: support-system.v8   (experiment)
+config/production.yaml    ← claude.model: claude-sonnet-5-5   prompt: support-system.v7   (released)
+```
+
+- **Separate files (or settings) per environment**, each naming its own model ID and prompt version.
+- **Separate API keys and workspaces** for staging and production, so a staging mistake can't spend production's budget.
+- **Promote, don't share:** a change reaches production only by being copied into production's configuration after it passes the evals, through a reviewed change.
+
+### Changing old Claude code safely
+
+<Imagine text={"A large, old module builds prompts and calls Claude. It has no tests and dozens of callers. Now it must also support a second model provider, and nobody wants to break production."} />
+
+The safe order is the one you'd use for any risky refactor, with one Claude-specific twist:
+
+1. **Pin today's behaviour first** with **characterization tests**: tests that record what the code does now, right or wrong. Because Claude's wording varies, check **properties** (valid JSON, the right fields, a category from the list), not exact text.
+2. **Put an interface in front of the model calls**, such as `ModelClient.complete(request)`, with the current Claude code as its first implementation. Callers switch to the interface one at a time.
+3. **Change in small, tested steps.** Run the tests and the evals after each one, and add the second provider as another implementation of the same interface.
+
+What not to do: a big rewrite from scratch, a long-lived branch that merges everything at the end, or provider `if` statements scattered through the old code. Each makes it hard to see what broke, and when.
+
 ### Organising access: workspaces, limits and the Workbench
 
 In the **Claude Console**, an organisation can be split into **workspaces**, for example one per team or per environment (dev, staging, production). Each workspace has its own API keys, its own **spend and rate limits**, and its own usage reports. A runaway test script in dev then can't use up production's budget, and finance can see what each team spends.
@@ -1686,4 +1724,5 @@ The Console's **Workbench** is a browser playground for drafting and testing pro
   "**Before designing,** agree the scope, when a person takes over, the compliance rules, what success looks like, and the volume.",
   "**Infrastructure needs** (where data may live, speed, sign-in) often decide the platform, so gather them first.",
   "**Separate teams or environments** with workspaces, each with its own keys and limits.",
+  "**Give each environment its own configuration** (model ID, prompt version, keys), and promote changes to production only after evals pass.",
 ]} />

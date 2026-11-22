@@ -13,8 +13,11 @@ interface Props {
   quizId: string;
   /** Full mock exam: adds a start screen, an optional countdown and a per-domain breakdown. */
   examMode?: boolean;
+  /** Exam time in minutes; defaults to the real exam's. A shorter paper gets the same pace. */
+  examMinutes?: number;
 }
-const { questions, quizId, examMode = false } = Astro.props;
+const { questions, quizId, examMode = false, examMinutes = EXAM_MINUTES } = Astro.props;
+const fullExam = examMinutes === EXAM_MINUTES;
 const chapterTotals = Object.entries(
   questions.reduce<Record<number, number>>((acc, q) => ({ ...acc, [q.chapter]: (acc[q.chapter] ?? 0) + 1 }), {}),
 );
@@ -26,9 +29,9 @@ const minutes = Math.ceil(questions.reduce((m, q) => m + MINUTES_PER_K[q.k], 0))
   <div class="card quiz-intro no-print">
     <dl>
       <div><dt>Questions</dt><dd id="question-count" data-testid="question-count">{total}</dd></div>
-      <div><dt>To pass</dt><dd id="pass-mark" data-testid="pass-mark">{passScore} / {total} (≈72%)</dd></div>
+      <div><dt>Practice target</dt><dd id="pass-mark" data-testid="pass-mark" title="The real exam is a scaled score: 720 on a 100–1,000 scale, not a fixed percentage. 72% is a rough practice target.">{passScore} / {total} (≈72%)</dd></div>
       {examMode
-        ? <div><dt>Time allowed</dt><dd>{EXAM_MINUTES} min</dd></div>
+        ? <div><dt>Time allowed</dt><dd>{examMinutes} min</dd></div>
         : <div><dt>Suggested time</dt><dd>~{minutes} min</dd></div>}
     </dl>
     <label class="paged-toggle no-print"><input type="checkbox" id="one-at-a-time" name="one-at-a-time" data-testid="one-at-a-time-toggle" data-paged-toggle checked={total > 20} /> Show one question at a time</label>
@@ -37,8 +40,9 @@ const minutes = Math.ceil(questions.reduce((m, q) => m + MINUTES_PER_K[q.k], 0))
       <div class="start" id="exam-start" data-testid="exam-start" data-start>
         <label for="time-limit">Time limit
           <select id="time-limit" name="time-limit" data-testid="time-limit" data-time-limit>
-            <option value="120">120 minutes — same as the real exam</option>
-            <option value="90">90 minutes — challenge mode</option>
+            {fullExam
+              ? <><option value="120">120 minutes — same as the real exam</option><option value="90">90 minutes — challenge mode</option></>
+              : <option value={examMinutes}>{examMinutes} minutes — the real exam's pace</option>}
             <option value="0">No time limit</option>
           </select>
         </label>
@@ -264,7 +268,7 @@ const minutes = Math.ceil(questions.reduce((m, q) => m + MINUTES_PER_K[q.k], 0))
       results.hidden = false;
       results.classList.toggle('is-pass', attempt.passed);
       quiz.querySelector('[data-score]')!.textContent = String(attempt.score);
-      quiz.querySelector('[data-percent]')!.textContent = `${attempt.percent}% · practice pass mark ≈72%`;
+      quiz.querySelector('[data-percent]')!.textContent = `${attempt.percent}% · practice target ≈72% (the real exam uses a scaled score of 720/1,000)`;
       quiz.querySelector('[data-verdict-label]')!.textContent = attempt.passed ? 'Pass - well done' : 'Not a pass yet - review below';
       results.focus();
       results.scrollIntoView({ behavior: 'smooth', block: 'start' });

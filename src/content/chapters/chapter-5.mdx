@@ -254,6 +254,16 @@ Three words you'll see:
 - **Breakpoint:** the `cache_control` marker. It means "cache everything up to here".
 - **Where the cache lives:** on Anthropic's side, private to your organisation. You don't look anything up: when a new request *starts* with exactly the same text as one cached in the last few minutes, it's reused automatically, and the reply's `usage` shows it as `cache_read_input_tokens`.
 
+**Static or dynamic?** Caching depends on splitting the request into two kinds of content:
+
+| | Static | Dynamic |
+|---|---|---|
+| **Means** | The same on every request | Changes from one request to the next |
+| **Examples** | The policy manual, the role and rules, few-shot examples, tool definitions | The user's question, their name or ID, the time, retrieved chunks |
+| **Where it goes** | First, **before** the cache marker | After the cache marker |
+
+"Static" doesn't mean it can never change. If the company updates the manual, the next request misses the cache, the new version is cached, and every request after that hits it again.
+
 Two ways to mark it:
 
 - **Automatic** - one top-level cache_control; the breakpoint moves forward as the conversation grows · best for multi-turn chat
