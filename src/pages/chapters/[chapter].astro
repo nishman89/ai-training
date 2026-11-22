@@ -5,6 +5,7 @@ import PageHead from '../../components/PageHead.astro';
 import WatchOut from '../../components/WatchOut.astro';
 import DomainOverview from '../../components/DomainOverview.astro';
 import DomainFit from '../../components/DomainFit.astro';
+import DomainSummary from '../../components/DomainSummary.astro';
 import BlueprintSkills from '../../components/BlueprintSkills.astro';
 import { SECTION_TITLES as TITLES } from '../../data/syllabus-sections.mjs';
 const SECTION_TITLES: Record<string, string> = TITLES;
@@ -88,7 +89,7 @@ const mainCount = (await getQuestions(MAIN_SET, data.number)).length;
 
       <DomainOverview chapter={data.number} />
       <BlueprintSkills chapter={data.number} />
-      <p class="fit-jump no-print"><a href="#how-it-fits">🗺️ See how this domain fits together</a> (a one-screen map of the sections, at the end)</p>
+      <p class="fit-jump no-print"><a href="#how-it-fits">🗺️ How this domain fits together</a> · <a href="#domain-summary">★ Domain summary</a> (both at the end)</p>
 
       <div class="chapter-progress no-print" id="chapter-progress" data-testid="chapter-progress" data-chapter-progress data-chapter={data.number} data-total={headings.filter((h) => h.depth === 2).length}>
         <p class="chapter-progress__label"><strong data-progress-count>0</strong> of {headings.filter((h) => h.depth === 2).length} sections done</p>
@@ -104,6 +105,7 @@ const mainCount = (await getQuestions(MAIN_SET, data.number)).length;
       <div class="prose" id="chapter-notes" data-testid="chapter-notes"><Content /></div>
 
       <DomainFit chapter={data.number} />
+      <DomainSummary chapter={data.number} />
 
       <WatchOut chapter={data.number} />
 

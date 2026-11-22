@@ -3,22 +3,23 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import PageHead from '../components/PageHead.astro';
 import { getSummaries } from '../lib/summaries';
 import { url } from '../lib/site';
-import { WATCH_OUTS } from '../data/summary-watchouts';
+import SummaryCard from '../components/SummaryCard.astro';
 
 const domains = await getSummaries();
+const SHORT: Record<number, string> = { 1: 'Agents', 2: 'API & apps', 3: 'Claude Code', 4: 'Evals', 5: 'Models & cost', 6: 'Prompts', 7: 'Security', 8: 'Tools & MCP' };
 const total = domains.reduce((n, d) => n + d.sections.length, 0);
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const fmt = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
 ---
 <BaseLayout title="Summaries" description="Every section summary from the eight CCDV-F domains on one page, for quick revision.">
   <PageHead eyebrow="Quick revision" title="Summaries">
-    <p class="lead">All {total} section summaries on one page, grouped by domain. Each heading links to the full notes, and some
-      sections add a <span class="mini-gotcha">⚠ Watch out</span> line for a common trap, and each domain ends with a link to its "How it all fits together" map.</p>
+    <p class="lead">All {total} section summaries, grouped by domain. Each card shows the one thing to remember; open it for the rest
+      of its points and any <span class="mini-gotcha">⚠ Watch out</span>. Each domain ends with a link to its "How it all fits together" map.</p>
   </PageHead>
 
   <div class="container">
     <nav class="jump no-print" aria-label="Jump to a domain">
-      {domains.map((d) => <a href={`#domain-${d.number}`} data-testid={`jump-domain-${d.number}`}><span>{d.number}</span>{d.title}</a>)}
+      {domains.map((d) => <a href={`#domain-${d.number}`} data-testid={`jump-domain-${d.number}`}><span>{d.number}</span><b class="jump__s">{SHORT[d.number]}</b><b class="jump__t">{d.title}</b></a>)}
     </nav>
 
     {domains.map((d) => (
@@ -32,13 +33,7 @@ const fmt = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').repla
           <a class="btn btn--ghost domain__quiz no-print" href={url(`quiz/${d.number}/a`)}>Domain quiz</a>
         </header>
         <div class="sections">
-          {d.sections.map((s) => (
-            <article class="card sec" data-testid={`summary-${s.number.replace('.', '-')}`}>
-              <h3><a href={`${url(`chapters/${d.number}`)}#${s.slug}`}><span class="sec__no">{s.number}</span> {s.title}</a></h3>
-              <div class="pts">{s.points.map((p, i) => i === 0 ? <p class="pt pt--key"><span class="pt__tag">★ The one thing</span><span set:html={fmt(p)} /></p> : <p class="pt" set:html={fmt(p)} />)}</div>
-              {(WATCH_OUTS[s.number] ?? []).map((w) => <p class="watch" data-testid="watch-out"><span class="watch__tag">⚠ Watch out</span> <span set:html={fmt(w)} /></p>)}
-            </article>
-          ))}
+          {d.sections.map((s) => <SummaryCard sec={s} href={`${url(`chapters/${d.number}`)}#${s.slug}`} />)}
         </div>
         <a class="fit-link no-print" href={`${url(`chapters/${d.number}`)}#how-it-fits`} data-testid={`fit-link-${d.number}`}>🗺️ How Domain {d.number} fits together →</a>
       </section>
@@ -56,11 +51,12 @@ const fmt = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').repla
   .fit-link { display: inline-block; margin-top: 1rem; padding: 0.55rem 1rem; border-radius: 10px; background: var(--charcoal); color: #fff; font-weight: 700; text-decoration: none; }
   .fit-link:hover { background: var(--pink); color: #fff; }
   .mini-gotcha { display: inline-block; padding: 0 0.5rem; border-radius: 999px; background: var(--pink-tint); color: var(--pink-dark); font-weight: 700; font-size: 0.85rem; }
-  .jump { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0 0 2rem; }
+  .jump { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0 0 2rem; padding: 0.6rem 0; background: var(--bg); }
   .jump a { display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.4rem 0.9rem 0.4rem 0.4rem; border-radius: 999px; background: var(--surface); box-shadow: var(--shadow); color: var(--charcoal); text-decoration: none; font-weight: 600; font-size: 0.9rem; }
   .jump a:hover { background: var(--pink-tint); }
   .jump span { display: grid; place-items: center; width: 1.6rem; height: 1.6rem; border-radius: 50%; background: var(--charcoal); color: #fff; font-size: 0.8rem; font-weight: 700; }
   .domain { margin: 0 0 3rem; scroll-margin-top: 5rem; }
+  .jump b { font-weight: 600; }
   .domain__head { display: grid; grid-template-columns: auto 1fr auto; gap: 1rem; align-items: center; padding: 1rem 1.25rem; border-radius: var(--radius); background: var(--charcoal); color: #fff; border-left: 8px solid var(--pink); }
   .domain__head .eyebrow { color: var(--pink-soft); }
   .domain__head h2 { margin: 0; }
@@ -69,7 +65,7 @@ const fmt = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').repla
   .domain__num { font: 700 2.4rem/1 var(--font-head); color: var(--pink); }
   .domain__quiz { color: #fff; border-color: #fff; background: none; padding: 0.45rem 1rem; }
   .domain__quiz:hover { background: #fff; color: var(--charcoal); }
-  .sections { display: grid; gap: 1rem; margin-top: 1rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 26rem), 1fr)); }
+  .sections { display: grid; gap: 1rem; margin-top: 1rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 26rem), 1fr)); align-items: start; }
   .sec { display: flex; flex-direction: column; gap: 0.6rem; border-top: 5px solid var(--charcoal); }
   .sec h3 { margin: 0; font-size: 1.15rem; }
   .sec h3 a { color: var(--charcoal); text-decoration: none; }
@@ -86,8 +82,16 @@ const fmt = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').repla
   .gotcha-tag:hover { background: var(--pink); color: #fff; }
   .gotcha-tag :global(code) { background: rgb(255 255 255 / 0.6); }
   @media (max-width: 40rem) {
+    .jump { position: sticky; top: 4.4rem; z-index: 5; background: var(--bg); flex-wrap: nowrap; overflow-x: auto; margin: 0 -1rem 1.5rem; padding: 0.5rem 1rem; scrollbar-width: none; }
+    .jump::-webkit-scrollbar { display: none; }
+    .jump a { flex: none; font-size: 0.85rem; }
+    .jump__t { display: none; }
+    .domain { scroll-margin-top: 8rem; }
     .domain__head { grid-template-columns: auto 1fr; }
     .domain__quiz { grid-column: 1 / -1; justify-self: start; }
+  }
+  @media (min-width: 40.01rem) {
+    .jump__s { display: none; }
   }
   @media print { .sections { grid-template-columns: 1fr; } .sec { break-inside: avoid; box-shadow: none; border: 1px solid var(--line); } }
 </style>

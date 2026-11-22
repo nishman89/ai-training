@@ -1,0 +1,29 @@
+---
+/** Every section summary of one domain, shown at the end of that domain's page, after "How it fits together". */
+import { getSummaries } from '../lib/summaries';
+import { url } from '../lib/site';
+import SummaryCard from './SummaryCard.astro';
+interface Props { chapter: number; }
+const { chapter } = Astro.props;
+const d = (await getSummaries()).find((x) => x.number === chapter);
+---
+{d && (
+  <section class="dsum" id="domain-summary" data-testid="domain-summary">
+    <p class="dsum__eyebrow">Revise</p>
+    <h2>Domain {chapter} in summary</h2>
+    <p class="dsum__intro">The one thing to remember from each section. Open a card for the rest of its points.</p>
+    <div class="dsum__grid">
+      {d.sections.map((s) => <SummaryCard sec={s} href={`#${s.slug}`} />)}
+    </div>
+    <p class="dsum__all no-print"><a href={url(`summaries#domain-${chapter}`)}>All eight domains on the Summaries page →</a></p>
+  </section>
+)}
+
+<style>
+  .dsum { margin: 2.5rem 0 0; scroll-margin-top: 5rem; }
+  .dsum__eyebrow { margin: 0; font-size: 0.78rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pink-dark); }
+  .dsum h2 { margin: 0.1rem 0 0.3rem; }
+  .dsum__intro { margin: 0 0 1rem; color: var(--grey); }
+  .dsum__grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr)); align-items: start; }
+  .dsum__all { margin: 1rem 0 0; font-weight: 700; }
+</style>

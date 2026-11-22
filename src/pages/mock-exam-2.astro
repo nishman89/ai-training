@@ -1,0 +1,29 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHead from '../components/PageHead.astro';
+import Quiz from '../components/Quiz.astro';
+import MockPicker from '../components/MockPicker.astro';
+import { getExam } from '../lib/data';
+import { url, EXAM_MINUTES } from '../lib/site';
+
+const exam = await getExam('B');
+const questions = exam.questions;
+---
+<BaseLayout title="Mock exam 2" description="A second, 53-question CCDV-F style mock exam in mixed domain order, with a score per domain and every answer explained.">
+  <PageHead eyebrow="Exam practice · based on unofficial papers" title="Mock exam 2">
+    <p class="lead">{questions.length} questions in {EXAM_MINUTES} minutes, in mixed domain order like the real exam,
+      with a score by domain at the end. Each question shows its domain and the section of the notes it tests, and links (📚) to the official documentation it's based on.
+      The questions are based on, but not copied from, unofficial practice papers: the topics match, but the wording, scenarios and explanations are original. They are not real exam questions.</p>
+    <p class="note">Where older material teaches something current models reject (setting temperature, prefilling the reply), the explanation says so and gives the current answer.</p>
+  </PageHead>
+  <div class="container">
+    <MockPicker current="2" />
+    <Quiz questions={questions} quizId="mock-b" examMode />
+  </div>
+</BaseLayout>
+
+<style>
+  .lead { max-width: 52rem; }
+  .note { max-width: 52rem; color: var(--grey); font-size: 0.95rem; }
+  .back { margin: 1rem 0 0; font-weight: 700; }
+</style>

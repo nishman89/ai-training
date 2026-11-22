@@ -2,6 +2,7 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import PageHead from '../components/PageHead.astro';
 import Quiz from '../components/Quiz.astro';
+import MockPicker from '../components/MockPicker.astro';
 import { getExam } from '../lib/data';
 import { url, EXAM_MINUTES, EXAM_QUESTIONS } from '../lib/site';
 
@@ -9,14 +10,14 @@ const exam = await getExam('C');
 const questions = exam.questions;
 const minutes = Math.round((questions.length / EXAM_QUESTIONS) * EXAM_MINUTES);
 ---
-<BaseLayout title="Quick mock (beta)" description="A 15-question CCDV-F style quick mock across all eight domains, timed at the real exam's pace, with every answer explained.">
-  <PageHead eyebrow="Exam practice · Beta" title="Quick mock">
-    <p class="lead"><span class="beta" data-testid="beta-badge">Beta</span> {questions.length} questions in {minutes} minutes (the real exam's pace), covering all eight domains, with a score by domain at the end. The 72% target is a rough guide: the real exam uses a scaled score (720 out of 1,000), not a fixed percentage.
+<BaseLayout title="Quick mock" description="A 15-question CCDV-F style quick mock across all eight domains, timed at the real exam's pace, with every answer explained.">
+  <PageHead eyebrow="Exam practice · based on an unofficial paper" title="Quick mock">
+    <p class="lead">{questions.length} questions in {minutes} minutes (the real exam's pace), covering all eight domains, with a score by domain at the end.
       Good for a quick check between study sessions. Each question shows its domain and the section of the notes it tests, and links (📚) to the official documentation it's based on.
-      These are original practice questions written for this site, not real exam questions.</p>
-    <p class="back no-print"><a href={url('mock-exam')}>← Mock exam 1</a> · <a href={url('mock-exam-beta')}>Mock exam 2</a> · <a href={url()}>All domains</a></p>
+      The questions are based on, but not copied from, an unofficial practice paper: the topics match, but the wording, scenarios and explanations are original. They are not real exam questions.</p>
   </PageHead>
   <div class="container">
+    <MockPicker current="quick" />
     <Quiz questions={questions} quizId="mock-c" examMode examMinutes={minutes} />
   </div>
 </BaseLayout>
@@ -24,6 +25,5 @@ const minutes = Math.round((questions.length / EXAM_QUESTIONS) * EXAM_MINUTES);
 <style>
   .lead { max-width: 52rem; }
   .note { max-width: 52rem; color: var(--grey); font-size: 0.95rem; }
-  .beta { display: inline-block; margin-right: 0.4rem; padding: 0.05rem 0.55rem; border-radius: 999px; background: #f5a623; color: #2d2a2b; font-weight: 800; font-size: 0.8rem; letter-spacing: 0.04em; text-transform: uppercase; vertical-align: middle; }
   .back { margin: 1rem 0 0; font-weight: 700; }
 </style>

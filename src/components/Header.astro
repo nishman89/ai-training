@@ -18,7 +18,7 @@ const links = [
   ['summaries', 'Summaries'],
   ['glossary', 'Glossary'],
   ['exam-tips', 'Exam tips'],
-  ['mock-exam', 'Mock exam'],
+  ['mock-exam-quick', 'Mock exams'],
 ] as const;
 /** External links, opened in a new tab. */
 const external = [
@@ -29,7 +29,7 @@ const external = [
   ['https://code.claude.com/docs', 'Claude Code docs', 'Official Claude Code documentation (opens in a new tab)'],
 ] as const;
 const path = Astro.url.pathname;
-const isActive = (href: string) => (href === url() ? path === href : path.startsWith(href));
+const isActive = (href: string) => (href === url() ? path === href : href.includes('mock-exam') ? path.startsWith(url('mock-exam')) : path.startsWith(href));
 ---
 <header class="site-header" id="site-header" data-testid="site-header">
   <div class="container bar">

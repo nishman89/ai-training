@@ -1,0 +1,38 @@
+---
+/** The three mock papers, in the order to take them, with where each one comes from. Shown on every mock page. */
+import { url } from '../lib/site';
+interface Props { current: 'quick' | '1' | '2'; }
+const { current } = Astro.props;
+const papers = [
+  { id: 'quick', href: 'mock-exam-quick', name: 'Quick mock', meta: '15 questions · 34 minutes', src: 'Based on, but not copied from, an unofficial practice paper. A quick check across all eight domains.' },
+  { id: '1', href: 'mock-exam', name: 'Mock exam 1', meta: '53 questions · 120 minutes', src: 'Written from the content of this site, weighted by domain like the real exam.' },
+  { id: '2', href: 'mock-exam-2', name: 'Mock exam 2', meta: '53 questions · 120 minutes', src: 'Based on, but not copied from, unofficial practice papers. Mixed domain order.' },
+];
+---
+<nav class="mp no-print" aria-label="Mock exams" data-testid="mock-picker">
+  {papers.map((p, i) => (
+    <a class:list={['mp__card', { 'is-current': p.id === current }]} href={url(p.href)} aria-current={p.id === current ? 'page' : undefined}>
+      <span class="mp__n">{i + 1}</span>
+      <span class="mp__body">
+        <strong>{p.name}</strong>{p.id === current && <span class="mp__here"> · you're here</span>}
+        <span class="mp__meta">{p.meta}</span>
+        <span class="mp__src">{p.src}</span>
+      </span>
+    </a>
+  ))}
+</nav>
+<p class="mp__note muted small">All questions are original practice items, not real exam questions. The 72% target is a rough guide: the real exam uses a scaled score (720 out of 1,000).</p>
+
+<style>
+  .mp { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); margin: 0 0 0.5rem; }
+  .mp__card { display: flex; gap: 0.75rem; padding: 0.9rem 1rem; border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); color: var(--charcoal); text-decoration: none; border: 2px solid transparent; }
+  .mp__card:hover { border-color: var(--pink-soft); }
+  .mp__card.is-current { border-color: var(--pink); background: var(--pink-tint); }
+  .mp__n { flex: none; display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%; background: var(--charcoal); color: #fff; font-weight: 800; }
+  .is-current .mp__n { background: var(--pink); }
+  .mp__body { display: grid; gap: 0.15rem; line-height: 1.4; }
+  .mp__here { font-size: 0.85rem; color: var(--pink-dark); font-weight: 700; }
+  .mp__meta { font-size: 0.88rem; font-weight: 700; color: var(--grey); }
+  .mp__src { font-size: 0.9rem; }
+  .mp__note { margin: 0 0 1.5rem; }
+</style>
