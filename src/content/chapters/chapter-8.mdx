@@ -841,6 +841,26 @@ An MCP server can offer three kinds of thing, called its **primitives**. To choo
 | **Resource** | Read-only data, such as documents or records | "Is it something to *read*?" | `inventory://warehouses`, an API spec, a style guide | Your app attaches it |
 | **Prompt** | A reusable, ready-made template | "Is it a workflow users start on purpose?" | `restock-report` (a slash command in Claude Code) | The user picks it |
 
+**Who writes these?** Whoever builds the server. For Jira's MCP server, that's Atlassian: you just connect, and choose which tools to switch on. You only write them yourself if you build your own server, say for your company's stock system. Then each one is just a function with a label on it:
+
+```python
+mcp = MCPServer("inventory")
+
+@mcp.tool()                               # a TOOL: does something
+def reorder_stock(sku: str, quantity: int) -> str:
+    return orders.create(sku, quantity)
+
+@mcp.resource("inventory://warehouses")   # a RESOURCE: something to read
+def list_warehouses() -> str:
+    return warehouses.as_json()
+
+@mcp.prompt()                             # a PROMPT: a ready-made instruction a user picks
+def restock_report(region: str) -> str:
+    return f"Write a restock report for {region}, listing items below 10 units."
+```
+
+When an app connects and asks "what can you do?", the server replies with exactly these three. Not every server offers all three: many only offer tools.
+
 **What it is comes first, who decides second.** Reference documents are resources and "create ticket" is a tool, even if Claude reads the documents "on demand". Only reach for a tool to fetch data when Claude must *search* or *filter* it itself, such as `search_orders(customer_id)`.
 
 **Resources in detail.** A resource has a **URI** (an address) and a **MIME type** that says what kind of content it is (`application/json`, `text/plain`), so the client knows how to read it. There are two kinds:
