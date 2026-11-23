@@ -298,6 +298,8 @@ Claude behaves differently depending on **where** you use it, because each surfa
 | **Claude Code** | Its own system prompt, built-in tools, your CLAUDE.md, settings, hooks and MCP servers | Behaviour depends on the repo's setup, which is why the same agent run headless with different settings behaves differently (1.4) |
 | **Claude apps** (claude.ai, desktop, mobile) | Anthropic's own system prompt, plus features such as projects, memory and connectors | A prompt that works in the app may not work the same through the API. Test it where it will run |
 
+Which surface to pick for which job (chat, CI, your own agent) is covered in **2.5, Choosing a surface**.
+
 ### Putting it together: a production prompt
 
 <Imagine text={"Acme's support bot worked well when a developer tried it in a chat window. Now it has to handle 20,000 real emails a day, every day, and the team needs to know exactly which prompt produced which answer."} />

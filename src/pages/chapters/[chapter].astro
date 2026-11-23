@@ -6,6 +6,7 @@ import WatchOut from '../../components/WatchOut.astro';
 import DomainOverview from '../../components/DomainOverview.astro';
 import DomainFit from '../../components/DomainFit.astro';
 import DomainSummary from '../../components/DomainSummary.astro';
+import Analogies from '../../components/Analogies.astro';
 import BlueprintSkills from '../../components/BlueprintSkills.astro';
 import { SECTION_TITLES as TITLES } from '../../data/syllabus-sections.mjs';
 const SECTION_TITLES: Record<string, string> = TITLES;
@@ -105,6 +106,7 @@ const mainCount = (await getQuestions(MAIN_SET, data.number)).length;
       <div class="prose" id="chapter-notes" data-testid="chapter-notes"><Content /></div>
 
       <DomainFit chapter={data.number} />
+      <Analogies chapter={data.number} />
       <DomainSummary chapter={data.number} />
 
       <WatchOut chapter={data.number} />

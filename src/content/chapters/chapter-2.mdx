@@ -1599,6 +1599,23 @@ A Claude application moves through the same lifecycle as any engineered system. 
 
 <RoleLens dev={"Pin full model IDs, keep prompts in version control, roll out new models behind a flag, and watch the deprecation dates."} test={"A model upgrade is a regression risk: run your eval suite against the new model ID before switching, just as you would run the regression pack before a release."} data={"Prompt and model versions belong in your lineage metadata, so you can explain why last month's classifications differ from this month's."} ba={"Model deprecations are planned change. Put them on the roadmap with an owner, a test window and sign-off, the same as any dependency upgrade."} />
 
+### Choosing a surface
+
+<Imagine text={"One Claude solution, three groups. Analysts want to ask questions in a chat window, a CI pipeline must write summaries every night with nobody watching, and developers want a scripted agent that edits repository files for review."} />
+
+A **surface** is *where* people or programs use Claude. Pick it by who (or what) is using it:
+
+| Surface | What it is | Pick it for |
+|---|---|---|
+| **claude.ai and the Claude apps** | Anthropic's ready-made chat website, desktop and mobile apps | People asking questions: no code, no setup. The analysts' ad hoc chat |
+| **Claude Code** | The coding agent in a terminal. `claude -p` runs it **headless**: no screen, no person | Developers working in a codebase, and unattended jobs in scripts or CI. The nightly summaries |
+| **Agent SDK** | Claude Code's engine as a library you call from your own code | Your own agent with file tools, permissions and hooks built in. The scripted file-editing agent |
+| **Messages API** | Raw requests: you build everything around them | Any feature inside your own product, when you want full control |
+
+Each surface fails at the others' jobs: the chat apps need a person typing, so they can't run in CI; and the bare API has no chat screen or file tools until you build them.
+
+**Surface vs platform:** the surface is *which product* you use; the platform (next) is *which cloud* you call Claude through.
+
 ### Choosing a platform
 
 <Imagine text={"Acme's biggest customer insists everything runs inside its own Google Cloud account, under its own access controls."} />

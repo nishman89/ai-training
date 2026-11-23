@@ -1,0 +1,44 @@
+---
+/** MCP host, clients and servers: Claude Code with one client per server (GitHub over stdio, Jira over HTTP). */
+import Figure from '../Figure.astro';
+---
+<Figure caption="One host, one MCP client per server. Claude chooses the tool; the client and server do the work.">
+  <div class="mh" role="img" aria-label="The host, Claude Code, contains Claude and two MCP clients. Client A connects to a GitHub MCP server on your laptop over stdio; client B connects to a shared Jira MCP server over HTTP.">
+    <div class="mh__host">
+      <p class="mh__label">Host: Claude Code <span>(the app you use)</span></p>
+      <div class="mh__box mh__claude"><strong>Claude</strong><span>picks which tool to use</span></div>
+      <div class="mh__links" aria-hidden="true"><span></span><span></span></div>
+      <div class="mh__row">
+        <div class="mh__box mh__client"><strong>MCP client A</strong><span>the plug for GitHub</span></div>
+        <div class="mh__box mh__client"><strong>MCP client B</strong><span>the plug for Jira</span></div>
+      </div>
+    </div>
+    <div class="mh__row mh__wires" aria-hidden="true"><span><em>stdio</em></span><span><em>HTTP</em></span></div>
+    <div class="mh__row">
+      <div class="mh__box mh__server"><strong>GitHub MCP server</strong><span>on your laptop</span></div>
+      <div class="mh__box mh__server"><strong>Jira MCP server</strong><span>shared, on the network</span></div>
+    </div>
+  </div>
+</Figure>
+
+<style>
+  .mh { display: grid; gap: 0; max-width: 40rem; margin: 0 auto; font-size: 0.9rem; }
+  .mh__host { padding: 0.8rem 0.9rem 0.9rem; border: 2px solid var(--charcoal); border-radius: 18px; background: var(--bg); }
+  .mh__label { margin: 0 0 0.6rem; text-align: center; font-weight: 800; }
+  .mh__label span { font-weight: 400; color: var(--grey); }
+  .mh__row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  .mh > .mh__row { padding: 0 calc(0.9rem + 2px); }
+  .mh__box { display: grid; gap: 0.1rem; text-align: center; padding: 0.55rem 0.5rem; border-radius: 10px; line-height: 1.3; }
+  .mh__box span { font-size: 0.82rem; }
+  .mh__claude { max-width: 15rem; margin: 0 auto; background: var(--charcoal); color: #fff; }
+  .mh__client { background: var(--pink-tint); border: 1.5px solid var(--pink); color: var(--pink-dark); }
+  .mh__server { background: var(--surface); border: 1.5px solid var(--charcoal); }
+  .mh__server span { color: var(--grey); }
+  .mh__links { display: grid; grid-template-columns: 1fr 1fr; height: 1.2rem; }
+  .mh__links span { border-top: 2px solid var(--grey); }
+  .mh__links span:first-child { margin-left: 25%; border-left: 2px solid var(--grey); border-top-left-radius: 8px; }
+  .mh__links span:last-child { margin-right: 25%; border-right: 2px solid var(--grey); border-top-right-radius: 8px; }
+  .mh__wires span { position: relative; height: 2.2rem; }
+  .mh__wires span::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; border-left: 2px dashed var(--grey); }
+  .mh__wires em { position: absolute; left: calc(50% + 0.5rem); top: 50%; transform: translateY(-50%); font-style: normal; font-weight: 700; font-size: 0.78rem; color: var(--grey); }
+</style>

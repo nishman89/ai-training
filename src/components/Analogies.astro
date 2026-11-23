@@ -1,0 +1,53 @@
+---
+/** "In other words": a collapsible panel of everyday analogies for a domain's key ideas. Data: src/data/analogies.ts */
+import fs from 'node:fs';
+import path from 'node:path';
+import { ANALOGIES } from '../data/analogies';
+
+interface Props { chapter: number; }
+const { chapter } = Astro.props;
+const list = ANALOGIES[chapter] ?? [];
+
+// Section number -> heading slug, read from the chapter file (same slug rule as the headings).
+const SLUG: Record<string, string> = {};
+const file = path.resolve(`src/content/chapters/chapter-${chapter}.mdx`);
+for (const m of fs.readFileSync(file, 'utf8').matchAll(/^## (\d+\.\d+) (.+)$/gm)) {
+  SLUG[m[1]] = `${m[1]} ${m[2]}`.toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, '').replace(/\s/g, '-');
+}
+const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const fmt = (t: string) => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>');
+---
+{list.length > 0 && (
+  <details class="an fold" id="analogies" data-testid="analogies">
+    <summary class="an__summary">
+      <span class="an__icon" aria-hidden="true">💡</span>
+      <span><span class="an__eyebrow">In other words</span><strong>Domain {chapter} as everyday analogies</strong><span class="an__count">{list.length} quick comparisons to check you've got the ideas</span></span>
+    </summary>
+    <ul class="an__list">
+      {list.map((a) => (
+        <li class="an__item">
+          <p class="an__concept"><strong>{a.concept}</strong> <a class="an__sec" href={SLUG[a.sec] ? `#${SLUG[a.sec]}` : '#'}>{a.sec}</a></p>
+          <p class="an__text" set:html={fmt(a.analogy)} />
+          {a.breaks && <p class="an__breaks"><strong>Where it breaks:</strong>{' '}<span set:html={fmt(a.breaks)} /></p>}
+        </li>
+      ))}
+    </ul>
+  </details>
+)}
+
+<style>
+  .an { margin: 2.5rem 0 0; padding: 1rem 1.25rem; border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); border-left: 6px solid #e0a800; scroll-margin-top: 5rem; }
+  .an__summary { gap: 0.9rem; }
+  .an__icon { font-size: 1.6rem; flex: none; }
+  .an__eyebrow { display: block; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #8a6400; }
+  .an__summary strong { display: block; font-family: var(--font-head); font-size: 1.25rem; line-height: 1.25; }
+  .an__count { display: block; font-size: 0.9rem; color: var(--grey); }
+  .an__list { list-style: none; margin: 1rem 0 0; padding: 0; display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr)); }
+  .an__item { margin: 0; padding: 0.8rem 0.95rem; border-radius: 12px; background: #fdf7e3; }
+  .an__item p { margin: 0; }
+  .an__concept { display: flex; justify-content: space-between; gap: 0.5rem; align-items: baseline; margin-bottom: 0.3rem !important; }
+  .an__sec { flex: none; font-size: 0.8rem; font-weight: 700; color: #8a6400; }
+  .an__text { line-height: 1.5; }
+  .an__breaks { margin-top: 0.45rem !important; font-size: 0.9rem; color: var(--grey); }
+  @media print { .an { break-inside: avoid; } }
+</style>

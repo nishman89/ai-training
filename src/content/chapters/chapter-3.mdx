@@ -123,13 +123,20 @@ Each conversation with Claude Code is a **session**, saved on your machine so yo
 | `claude -p "..."` | Headless: one prompt, no interactive screen (see above) |
 | `--output-format text \| json \| stream-json` | For headless runs: plain text, one JSON result at the end, or a **stream** of JSON events as the work happens (for live progress in a script or UI) |
 
+**Picking up yesterday's work.** Only resuming brings a conversation back. The other options sound similar but do something else:
+
+| You want… | Use | Not this |
+|---|---|---|
+| Yesterday's conversation back, with its history | `claude --continue` (latest) or `claude --resume` (pick one) | **A new session:** it starts empty. **`/init`:** it writes CLAUDE.md, it doesn't restore a chat. **Compaction:** it only shortens a conversation *within* a session |
+| Rules and facts that every session should know | CLAUDE.md (`/init` drafts the first version) | Hoping Claude remembers an earlier chat |
+
 **Session hygiene:** one task per session. Use `/clear` (or a new session) between unrelated tasks, `--continue` to pick the same task back up, and put anything that must outlive the session in CLAUDE.md or a notes file, not in the chat.
 
 <SectionSummary points={[
   "Claude Code is the agent loop in your terminal: it explores, plans, then changes code, asking permission as it goes.",
   "**For anything big,** use plan mode: it only explores until you approve the plan.",
   "**When the session fills up,** use `/compact` to summarise, `/clear` for a new task, or `/rewind` to undo a dead end.",
-  "**Keep one task per session.** Pick up earlier work with `--continue` or `--resume`.",
+  "**Keep one task per session.** Pick up earlier work with `--continue` or `--resume`: a new session, `/init` or compaction won't bring it back.",
 ]} />
 
 ## 3.2 Permission modes and settings
@@ -386,6 +393,16 @@ fi
 <Imagine text={"The setup works so well the whole team wants it: the same rules, the same release-notes command and the same safety checks, on every laptop, without copying files around."} />
 
 ### Skills, commands and plugins
+
+**Who starts it?** The quickest way to tell commands, skills and hooks apart:
+
+| | Who starts it | Use it when | Example |
+|---|---|---|---|
+| **Slash command** | **You**, by typing it | A routine has the same steps every time, and a person decides when to run it | Releases always need tests, changelog, version bump and tag. `/release` runs that checklist, so nobody forgets a step |
+| **Skill** | **Claude**, when the task matches (or you, by name) | Claude needs know-how only for some tasks | The 40-page house style guide loads only when Claude is writing a report |
+| **Hook** | **Nobody**: it runs by itself on every matching tool call | Something must happen every time, with no exceptions | Block any edit to `.env`; run the linter after every file edit |
+
+Put the file in the project's `.claude/` folder and commit it, and the whole team gets it. In your home folder (`~/.claude/`), only you do.
 
 These are three ways to package a setup so the rest of your team (or your whole organisation) gets the same behaviour, from smallest to biggest.
 

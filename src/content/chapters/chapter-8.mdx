@@ -23,6 +23,7 @@ import Running from '../../components/Running.astro';
 import CodeSwitch from '../../components/CodeSwitch.astro';
 import Flow from '../../components/diagrams/Flow.astro';
 import Hub from '../../components/diagrams/Hub.astro';
+import McpHostDiagram from '../../components/diagrams/McpHostDiagram.astro';
 import VsPair from '../../components/VsPair.astro';
 import MythReality from '../../components/MythReality.astro';
 import Exercise from '../../components/Exercise.astro';
@@ -805,6 +806,21 @@ Older models were sometimes reluctant to ask for several tools at once, so you m
 | The cable: plugged in, or over the network | The **transport**: stdio (local, on the same machine) or Streamable HTTP (remote) |
 | The computer asks "what are you, and what can you do?" | The **handshake**: the client starts the connection and asks the server to list its tools, resources and prompts |
 
+**What it looks like in practice.** Here's Claude Code with two MCP servers connected:
+
+{/* diagram */}
+<McpHostDiagram />
+
+**A simple example.** You type into Claude Code: *"Open a Jira ticket for the failing login test."*
+
+1. **When Claude Code starts,** each client connects to its server and asks "what can you do?". The Jira server answers with its tools, such as `create_issue`.
+2. **Claude reads your request** and decides to use `create_issue`.
+3. **Client B sends that call** to the Jira server.
+4. **The Jira server creates the ticket** and sends back "Created PROJ-142".
+5. **Claude tells you:** "Done, PROJ-142 is open." Client A and the GitHub server weren't needed, so they did nothing.
+
+Three things to remember: there's **one client per server**; **Claude chooses the tool, but never talks to Jira itself**; and the Jira server is built **once**, so Claude Desktop or your own agent could plug into it too.
+
 **Where the picture holds:** build a server once and it works with any MCP host, with no custom wiring.
 
 **Where it breaks:** unlike a cable, MCP doesn't decide anything: your app (or Claude) still runs the loop and chooses which tools to call. And like an unknown USB stick, an unknown server is a risk (8.5).
@@ -1004,7 +1020,7 @@ MCP doesn't use **websockets**. Remote MCP is plain HTTP plus SSE, and so is Cla
 
 <SectionSummary points={[
   "MCP packages tools so you build them once and any MCP app can use them.",
-  "**A server offers** tools (actions), resources (read-only data) and prompts (templates). Choose by what the thing is first, then by who decides to use it.",
+  "**A server offers three things. The simple rule:** reading something → a **resource**; doing or changing something → a **tool**; a reusable instruction a user starts → a **prompt**.",
   "**Local, one machine:** stdio. **Shared or remote:** Streamable HTTP.",
   "**When a server isn't working,** test it with the MCP Inspector.",
 ]} />

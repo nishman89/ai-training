@@ -1147,6 +1147,8 @@ A **subagent** is a second agent that the main agent starts for one sub-task. It
 
 When one agent (the **lead**, also called a manager or supervisor) hands work to subagents, most failures come from **vague briefs**, not weak subagents. "Research the market" leaves each subagent to guess its own scope, so they overlap in some places and leave gaps in others. Anthropic saw exactly this in its own multi-agent research system.
 
+A subagent starts with an **empty context**: it can't see the lead's conversation, only the brief it's given. So anything it needs, including facts the user mentioned earlier, has to be written into the brief.
+
 Each brief should state:
 
 | Part of the brief | Example |
@@ -1155,6 +1157,7 @@ Each brief should state:
 | **Boundaries:** what's yours and what isn't | "UK only. Another subagent covers customer reviews; don't" |
 | **Output format** | "A table: provider, package, monthly price, source link" |
 | **Tools and sources** | "Use web search; prefer the providers' own price pages" |
+| **Facts from the conversation** | "Show all prices in GBP" (the customer said so three turns ago, and the subagent can't see that) |
 
 Then the lead **checks the returned reports against its plan** before writing the final answer: is every topic covered once, and only once? If not, it sends a follow-up brief rather than papering over the gap.
 
@@ -1170,5 +1173,5 @@ Bigger models, more subagents or a longer final prompt don't fix this. Clear bri
   "**When state must survive a restart or be shared,** keep it outside the conversation: a file or a database.",
   "**When a side task would clutter the context,** give it to a subagent. It works in a fresh context and returns only a summary.",
   "**Subagent vs worker:** a subagent is a whole agent with its own loop; a worker (1.2) is one call your code runs.",
-  "**When subagents overlap or leave gaps,** fix the lead's briefs: objective, boundaries, output format and tools for each, then check coverage before the final answer.",
+  "**When subagents overlap, leave gaps or miss a detail,** fix the lead's briefs: objective, boundaries, output format, tools and any facts from the conversation (subagents can't see it), then check coverage.",
 ]} />
